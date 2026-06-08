@@ -10,6 +10,7 @@
 import { Config } from './Config.js';
 import { Renderer } from './Renderer.js';
 import { SwipeInput } from './SwipeInput.js';
+import { TapInput } from './TapInput.js';
 import { IntroScene } from '../scenes/IntroScene.js';
 import { GameplayScene } from '../scenes/GameplayScene.js';
 
@@ -27,12 +28,19 @@ export class Game {
     this._onResize = this._onResize.bind(this);
     this._tick = this._tick.bind(this);
 
-    // Forward swipe-up gestures to whichever scene is currently active —
-    // only IntroScene reacts to it today, but the lookup is dynamic so
-    // this keeps working as `this.scene` is swapped out.
-    this.input = new SwipeInput(stage, {
+    // Forward gestures to whichever scene is currently active — the
+    // lookup is dynamic (`this.scene.handle...?.()`) so this keeps working
+    // as `this.scene` is swapped out, and scenes that don't care about a
+    // given gesture simply don't implement its handler.
+    this.swipeInput = new SwipeInput(stage, {
       thresholdPx: Config.intro.swipeThresholdPx,
       onSwipeUp: () => this.scene.handleSwipeUp?.(),
+    });
+    this.tapInput = new TapInput(stage, {
+      onTap: (clientX, clientY) => {
+        const { x, y } = this.renderer.toVirtualCoords(clientX, clientY);
+        this.scene.handleTap?.(x, y);
+      },
     });
   }
 
@@ -43,7 +51,7 @@ export class Game {
     requestAnimationFrame(this._tick);
   }
 
-  /** Swap the intro prompt out for the gameplay scene once it's done. */
+  /** Swap the intro prompt out for the gameplay scene once the player swipes past it. */
   _startGameplay() {
     this.scene = new GameplayScene(this.renderer);
   }

@@ -3,10 +3,12 @@
  * The gameplay screen foundation.
  *
  * Current milestone: an animated backdrop — a drifting starfield that
- * loops seamlessly downward — with the player's ship launching into it.
- * It is the slot where future gameplay systems (input, physics, enemies,
- * HUD) will eventually be composed, but no such hooks are stubbed here
- * yet, by design.
+ * loops seamlessly downward — with the player's ship launching into it,
+ * and a skippable story beat (StoryOverlay) typing itself out near the
+ * top of the screen while both animate in alongside it. This remains the
+ * slot where future gameplay systems (input, physics, enemies, HUD) will
+ * eventually be composed, but nothing beyond what's described here is
+ * stubbed in yet, by design.
  *
  * Performance: the starfield is organised into a few parallax layers,
  * each baked ONCE to an off-screen canvas tile (see _bakeTile). Every
@@ -23,6 +25,7 @@
  */
 import { Config } from '../core/Config.js';
 import { Player } from '../entities/Player.js';
+import { StoryOverlay } from '../entities/StoryOverlay.js';
 
 export class GameplayScene {
   /** @param {import('../core/Renderer.js').Renderer} renderer */
@@ -30,10 +33,11 @@ export class GameplayScene {
     this.renderer = renderer;
     this.layers = this._createLayers();
     this.player = new Player();
+    this.story = new StoryOverlay(renderer);
     this._age = 0; // seconds since this scene started — drives the fade-in
   }
 
-  /** Advance the backdrop and the player by `dt` seconds. */
+  /** Advance the backdrop, the player, and the story overlay by `dt` seconds. */
   update(dt) {
     this._age += dt;
 
@@ -44,13 +48,20 @@ export class GameplayScene {
     }
 
     this.player.update(dt);
+    this.story.update(dt);
   }
 
-  /** Render one frame: void backdrop, starfield layers, then the player on top. */
+  /** The story overlay's "SKIP" button is the only interactive element this scene has. */
+  handleTap(x, y) {
+    this.story.handleTap(x, y);
+  }
+
+  /** Render one frame: void backdrop, starfield layers, the player, then the story overlay on top. */
   render() {
     this.renderer.clear(Config.colors.void);
     this._drawLayers();
     this.player.render(this.renderer);
+    this.story.render(this.renderer);
   }
 
   // --- Starfield -----------------------------------------------------------

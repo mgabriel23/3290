@@ -43,6 +43,25 @@ export class Renderer {
     this.ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
   }
 
+  /**
+   * Convert viewport-relative client coordinates (CSS px — what pointer
+   * events report) into virtual coordinates — the inverse of the mapping
+   * `resize` establishes. Lets gesture-detecting input systems report
+   * positions that scenes can hit-test directly against their own
+   * virtual-space layout (e.g. an on-canvas button's bounds), without
+   * each one re-deriving the canvas's on-screen geometry itself.
+   * @param {number} clientX @param {number} clientY
+   * @returns {{x: number, y: number}}
+   */
+  toVirtualCoords(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    const { width: vW, height: vH } = Config.virtual;
+    return {
+      x: ((clientX - rect.left) / rect.width) * vW,
+      y: ((clientY - rect.top) / rect.height) * vH,
+    };
+  }
+
   /** Clear the whole virtual surface to a solid color. */
   clear(color) {
     const { width, height } = Config.virtual;

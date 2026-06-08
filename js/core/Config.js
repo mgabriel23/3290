@@ -98,6 +98,50 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * The opening story beat: a single skippable paragraph that reveals
+   * itself with a "typewriter" effect (one character at a time, each
+   * non-space character accompanied by a short blip), overlaid near the
+   * top of the gameplay scene while the starfield fades in and the
+   * player's ship launches into position beneath it — see StoryOverlay,
+   * composed into GameplayScene. This is a first sample of the mechanism
+   * with placeholder lore — the actual story content/structure is still
+   * to be planned.
+   */
+  story: Object.freeze({
+    text:
+      'Far beyond the edge of charted space, a single signal cuts through ' +
+      'the silence — a distress call from a colony presumed lost generations ' +
+      'ago. You are the first ship to answer. What waits for you out there ' +
+      'will change everything.',
+    font: '400 20px "Audiowide", "Courier New", monospace',
+    textColor: '#aab4d4',
+    lineHeight: 34,     // virtual px between line baselines
+    sideMargin: 60,     // virtual px — bounds the wrapped paragraph's width
+    topMargin: 96,      // virtual px from the top edge to the first line's baseline
+    charsPerSecond: 26, // typewriter reveal speed
+    holdDuration: 1.4,  // seconds the finished paragraph stays up before retiring
+
+    /** Top-right "skip the story" control — a plain neon-outline rectangle. */
+    skipButton: Object.freeze({
+      label: 'SKIP',
+      font: '400 16px "Audiowide", "Courier New", monospace',
+      color: '#aab4d4',
+      lineWidth: 2,
+      glowBlur: 8,
+      width: 88,
+      height: 36,
+      marginTop: 28,
+      marginRight: 24,
+    }),
+
+    /** A short blip per revealed letter — cloned per-play so rapid retriggers can overlap cleanly. */
+    blip: Object.freeze({
+      src: 'assets/audio/typewriter-blip.mp3',
+      volume: 0.5,
+    }),
+  }),
+
+  /**
    * Background music. A single looping theme track, started the moment
    * the player swipes past the intro prompt.
    */
