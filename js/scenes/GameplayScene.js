@@ -3,9 +3,10 @@
  * The gameplay screen foundation.
  *
  * Current milestone: an animated backdrop — a drifting starfield that
- * loops seamlessly downward — behind an otherwise empty stage. It is the
- * slot where future gameplay systems (entities, input, physics) will
- * eventually be composed, but no such hooks are stubbed here yet, by design.
+ * loops seamlessly downward — with the player's ship launching into it.
+ * It is the slot where future gameplay systems (input, physics, enemies,
+ * HUD) will eventually be composed, but no such hooks are stubbed here
+ * yet, by design.
  *
  * Performance: the starfield is organised into a few parallax layers,
  * each baked ONCE to an off-screen canvas tile (see _bakeTile). Every
@@ -13,29 +14,43 @@
  * two-copy seamless-scroll technique) — flat per-frame cost no matter
  * how many stars a layer contains, which keeps this cheap on low-end
  * devices.
+ *
+ * Entrance: the starfield doesn't snap into view — it eases in from
+ * fully transparent over `Config.starfield.fadeInDuration`, so the
+ * handoff from the intro's static label feels like a soft reveal
+ * rather than an abrupt scene swap (the void backdrop is identical in
+ * both scenes, so only the stars themselves need to fade).
  */
 import { Config } from '../core/Config.js';
+import { Player } from '../entities/Player.js';
 
 export class GameplayScene {
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   constructor(renderer) {
     this.renderer = renderer;
     this.layers = this._createLayers();
+    this.player = new Player();
+    this._age = 0; // seconds since this scene started — drives the fade-in
   }
 
-  /** Advance the backdrop by `dt` seconds. */
+  /** Advance the backdrop and the player by `dt` seconds. */
   update(dt) {
+    this._age += dt;
+
     const { height } = Config.virtual;
     for (const layer of this.layers) {
       layer.scroll += layer.speed * dt;
       if (layer.scroll > height) layer.scroll -= height; // wrap for a seamless loop
     }
+
+    this.player.update(dt);
   }
 
-  /** Render one frame: void backdrop + starfield layers (back to front). */
+  /** Render one frame: void backdrop, starfield layers, then the player on top. */
   render() {
     this.renderer.clear(Config.colors.void);
     this._drawLayers();
+    this.player.render(this.renderer);
   }
 
   // --- Starfield -----------------------------------------------------------
@@ -86,13 +101,18 @@ export class GameplayScene {
    * Draw each layer's tile twice, offset by one tile-height — the
    * standard seamless scroll technique: as the lower copy scrolls fully
    * into view, the upper copy is simultaneously scrolling out, so the
-   * loop point is never visible.
+   * loop point is never visible. All copies share one fade-in alpha
+   * (ramping from 0 to 1 over `fadeInDuration`) so the whole starfield
+   * eases into view together as a single reveal.
    */
   _drawLayers() {
     const { height } = Config.virtual;
+    const { fadeInDuration } = Config.starfield;
+    const alpha = Math.min(this._age / fadeInDuration, 1);
+
     for (const layer of this.layers) {
-      this.renderer.drawImage(layer.tile, 0, layer.scroll - height);
-      this.renderer.drawImage(layer.tile, 0, layer.scroll);
+      this.renderer.drawImage(layer.tile, 0, layer.scroll - height, alpha);
+      this.renderer.drawImage(layer.tile, 0, layer.scroll, alpha);
     }
   }
 }

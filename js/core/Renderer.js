@@ -54,10 +54,72 @@ export class Renderer {
    * Blit a pre-rendered image (e.g. an off-screen canvas tile) at a
    * position in virtual coordinates — the cheap way to draw static
    * content baked once and reused every frame (e.g. starfield layers).
-   * @param {CanvasImageSource} image @param {number} x @param {number} y
+   * `alpha` (0–1) optionally fades the blit, e.g. for fade-in transitions;
+   * omitting it (the common case) skips touching `globalAlpha` entirely.
+   * @param {CanvasImageSource} image @param {number} x @param {number} y @param {number} [alpha]
    */
-  drawImage(image, x, y) {
-    this.ctx.drawImage(image, x, y);
+  drawImage(image, x, y, alpha = 1) {
+    const { ctx } = this;
+    if (alpha >= 1) {
+      ctx.drawImage(image, x, y);
+      return;
+    }
+    const previousAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(image, x, y);
+    ctx.globalAlpha = previousAlpha;
+  }
+
+  /**
+   * Draw a line of text in virtual coordinates — for simple UI labels
+   * (prompts, menus). Alignment/baseline default to centring on `(x, y)`
+   * so callers can position labels without measuring text themselves.
+   * @param {string} text @param {number} x @param {number} y
+   * @param {{font: string, color: string, align?: CanvasTextAlign, baseline?: CanvasTextBaseline}} style
+   */
+  drawText(text, x, y, { font, color, align = 'center', baseline = 'middle' }) {
+    const { ctx } = this;
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline;
+    ctx.fillText(text, x, y);
+  }
+
+  /**
+   * Stroke one or more hand-authored vector paths — each an array of
+   * `[x, y]` points in a shape's own local space — translated as a
+   * group to a world position, with an optional neon-style glow (a
+   * soft colored halo behind the line). This is the primitive for
+   * outline-only "wireframe" shapes (ships, debris, UI iconography)
+   * that are drawn as strokes rather than filled sprites.
+   * @param {Array<{points: Array<[number, number]>, closed?: boolean}>} paths
+   * @param {{x?: number, y?: number, scale?: number, color: string, lineWidth: number, glowColor?: string, glowBlur?: number}} style
+   */
+  strokePaths(paths, { x = 0, y = 0, scale = 1, color, lineWidth, glowColor, glowBlur = 0 }) {
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(x, y);
+    if (scale !== 1) ctx.scale(scale, scale);
+    ctx.strokeStyle = color;
+    // Counter-scale so `lineWidth` always reads as that many virtual px,
+    // regardless of how the shape itself is scaled (the scale transform
+    // would otherwise thin out the stroke along with the geometry).
+    ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
+    if (glowBlur > 0) {
+      ctx.shadowColor = glowColor ?? color;
+      ctx.shadowBlur = glowBlur;
+    }
+
+    for (const { points, closed = true } of paths) {
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+      if (closed) ctx.closePath();
+      ctx.stroke();
+    }
+
+    ctx.restore();
   }
 
 }

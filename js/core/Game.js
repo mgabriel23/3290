@@ -1,12 +1,16 @@
 /**
  * Game.js
- * Owns the application lifecycle: responsive sizing and driving the main
- * loop that advances and renders the active scene. Still deliberately
- * contains no gameplay logic of its own (entities, input, physics) — the
- * loop exists only to drive scene animation (e.g. the scrolling backdrop).
+ * Owns the application lifecycle: responsive sizing, forwarding input to
+ * the active scene, switching between scenes, and driving the main loop
+ * that advances and renders whichever scene is current. Still deliberately
+ * contains no gameplay logic of its own (entities, physics) — scenes own
+ * their content; Game just owns *which* scene is running and feeds it
+ * time and gestures.
  */
 import { Config } from './Config.js';
 import { Renderer } from './Renderer.js';
+import { SwipeInput } from './SwipeInput.js';
+import { IntroScene } from '../scenes/IntroScene.js';
 import { GameplayScene } from '../scenes/GameplayScene.js';
 
 export class Game {
@@ -17,11 +21,19 @@ export class Game {
   constructor(canvas, stage) {
     this.stage = stage;
     this.renderer = new Renderer(canvas);
-    this.scene = new GameplayScene(this.renderer);
+    this.scene = new IntroScene(this.renderer, { onContinue: () => this._startGameplay() });
     this._lastTimestamp = 0;
 
     this._onResize = this._onResize.bind(this);
     this._tick = this._tick.bind(this);
+
+    // Forward swipe-up gestures to whichever scene is currently active —
+    // only IntroScene reacts to it today, but the lookup is dynamic so
+    // this keeps working as `this.scene` is swapped out.
+    this.input = new SwipeInput(stage, {
+      thresholdPx: Config.intro.swipeThresholdPx,
+      onSwipeUp: () => this.scene.handleSwipeUp?.(),
+    });
   }
 
   /** Wire up listeners, perform the first layout + paint, and start the loop. */
@@ -29,6 +41,11 @@ export class Game {
     window.addEventListener('resize', this._onResize);
     this._onResize();
     requestAnimationFrame(this._tick);
+  }
+
+  /** Swap the intro prompt out for the gameplay scene once it's done. */
+  _startGameplay() {
+    this.scene = new GameplayScene(this.renderer);
   }
 
   /**
