@@ -12,6 +12,7 @@ import { Renderer } from './Renderer.js';
 import { SwipeInput } from './SwipeInput.js';
 import { TapInput } from './TapInput.js';
 import { IntroScene } from '../scenes/IntroScene.js';
+import { PrologueScene } from '../scenes/PrologueScene.js';
 import { GameplayScene } from '../scenes/GameplayScene.js';
 
 export class Game {
@@ -22,7 +23,7 @@ export class Game {
   constructor(canvas, stage) {
     this.stage = stage;
     this.renderer = new Renderer(canvas);
-    this.scene = new IntroScene(this.renderer, { onContinue: () => this._startGameplay() });
+    this.scene = new IntroScene(this.renderer, { onContinue: () => this._startPrologue() });
     this._lastTimestamp = 0;
 
     this._onResize = this._onResize.bind(this);
@@ -51,7 +52,12 @@ export class Game {
     requestAnimationFrame(this._tick);
   }
 
-  /** Swap the intro prompt out for the gameplay scene once the player swipes past it. */
+  /** Swap the intro prompt out for the opening cinematic once the player swipes past it. */
+  _startPrologue() {
+    this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startGameplay() });
+  }
+
+  /** Swap the cinematic out for the gameplay scene once the player taps PLAY on its title card. */
   _startGameplay() {
     this.scene = new GameplayScene(this.renderer);
   }

@@ -98,46 +98,131 @@ export const Config = Object.freeze({
   }),
 
   /**
-   * The opening story beat: a single skippable paragraph that reveals
-   * itself with a "typewriter" effect (one character at a time, each
-   * non-space character accompanied by a short blip), overlaid near the
-   * top of the gameplay scene while the starfield fades in and the
-   * player's ship launches into position beneath it — see StoryOverlay,
-   * composed into GameplayScene. This is a first sample of the mechanism
-   * with placeholder lore — the actual story content/structure is still
-   * to be planned.
+   * The opening cinematic — plays once between the intro prompt and
+   * gameplay, structured as a fixed sequence of "beats" (see
+   * PrologueScene): a year card sets the scene, three wireframe portals
+   * tear open, the commander's mandatory briefing types itself out, the
+   * whole assembly fades to black, and finally the game's title card —
+   * "3290", deliberately doubling as the year — appears with the PLAY
+   * button that gates entry into actual gameplay.
    */
-  story: Object.freeze({
-    text:
-      'Far beyond the edge of charted space, a single signal cuts through ' +
-      'the silence — a distress call from a colony presumed lost generations ' +
-      'ago. You are the first ship to answer. What waits for you out there ' +
-      'will change everything.',
-    font: '400 20px "Audiowide", "Courier New", monospace',
-    textColor: '#aab4d4',
-    lineHeight: 34,     // virtual px between line baselines
-    sideMargin: 60,     // virtual px — bounds the wrapped paragraph's width
-    topMargin: 96,      // virtual px from the top edge to the first line's baseline
-    charsPerSecond: 26, // typewriter reveal speed
-    holdDuration: 1.4,  // seconds the finished paragraph stays up before retiring
-
-    /** Top-right "skip the story" control — a plain neon-outline rectangle. */
-    skipButton: Object.freeze({
-      label: 'SKIP',
-      font: '400 16px "Audiowide", "Courier New", monospace',
-      color: '#aab4d4',
-      lineWidth: 2,
-      glowBlur: 8,
-      width: 88,
-      height: 36,
-      marginTop: 28,
-      marginRight: 24,
+  prologue: Object.freeze({
+    /** Beat 1: a stark "when" title card, in and out before the portals appear. */
+    yearCard: Object.freeze({
+      text: 'EARTH — YEAR 3290',
+      font: '400 28px "Audiowide", "Courier New", monospace',
+      textColor: '#aab4d4',
+      fadeInDuration: 1.0,
+      holdDuration: 1.8,
+      fadeOutDuration: 1.0,
     }),
 
-    /** A short blip per revealed letter — cloned per-play so rapid retriggers can overlap cleanly. */
-    blip: Object.freeze({
-      src: 'assets/audio/typewriter-blip.mp3',
-      volume: 0.5,
+    /**
+     * Beat 2: three wireframe vortices burst into the (now-visible) sky,
+     * one after another (see Portal — identical spiral arms fanned
+     * evenly around a small counter-spinning core, the whole assembly
+     * growing and fading in with an ease-out "tearing open" animation).
+     * An eerie violet, deliberately distinct from the player's
+     * cyan/orange palette, so they read as something that doesn't belong.
+     */
+    portals: Object.freeze({
+      color: '#9D7BFF',
+      glowColor: '#9D7BFF',
+      lineWidth: 2,
+      glowBlur: 22,
+      appearDuration: 1.6, // seconds for one portal's grow-and-fade-in (also syncs the sky's own reveal — see PrologueScene._renderPortals)
+      staggerDelay: 0.9,   // seconds between each portal starting its own appear animation
+      holdDuration: 1.6,   // seconds all three linger after the last one finishes appearing
+
+      /** The swirling vortex body: one spiral-arm shape, baked once and re-stroked at evenly fanned rotations — see Portal._renderArms. */
+      spiral: Object.freeze({
+        armCount: 4,
+        innerRadius: 8,   // virtual px — where each arm starts, near the core
+        outerRadius: 50,  // virtual px — how far each arm reaches outward
+        turns: 1.4,       // revolutions an arm sweeps through end to end — higher reads as "tighter"
+        segments: 28,     // polyline resolution along the curve — higher = smoother
+        rotationSpeed: 1.1, // radians/second — the whole swirl's spin
+      }),
+
+      /** A small faceted "event horizon" at the very center, counter-spinning against the arms for a layered, alien feel. */
+      core: Object.freeze({ sides: 6, radius: 10, rotationSpeed: -2.4 }),
+
+      // Clustered in the upper half — virtual-ratio coordinates — deliberately
+      // leaving the lower half clear: the briefing beat keeps these on screen
+      // and anchors its text near the bottom edge, so the two never collide.
+      positions: Object.freeze([
+        Object.freeze({ xRatio: 0.28, yRatio: 0.18 }),
+        Object.freeze({ xRatio: 0.70, yRatio: 0.30 }),
+        Object.freeze({ xRatio: 0.46, yRatio: 0.42 }),
+      ]),
+    }),
+
+    /**
+     * Beat 3: the commander's voice cuts in over comms — a mandatory
+     * typewriter-revealed briefing (deliberately no skip control: unlike
+     * the sample paragraph this superseded, this part of the story always
+     * plays) — staged centered, near the bottom edge, while the portals
+     * keep churning above (PrologueScene keeps both alive and on screen
+     * through this beat — see _renderBriefing).
+     */
+    briefing: Object.freeze({
+      text:
+        "Pilot, are you reading me? We don't know what's happening — three " +
+        "tears just ripped open in the sky and nobody can explain it. Reports " +
+        "are flooding in from every direction: unidentified objects coming " +
+        "through, hitting multiple regions at once. Comms are down across half " +
+        "the eastern sectors. We don't know what they are, where they came from, " +
+        "or how many more are coming. All we know is — they're not stopping. " +
+        "Get up there. We need eyes on this. Now.",
+      font: '400 20px "Audiowide", "Courier New", monospace',
+      textColor: '#aab4d4',
+      lineHeight: 32,     // virtual px between line baselines
+      sideMargin: 56,     // virtual px — bounds the wrapped paragraph's width
+      bottomMargin: 64,   // virtual px from the bottom edge to the newest line's baseline (see PrologueScene._briefingAnchorY) — sits low, beneath the portals
+      maxVisibleLines: 4, // the "subtitle window" never shows more than this many lines at once — older ones fall away as new ones reveal (see PrologueScene._drawBriefingText)
+      charsPerSecond: 20, // slowed from the sample overlay's pace — gives the commander's words more weight
+      holdDuration: 1.6,  // seconds the finished briefing stays up before fading out
+
+      /**
+       * A short blip accompanying the reveal — cloned per-play so rapid
+       * retriggers can overlap cleanly (see _playBlip). `everyNChars`
+       * fires it only on every Nth revealed *non-space* character rather
+       * than each one: at this reading pace, one-per-letter piles clips
+       * up into a stuttering chatter; spacing them out turns it into a
+       * calmer, more deliberate "transmission" pulse.
+       */
+      blip: Object.freeze({
+        src: 'assets/audio/typewriter-blip.mp3',
+        volume: 0.5,
+        everyNChars: 4,
+      }),
+    }),
+
+    /** Beat 4: the assembled scene dissolves to black — see Renderer.clear's translucent-overlay technique. */
+    fadeOutDuration: 1.2,
+
+    /**
+     * Beat 5: the title card. "3290" is the game's name, deliberately
+     * echoing the year established in the opening beat. PLAY is the
+     * actual control gate — tapping it is what hands off to gameplay
+     * (see PrologueScene.handleTap / Game._startGameplay).
+     */
+    title: Object.freeze({
+      text: '3290',
+      font: '400 64px "Audiowide", "Courier New", monospace',
+      textColor: '#4DEFFF',
+      fadeInDuration: 1.0,
+
+      playButton: Object.freeze({
+        label: 'PLAY',
+        font: '400 22px "Audiowide", "Courier New", monospace',
+        color: '#4DEFFF',
+        lineWidth: 2.5,
+        glowBlur: 14,
+        width: 160,
+        height: 52,
+        offsetBelowTitle: 90, // virtual px from the title's baseline to the button's center
+      }),
     }),
   }),
 

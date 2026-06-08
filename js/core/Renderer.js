@@ -62,11 +62,27 @@ export class Renderer {
     };
   }
 
-  /** Clear the whole virtual surface to a solid color. */
-  clear(color) {
+  /**
+   * Clear the whole virtual surface to a solid color. `alpha` (0–1)
+   * optionally makes the fill translucent rather than opaque — the
+   * cheap way to lay a fade-to-black overlay on top of whatever was
+   * drawn earlier in the frame, without a dedicated overlay primitive
+   * (just call `clear` again, after the scene's normal drawing, with
+   * the void color and a rising alpha).
+   * @param {string} color @param {number} [alpha]
+   */
+  clear(color, alpha = 1) {
+    const { ctx } = this;
     const { width, height } = Config.virtual;
-    this.ctx.fillStyle = color;
-    this.ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = color;
+    if (alpha >= 1) {
+      ctx.fillRect(0, 0, width, height);
+      return;
+    }
+    const previousAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalAlpha = previousAlpha;
   }
 
   /**
@@ -135,14 +151,21 @@ export class Renderer {
    * soft colored halo behind the line). This is the primitive for
    * outline-only "wireframe" shapes (ships, debris, UI iconography)
    * that are drawn as strokes rather than filled sprites.
+   * `rotation` (radians) spins the group about its local origin —
+   * applied between translate and scale in the transform stack, so a
+   * shape authored around `[0, 0]` rotates in place. `alpha` (0–1)
+   * fades the whole group, e.g. for an "appearing" wireframe — same
+   * opt-in convention as `drawImage`/`drawText`.
    * @param {Array<{points: Array<[number, number]>, closed?: boolean}>} paths
-   * @param {{x?: number, y?: number, scale?: number, color: string, lineWidth: number, glowColor?: string, glowBlur?: number}} style
+   * @param {{x?: number, y?: number, scale?: number, rotation?: number, alpha?: number, color: string, lineWidth: number, glowColor?: string, glowBlur?: number}} style
    */
-  strokePaths(paths, { x = 0, y = 0, scale = 1, color, lineWidth, glowColor, glowBlur = 0 }) {
+  strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0 }) {
     const { ctx } = this;
     ctx.save();
     ctx.translate(x, y);
+    if (rotation !== 0) ctx.rotate(rotation);
     if (scale !== 1) ctx.scale(scale, scale);
+    if (alpha < 1) ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     // Counter-scale so `lineWidth` always reads as that many virtual px,
     // regardless of how the shape itself is scaled (the scale transform
