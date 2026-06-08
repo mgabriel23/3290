@@ -18,18 +18,18 @@ export const Config = Object.freeze({
   }),
 
   /**
-   * Background starfield: small points drifting downward to suggest
-   * forward motion through space. Each star's size and speed are tied
-   * to a shared "depth" factor — bigger stars drift faster, reading as
-   * closer to the viewer (a simple parallax illusion).
+   * Background starfield: small squares drifting downward to suggest
+   * forward motion through space, organised into discrete parallax
+   * layers (back to front) — each layer is baked once to an off-screen
+   * tile and blitted thereafter, so per-frame cost stays flat regardless
+   * of star count (see GameplayScene._bakeTile).
    */
   starfield: Object.freeze({
-    count: 90,
-    radiusMin: 0.6,  // virtual px
-    radiusMax: 1.8,
-    speedMin: 12,    // virtual px / second
-    speedMax: 48,
     color: '#aab4d4',
+    layers: Object.freeze([
+      Object.freeze({ count: 60, sizeMin: 0.6, sizeMax: 1.0, speed: 16 }), // far
+      Object.freeze({ count: 30, sizeMin: 1.1, sizeMax: 1.8, speed: 38 }), // near
+    ]),
   }),
 
   /**

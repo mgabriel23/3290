@@ -51,16 +51,13 @@ export class Renderer {
   }
 
   /**
-   * Fill a small circle in virtual coordinates — for point-like sprites
-   * such as background stars.
-   * @param {number} x @param {number} y @param {number} radius @param {string} color
+   * Blit a pre-rendered image (e.g. an off-screen canvas tile) at a
+   * position in virtual coordinates — the cheap way to draw static
+   * content baked once and reused every frame (e.g. starfield layers).
+   * @param {CanvasImageSource} image @param {number} x @param {number} y
    */
-  fillCircle(x, y, radius, color) {
-    const { ctx } = this;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
+  drawImage(image, x, y) {
+    this.ctx.drawImage(image, x, y);
   }
 
 }
