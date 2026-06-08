@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+  />
+  <title>Space Shooter</title>
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Visible phone/device frame -->
+    <div class="device-frame">
+      <!-- Stage: defines the space the canvas scales into -->
+      <div class="device-frame__stage" id="game-stage">
+        <!-- Responsive canvas (sized by the Renderer) -->
+        <canvas class="device-frame__canvas" id="game-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

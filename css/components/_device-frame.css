@@ -1,0 +1,38 @@
+/* components/_device-frame.css — the visible phone/device frame + stage */
+
+/*
+ * The device frame caps its size to a phone-like footprint so the game keeps
+ * a mobile perspective and never stretches on large screens. It holds its
+ * 9:16 aspect ratio and shrinks to fit smaller viewports.
+ */
+.device-frame {
+  aspect-ratio: 9 / 16;
+  height: min(100%, 92dvh);
+  max-width: 100%;
+  padding: 12px;
+  background: var(--frame-bezel);
+  border: 1px solid var(--frame-edge);
+  border-radius: 36px;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.4),
+    0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+/*
+ * The stage is the inner area whose box defines the space available to the
+ * canvas. Game.js measures this element to drive responsive scaling.
+ */
+.device-frame__stage {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #05070f;
+}
+
+/* The canvas is sized in JS; block layout removes baseline gaps. */
+.device-frame__canvas {
+  display: block;
+}

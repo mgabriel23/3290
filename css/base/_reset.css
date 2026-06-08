@@ -1,0 +1,27 @@
+/* base/_reset.css — minimal modern reset + root theme tokens */
+:root {
+  --backdrop: #0a0c14;
+  --backdrop-2: #11141f;
+  --frame-bezel: #1a1d29;
+  --frame-edge: #2a2e3d;
+}
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(circle at 50% 30%, var(--backdrop-2), var(--backdrop));
+  /* Prevent mobile scroll/bounce around the fixed game viewport. */
+  overflow: hidden;
+  overscroll-behavior: none;
+}

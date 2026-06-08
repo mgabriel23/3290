@@ -1,0 +1,9 @@
+/* layouts/_app.css — centers the device frame within the viewport */
+.app {
+  /* Use dynamic viewport units so mobile browser chrome is accounted for. */
+  width: 100vw;
+  height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
