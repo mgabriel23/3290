@@ -18,20 +18,9 @@ export const Config = Object.freeze({
   }),
 
   /**
-   * The gameplay world border (the battlefield edge), inset from the
-   * canvas edges so the play area reads as a contained arena.
-   */
-  world: Object.freeze({
-    margin: 24,        // inset from canvas edge to the border, in virtual px
-    borderWidth: 2,    // stroke width of the battlefield border, in virtual px
-  }),
-
-  /**
    * Colors. Centralised so the renderer stays dumb about theme.
    */
   colors: Object.freeze({
-    void: '#05070f',          // deep space background inside the arena
-    worldBorder: '#2dd4bf',   // battlefield border stroke
-    worldGlow: 'rgba(45, 212, 191, 0.35)', // subtle border glow
+    void: '#05070f', // deep space background
   }),
 });

@@ -49,22 +49,4 @@ export class Renderer {
     this.ctx.fillStyle = color;
     this.ctx.fillRect(0, 0, width, height);
   }
-
-  /**
-   * Stroke a rectangle in virtual coordinates, with an optional glow.
-   * @param {number} x @param {number} y @param {number} w @param {number} h
-   * @param {{ color: string, width: number, glow?: string }} style
-   */
-  strokeRect(x, y, w, h, style) {
-    const { ctx } = this;
-    ctx.save();
-    if (style.glow) {
-      ctx.shadowColor = style.glow;
-      ctx.shadowBlur = 12;
-    }
-    ctx.strokeStyle = style.color;
-    ctx.lineWidth = style.width;
-    ctx.strokeRect(x, y, w, h);
-    ctx.restore();
-  }
 }

@@ -2,8 +2,13 @@
 :root {
   --backdrop: #0a0c14;
   --backdrop-2: #11141f;
-  --frame-bezel: #1a1d29;
-  --frame-edge: #2a2e3d;
+  /* Caps how wide the play area grows on screens wider than a phone
+     (it never affects real mobile devices — `.app` is `width: 100%`,
+     and phones are already narrower than this). ~430px is the largest
+     current flagship phones in portrait (e.g. iPhone Pro Max); 480px
+     adds a little headroom so the desktop view still reads as "the
+     biggest phone you'd hold" rather than a small tablet. */
+  --game-max-width: 480px;
 }
 
 *,
@@ -17,11 +22,12 @@
 html,
 body {
   height: 100%;
+  /* Prevent scroll/bounce (and the scrollbar-gutter mismatch that makes
+     100vw overshoot the visible viewport) around the fixed game viewport. */
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
   background: radial-gradient(circle at 50% 30%, var(--backdrop-2), var(--backdrop));
-  /* Prevent mobile scroll/bounce around the fixed game viewport. */
-  overflow: hidden;
-  overscroll-behavior: none;
 }

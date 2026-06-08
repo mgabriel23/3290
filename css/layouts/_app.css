@@ -1,9 +1,22 @@
-/* layouts/_app.css — centers the device frame within the viewport */
+/* layouts/_app.css — full-screen stage that hosts the canvas */
 .app {
-  /* Use dynamic viewport units so mobile browser chrome is accounted for. */
-  width: 100vw;
+  width: 100%;
+  /* Dynamic viewport unit so mobile browser chrome is accounted for. */
   height: 100dvh;
+  /* Fills small (mobile) screens edge-to-edge; on larger screens it's
+     capped and centered so the game stays a comfortable, phone-like size. */
+  max-width: var(--game-max-width);
+  margin-inline: auto;
   display: grid;
   place-items: center;
-  padding: 16px;
+  overflow: hidden;
+  /* Matches the void color drawn inside the canvas, so any letterbox
+     bars (when the viewport's aspect ratio isn't exactly 9:16) blend
+     seamlessly into the game rather than reading as a visible frame. */
+  background: #05070f;
+}
+
+/* The canvas is sized in JS; block layout removes baseline gaps. */
+.app__canvas {
+  display: block;
 }

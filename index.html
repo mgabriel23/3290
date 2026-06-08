@@ -10,15 +10,10 @@
   <link rel="stylesheet" href="css/main.css" />
 </head>
 <body>
-  <div class="app">
-    <!-- Visible phone/device frame -->
-    <div class="device-frame">
-      <!-- Stage: defines the space the canvas scales into -->
-      <div class="device-frame__stage" id="game-stage">
-        <!-- Responsive canvas (sized by the Renderer) -->
-        <canvas class="device-frame__canvas" id="game-canvas"></canvas>
-      </div>
-    </div>
+  <!-- Full-screen stage: defines the space the canvas scales into -->
+  <div class="app" id="game-stage">
+    <!-- Responsive canvas (sized by the Renderer) -->
+    <canvas class="app__canvas" id="game-canvas"></canvas>
   </div>
 
   <script type="module" src="js/main.js"></script>
