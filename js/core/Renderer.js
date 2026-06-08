@@ -74,16 +74,39 @@ export class Renderer {
    * Draw a line of text in virtual coordinates — for simple UI labels
    * (prompts, menus). Alignment/baseline default to centring on `(x, y)`
    * so callers can position labels without measuring text themselves.
+   * `alpha` (0–1) optionally fades the glyph, e.g. for letter-by-letter
+   * reveal/dismiss effects — same opt-in convention as `drawImage`.
    * @param {string} text @param {number} x @param {number} y
-   * @param {{font: string, color: string, align?: CanvasTextAlign, baseline?: CanvasTextBaseline}} style
+   * @param {{font: string, color: string, align?: CanvasTextAlign, baseline?: CanvasTextBaseline, alpha?: number}} style
    */
-  drawText(text, x, y, { font, color, align = 'center', baseline = 'middle' }) {
+  drawText(text, x, y, { font, color, align = 'center', baseline = 'middle', alpha = 1 }) {
     const { ctx } = this;
     ctx.font = font;
     ctx.fillStyle = color;
     ctx.textAlign = align;
     ctx.textBaseline = baseline;
+    if (alpha >= 1) {
+      ctx.fillText(text, x, y);
+      return;
+    }
+    const previousAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha;
     ctx.fillText(text, x, y);
+    ctx.globalAlpha = previousAlpha;
+  }
+
+  /**
+   * Measure how wide `text` would render in `font`, in virtual px.
+   * Lets scenes lay out custom text themselves (e.g. positioning each
+   * character of a label individually for a per-letter animation)
+   * without ever reaching for the raw canvas context.
+   * @param {string} text @param {string} font
+   * @returns {{ width: number }}
+   */
+  measureText(text, font) {
+    const { ctx } = this;
+    ctx.font = font;
+    return { width: ctx.measureText(text).width };
   }
 
   /**

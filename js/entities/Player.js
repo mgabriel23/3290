@@ -22,8 +22,8 @@ import { Config } from '../core/Config.js';
 // mirrored across the centerline below so the silhouette is guaranteed
 // symmetric without hand-duplicating points.
 const SHIP_HALF_OUTLINE = [
-  [0, -40],  // nose tip
-  [4, -30],  // nose taper
+  [0, -24],  // nose tip
+  [3, -20],  // nose taper
   [5, -14],  // cockpit-side fuselage
   [9, -6],   // wing root, leading edge
   [32, 12],  // wingtip (swept back)

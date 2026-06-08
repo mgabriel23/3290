@@ -68,10 +68,33 @@ export const Config = Object.freeze({
    */
   intro: Object.freeze({
     text: 'SWIPE UP TO CONTINUE',
-    font: '700 28px "Courier New", monospace',
+    // Audiowide ships in a single (regular) weight — requesting 700 would
+    // just trigger faux-bold synthesis, so weight is left at its natural 400.
+    font: '400 24px "Audiowide", "Courier New", monospace',
     textColor: '#aab4d4',
     bottomMargin: 100,    // virtual px from the bottom edge to the label's position
     swipeThresholdPx: 48, // CSS px of upward drag that counts as "swipe up"
+
+    /** A small bobbing chevron above the label, hinting at the swipe direction. */
+    arrow: Object.freeze({
+      color: '#aab4d4',
+      lineWidth: 2.5,
+      glowBlur: 10,
+      offsetAboveText: 38, // virtual px between the label's baseline and the arrow
+      bobAmplitude: 6,     // virtual px of vertical travel
+      bobSpeed: 3,         // radians / second
+    }),
+
+    /**
+     * The "typewriter" fade-out: once the player swipes, each letter of
+     * the label fades to transparent in sequence (first letter first),
+     * each starting `staggerDelay` seconds after the previous one. Only
+     * once the last letter has fully faded does `onContinue` fire.
+     */
+    exit: Object.freeze({
+      staggerDelay: 0.05, // seconds between each letter's fade-out start
+      fadeDuration: 0.2,  // seconds for a single letter to fade to transparent
+    }),
   }),
 
   /**
