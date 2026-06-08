@@ -18,6 +18,21 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Background starfield: small points drifting downward to suggest
+   * forward motion through space. Each star's size and speed are tied
+   * to a shared "depth" factor — bigger stars drift faster, reading as
+   * closer to the viewer (a simple parallax illusion).
+   */
+  starfield: Object.freeze({
+    count: 90,
+    radiusMin: 0.6,  // virtual px
+    radiusMax: 1.8,
+    speedMin: 12,    // virtual px / second
+    speedMax: 48,
+    color: '#aab4d4',
+  }),
+
+  /**
    * Colors. Centralised so the renderer stays dumb about theme.
    */
   colors: Object.freeze({

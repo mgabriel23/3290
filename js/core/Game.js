@@ -1,9 +1,9 @@
 /**
  * Game.js
- * Owns the application lifecycle: responsive sizing and delegating
- * rendering to the active scene. Deliberately contains no gameplay logic
- * and no update loop yet — the current milestone is a static foundation,
- * so adding a requestAnimationFrame tick now would be speculative.
+ * Owns the application lifecycle: responsive sizing and driving the main
+ * loop that advances and renders the active scene. Still deliberately
+ * contains no gameplay logic of its own (entities, input, physics) — the
+ * loop exists only to drive scene animation (e.g. the scrolling backdrop).
  */
 import { Config } from './Config.js';
 import { Renderer } from './Renderer.js';
@@ -18,14 +18,33 @@ export class Game {
     this.stage = stage;
     this.renderer = new Renderer(canvas);
     this.scene = new GameplayScene(this.renderer);
+    this._lastTimestamp = 0;
 
     this._onResize = this._onResize.bind(this);
+    this._tick = this._tick.bind(this);
   }
 
-  /** Wire up listeners and perform the first layout + paint. */
+  /** Wire up listeners, perform the first layout + paint, and start the loop. */
   start() {
     window.addEventListener('resize', this._onResize);
     this._onResize();
+    requestAnimationFrame(this._tick);
+  }
+
+  /**
+   * The main loop: advance the scene by the elapsed time (in seconds),
+   * render it, and schedule the next frame — keeping animation in step
+   * with the display's refresh rate.
+   * @param {number} timestamp  high-resolution time in ms, supplied by rAF
+   */
+  _tick(timestamp) {
+    const dt = this._lastTimestamp ? (timestamp - this._lastTimestamp) / 1000 : 0;
+    this._lastTimestamp = timestamp;
+
+    this.scene.update(dt);
+    this.scene.render();
+
+    requestAnimationFrame(this._tick);
   }
 
   /**

@@ -49,4 +49,18 @@ export class Renderer {
     this.ctx.fillStyle = color;
     this.ctx.fillRect(0, 0, width, height);
   }
+
+  /**
+   * Fill a small circle in virtual coordinates — for point-like sprites
+   * such as background stars.
+   * @param {number} x @param {number} y @param {number} radius @param {string} color
+   */
+  fillCircle(x, y, radius, color) {
+    const { ctx } = this;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
 }
