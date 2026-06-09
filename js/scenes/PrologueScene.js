@@ -40,11 +40,11 @@ export class PrologueScene {
    * @param {import('../core/Renderer.js').Renderer} renderer
    * @param {{ onContinue: () => void }} options  called once PLAY is tapped
    */
-  constructor(renderer, { onContinue }) {
+  constructor(renderer, { onContinue, devSkipToTitle = false }) {
     this.renderer = renderer;
     this.onContinue = onContinue;
 
-    this._beat = 'yearCard';
+    this._beat = devSkipToTitle ? 'title' : 'yearCard';
     this._beatAge = 0;
 
     this._yearRevealedCount = 0; // fractional char count — drives letter-by-letter reveal

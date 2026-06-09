@@ -17,7 +17,7 @@ import { Config } from '../core/Config.js';
 export class HUD {
   constructor() {
     this.score = 10000;
-    this.gold  = 0;
+    this.gold  = 10000;
     this._initGeometry();
   }
 
