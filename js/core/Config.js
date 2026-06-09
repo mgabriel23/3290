@@ -197,7 +197,9 @@ export const Config = Object.freeze({
        */
       blip: Object.freeze({
         src: 'assets/audio/typewriter-blip.mp3',
-        volume: 0.5,
+        // Fires at up to 12/sec (year card) and 6/sec (briefing) — individual volume
+        // must be low so rapid stacking doesn't overwhelm the BGM at 0.45.
+        volume: 0.10,
         perSecond: 6,
       }),
     }),
@@ -248,7 +250,7 @@ export const Config = Object.freeze({
    */
   audio: Object.freeze({
     themeSrc: 'assets/audio/bg-music.mp3',
-    themeVolume: 0.4, // kept moderate so future sound effects can sit on top without competing
+    themeVolume: 0.45, // BGM is the loudest persistent layer — sits above all other sounds
     themeLoop: true,
   }),
 
@@ -322,7 +324,9 @@ export const Config = Object.freeze({
     progressColor: '#4DEFFF',
     blip: Object.freeze({
       src: 'assets/audio/typewriter-blip.mp3',
-      volume: 0.35,
+      // Fires at 8/sec — slightly louder than the prologue blip since it's
+      // slower and the tutorial context makes each blip more deliberate.
+      volume: 0.13,
       perSecond: 8,
     }),
   }),
