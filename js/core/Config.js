@@ -151,13 +151,13 @@ export const Config = Object.freeze({
       /** A small faceted "event horizon" at the very center, counter-spinning against the arms for a layered, alien feel. */
       core: Object.freeze({ sides: 6, radius: 10, rotationSpeed: -2.4 }),
 
-      // Clustered in the upper half — virtual-ratio coordinates — deliberately
+      // Spread across the upper half — virtual-ratio coordinates — deliberately
       // leaving the lower half clear: the briefing beat keeps these on screen
       // and anchors its text near the bottom edge, so the two never collide.
       positions: Object.freeze([
-        Object.freeze({ xRatio: 0.28, yRatio: 0.18 }),
-        Object.freeze({ xRatio: 0.70, yRatio: 0.30 }),
-        Object.freeze({ xRatio: 0.46, yRatio: 0.42 }),
+        Object.freeze({ xRatio: 0.24, yRatio: 0.13 }),
+        Object.freeze({ xRatio: 0.80, yRatio: 0.26 }),
+        Object.freeze({ xRatio: 0.48, yRatio: 0.46 }),
       ]),
     }),
 
@@ -257,5 +257,23 @@ export const Config = Object.freeze({
    */
   colors: Object.freeze({
     void: '#05070f', // deep space background
+  }),
+
+  /**
+   * Gameplay HUD: score (top-left) and gold (top-right) displayed as
+   * compact neon panels. Same sci-fi design language as the title screen —
+   * L-bracket corner accent, dim label, bright neon value with glow.
+   */
+  hud: Object.freeze({
+    margin: 20,          // virtual px from screen edges to the panel anchor corner
+    labelFont: '400 10px "Audiowide", "Courier New", monospace',
+    labelColor: '#aab4d4',
+    valueFont: '400 20px "Audiowide", "Courier New", monospace',
+    valueColor: '#4DEFFF',
+    valueGlowBlur: 8,    // neon halo on the score/gold numbers
+    chromeColor: '#4DEFFF',
+    chromeLineWidth: 1,
+    chromeGlowBlur: 5,
+    bracketSize: 12,     // leg length (virtual px) of the L-bracket corner accent
   }),
 });
