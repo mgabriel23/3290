@@ -40,6 +40,10 @@ export class Particles {
     this._vy   = new Float32Array(MAX);
     this._age  = new Float32Array(MAX);
     this._life = new Float32Array(MAX);
+    // Pre-normalized travel direction — drag is scalar so direction never changes;
+    // computing once at emit eliminates one sqrt per spark per render frame.
+    this._ndx  = new Float32Array(MAX);
+    this._ndy  = new Float32Array(MAX);
     this._count = 0;
 
     this._pool = Array.from({ length: MAX }, () => ({
@@ -72,15 +76,18 @@ export class Particles {
 
     // Sparks — faster than before so they burst through and past the inner ring
     for (let i = 0; i < 14 && this._count < MAX; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = 140 + Math.random() * 240;
-      const j = this._count++;
+      const a  = Math.random() * Math.PI * 2;
+      const s  = 140 + Math.random() * 240;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const j  = this._count++;
       this._x[j]    = x;
       this._y[j]    = y;
-      this._vx[j]   = Math.cos(a) * s;
-      this._vy[j]   = Math.sin(a) * s;
+      this._vx[j]   = ca * s;
+      this._vy[j]   = sa * s;
+      this._ndx[j]  = ca;  // unit direction — invariant under scalar drag
+      this._ndy[j]  = sa;
       this._age[j]  = 0;
-      this._life[j] = 0.18 + Math.random() * 0.18; // 0.18–0.36s — die before outer ring
+      this._life[j] = 0.18 + Math.random() * 0.18;
     }
   }
 
@@ -103,8 +110,9 @@ export class Particles {
         this._vx[i] *= drag;
         this._vy[i] *= drag;
         if (w !== i) {
-          this._x[w]    = this._x[i];  this._y[w]    = this._y[i];
-          this._vx[w]   = this._vx[i]; this._vy[w]   = this._vy[i];
+          this._x[w]    = this._x[i];   this._y[w]    = this._y[i];
+          this._vx[w]   = this._vx[i];  this._vy[w]   = this._vy[i];
+          this._ndx[w]  = this._ndx[i]; this._ndy[w]  = this._ndy[i];
           this._age[w]  = this._age[i]; this._life[w] = this._life[i];
         }
         w++;
@@ -138,14 +146,12 @@ export class Particles {
       });
     }
 
-    // Sparks
+    // Sparks — use pre-normalized direction (no sqrt per frame)
     if (this._count === 0) return;
     for (let i = 0; i < this._count; i++) {
-      const vx  = this._vx[i], vy = this._vy[i];
-      const spd = Math.sqrt(vx * vx + vy * vy) || 1;
-      const nx  = (vx / spd) * HALF;
-      const ny  = (vy / spd) * HALF;
-      const p   = this._pool[i];
+      const nx = this._ndx[i] * HALF;
+      const ny = this._ndy[i] * HALF;
+      const p  = this._pool[i];
       p.points[0][0] = this._x[i] - nx;
       p.points[0][1] = this._y[i] - ny;
       p.points[1][0] = this._x[i] + nx;

@@ -51,7 +51,8 @@ export class Rockets {
     }));
 
     const { color, lineWidth, glowBlur } = Config.rocket;
-    this._style = { color, lineWidth, glowBlur, lineCap: 'round', singleStroke: true };
+    // Mutable style object — alpha is overwritten each render, no per-frame allocation
+    this._style = { color, lineWidth, glowBlur, lineCap: 'round', singleStroke: true, alpha: 1 };
   }
 
   /**
@@ -97,15 +98,31 @@ export class Rockets {
       this._age[i]  += dt;
       this._hTick[i] += dt;
 
-      // ── Homing: steer toward the player, clamped by turn rate ──────────────
-      const curAngle = Math.atan2(this._vy[i], this._vx[i]);
-      const tgtAngle = Math.atan2(playerY - this._y[i], playerX - this._x[i]);
-      let   diff     = tgtAngle - curAngle;
-      if (diff >  Math.PI) diff -= Math.PI * 2;
-      if (diff < -Math.PI) diff += Math.PI * 2;
-      const newAngle  = curAngle + Math.sign(diff) * Math.min(Math.abs(diff), turnRate * dt);
-      this._vx[i]     = Math.cos(newAngle) * speed;
-      this._vy[i]     = Math.sin(newAngle) * speed;
+      // ── Homing: vector cross-product steering — no atan2/cos/sin ──────────
+      // vx/vy always has magnitude ≈ speed (enforced by the renorm below),
+      // so dividing by speed gives the unit current direction directly.
+      const ux   = this._vx[i] / speed;
+      const uy   = this._vy[i] / speed;
+
+      const ddx  = playerX - this._x[i];
+      const ddy  = playerY - this._y[i];
+      const dlen = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+      const tx   = ddx / dlen;   // unit target direction
+      const ty   = ddy / dlen;
+
+      // Cross product = sin(angle from current to target) — sign tells which way to turn.
+      // For |turn| ≤ 0.037 rad (turnRate=2.2 at 60fps), sin ≈ angle to < 0.1% error.
+      const cross = ux * ty - uy * tx;
+      const maxT  = turnRate * dt;
+      const turn  = cross >= 0 ? Math.min(cross, maxT) : Math.max(cross, -maxT);
+
+      // Rotate by `turn` radians — small-angle linear approximation (exact for |turn|≤0.04)
+      const nux  = ux - turn * uy;
+      const nuy  = uy + turn * ux;
+      // Renormalize to prevent float-point drift accumulating over seconds
+      const nlen = Math.sqrt(nux * nux + nuy * nuy) || 1;
+      this._vx[i] = (nux / nlen) * speed;
+      this._vy[i] = (nuy / nlen) * speed;
 
       // ── Move ────────────────────────────────────────────────────────────────
       this._x[i] += this._vx[i] * dt;
@@ -175,7 +192,8 @@ export class Rockets {
       }
     }
 
-    renderer.strokePaths(this._pool, { ...this._style, alpha: batchAlpha }, this._count);
+    this._style.alpha = batchAlpha;
+    renderer.strokePaths(this._pool, this._style, this._count);
   }
 
   /** True while any rocket is still in flight — used by WaveManager.isDone. */

@@ -335,7 +335,7 @@ export const Config = Object.freeze({
       lineWidth:        1.5,
       glowBlur:         12,
       hitGlowBlur:      22,
-      engineCoreColor:  '#FF6A00',   // orange core, same family as enemy bullets
+      engineCoreColor:  '#FF6A00',   // deeper orange — contrasts with the amber hull
       flameColor:       '#FFB020',
       flameHalfWidth:   3,
       entrySpeed:       280,
@@ -357,7 +357,7 @@ export const Config = Object.freeze({
    */
   enemyBullet: Object.freeze({
     speed:     420,
-    color:     '#ff6a00',
+    color:     '#ff3ec9',    // matches Scout hull
     lineWidth: 4,
     halfLen:   5,
     glowBlur:  8,
@@ -391,7 +391,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scouts only, slow trickle
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'rocketeer', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'scout', count: 5, spawnInterval: 4 }),
       ]) }),
       // Level 2 — more scouts
       Object.freeze({ enemies: Object.freeze([
