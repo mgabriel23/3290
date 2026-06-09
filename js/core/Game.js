@@ -13,6 +13,7 @@ import { SwipeInput } from './SwipeInput.js';
 import { TapInput } from './TapInput.js';
 import { IntroScene } from '../scenes/IntroScene.js';
 import { PrologueScene } from '../scenes/PrologueScene.js';
+import { TutorialScene } from '../scenes/TutorialScene.js';
 import { GameplayScene } from '../scenes/GameplayScene.js';
 
 export class Game {
@@ -26,7 +27,7 @@ export class Game {
     // DEV: skip intro + prologue cinematic, boot straight to the title screen
     // To restore the full flow: replace this line with:
     //   this.scene = new IntroScene(this.renderer, { onContinue: () => this._startPrologue() });
-    this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startGameplay(), devSkipToTitle: true });
+    this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startTutorial(), devSkipToTitle: true });
     this._lastTimestamp = 0;
 
     this._onResize = this._onResize.bind(this);
@@ -57,10 +58,15 @@ export class Game {
 
   /** Swap the intro prompt out for the opening cinematic once the player swipes past it. */
   _startPrologue() {
-    this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startGameplay() });
+    this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startTutorial() });
   }
 
-  /** Swap the cinematic out for the gameplay scene once the player taps PLAY on its title card. */
+  /** Swap the cinematic out for the tutorial once the player taps PLAY on the title card. */
+  _startTutorial() {
+    this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
+  }
+
+  /** Swap the tutorial out for the gameplay scene once all hints are dismissed. */
   _startGameplay() {
     this.scene = new GameplayScene(this.renderer);
   }

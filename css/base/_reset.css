@@ -2,13 +2,12 @@
 :root {
   --backdrop: #0a0c14;
   --backdrop-2: #11141f;
-  /* Caps how wide the play area grows on screens wider than a phone
-     (it never affects real mobile devices — `.app` is `width: 100%`,
-     and phones are already narrower than this). ~430px is the largest
-     current flagship phones in portrait (e.g. iPhone Pro Max); 480px
-     adds a little headroom so the desktop view still reads as "the
-     biggest phone you'd hold" rather than a small tablet. */
-  --game-max-width: 480px;
+  /* Derives the max stage width from the viewport height and the game's
+     9:16 aspect ratio, so the container is always the exact right
+     proportion on desktop/tablet — no arbitrary pixel guess needed.
+     On real phones (always narrower than this value) `width: 100%` on
+     `.app` wins and the cap never fires, so phone layout is unaffected. */
+  --game-max-width: calc(100dvh * 9 / 16);
 }
 
 *,

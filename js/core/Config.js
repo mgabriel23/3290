@@ -276,6 +276,11 @@ export const Config = Object.freeze({
     innerInset: 10,    // inner echo arc is this many px shallower than the main arc
     strutCount: 5,     // upward structural tick marks along the arc
     strutDepth: 14,    // virtual px — how far each strut extends toward screen center
+    // Permanent health readout rendered inside the dome at the peak
+    healthLabelFont: '400 9px "Audiowide", "Courier New", monospace',
+    healthValueFont: '400 14px "Audiowide", "Courier New", monospace',
+    healthColor: '#4DEFFF',
+    healthGlowBlur: 5,
   }),
 
   /**
@@ -294,5 +299,31 @@ export const Config = Object.freeze({
     chromeLineWidth: 1,
     chromeGlowBlur: 5,
     bracketSize: 12,     // leg length (virtual px) of the L-bracket corner accent
+  }),
+
+  /**
+   * Tutorial overlay. Plays once between the title screen and the first
+   * gameplay session — the full gameplay backdrop (starfield, barrier, HUD)
+   * is visible behind a dim overlay so every hint arrow points at the real
+   * UI element it describes.
+   */
+  tutorial: Object.freeze({
+    textFont: '400 20px "Audiowide", "Courier New", monospace',
+    textColor: '#aab4d4',
+    lineHeight: 28,      // virtual px between lines of a multi-line hint
+    wordsPerSecond: 5,   // typewriter reveal speed — word-at-a-time, same pattern as briefing
+    textMaxWidth: 370,   // virtual px — hint text wraps at this width
+    tapFont: '400 10px "Audiowide", "Courier New", monospace',
+    tapColor: '#4DEFFF',
+    overlayAlpha: 0.60,  // how much the gameplay backdrop dims behind the hint text
+    arrowColor: '#4DEFFF',
+    arrowGlowBlur: 10,
+    progressFont: '400 10px "Audiowide", "Courier New", monospace',
+    progressColor: '#4DEFFF',
+    blip: Object.freeze({
+      src: 'assets/audio/typewriter-blip.mp3',
+      volume: 0.35,
+      perSecond: 8,
+    }),
   }),
 });

@@ -19,6 +19,7 @@ import { Config } from '../core/Config.js';
 
 export class Barrier {
   constructor() {
+    this.health = 100; // 0–100; written by gameplay systems, read by this render method
     this._initGeometry();
   }
 
@@ -29,6 +30,20 @@ export class Barrier {
     // Details — inner echo, struts, emblem, anchors — all at the same dimmer style
     renderer.strokePaths(this._detailPaths, {
       color, lineWidth: 1, glowBlur: glowBlur * 0.5, alpha: 0.45,
+    });
+    this._renderHealth(renderer);
+  }
+
+  _renderHealth(renderer) {
+    const { baseY, arcHeight, healthLabelFont, healthValueFont, healthColor, healthGlowBlur } =
+      Config.barrier;
+    const { width: vW } = Config.virtual;
+    const peakY = baseY - arcHeight; // y of the arc's topmost point
+    renderer.drawText('SHIELD', vW / 2, peakY + 26, {
+      font: healthLabelFont, color: healthColor, alpha: 0.5,
+    });
+    renderer.drawText(String(this.health), vW / 2, peakY + 52, {
+      font: healthValueFont, color: healthColor, glowBlur: healthGlowBlur,
     });
   }
 
