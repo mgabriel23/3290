@@ -97,6 +97,9 @@ export class Player {
     this._flame = [[-6, 38], [0, 38], [6, 38]];
   }
 
+  /** True once the entry animation has completed and the ship is controllable. */
+  get ready() { return this._entryDone; }
+
   /**
    * Move the ship to (x, y) in virtual coordinates, clamped to the play area.
    * Silently ignored while the entry animation is still running.

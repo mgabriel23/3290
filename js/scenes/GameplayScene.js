@@ -19,6 +19,7 @@
  */
 import { Config } from '../core/Config.js';
 import { Barrier } from '../entities/Barrier.js';
+import { Bullets } from '../entities/Bullets.js';
 import { HUD } from '../entities/HUD.js';
 import { Player } from '../entities/Player.js';
 import { Starfield } from '../entities/Starfield.js';
@@ -30,6 +31,7 @@ export class GameplayScene {
     this.starfield = new Starfield();
     this.barrier = new Barrier();
     this.player = new Player();
+    this.bullets = new Bullets();
     this.hud = new HUD();
     this._age = 0; // seconds since this scene started — drives the fade-in
     this._pointerDown = false;
@@ -40,6 +42,7 @@ export class GameplayScene {
     this._age += dt;
     this.starfield.update(dt);
     this.player.update(dt);
+    this.bullets.update(dt, this.player);
   }
 
   /** Render one frame: starfield → barrier → player → HUD (back to front). */
@@ -48,6 +51,7 @@ export class GameplayScene {
     this._drawStarfield();
     this.barrier.render(this.renderer);
     this.player.render(this.renderer);
+    this.bullets.render(this.renderer);
     this.hud.render(this.renderer);
   }
 

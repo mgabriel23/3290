@@ -62,6 +62,29 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Player bullets: auto-fired as a continuous stream once the player's
+   * ship has landed, rendered as short glowing capsule strokes in the same
+   * neon-cyan as the hull so they read as energy bolts rather than solid
+   * projectiles. All active bullets are batched into a single strokePaths
+   * call each frame — one shadow-blur GPU pass regardless of bullet count.
+   */
+  bullet: Object.freeze({
+    color: '#4DEFFF',      // matches player hull
+    lineWidth: 5,          // virtual px — thick enough to look solid
+    halfLen: 6,            // virtual px — segment half-length; with round caps total visual height ≈ 17px
+    glowBlur: 8,           // reduced from 12 — blur cost ∝ radius², so 8 vs 12 is ~56% cheaper; singleStroke batching means this runs once regardless of bullet count
+    speed: 1500,            // virtual px/sec, upward
+    fireRate: 7,           // shots per second — fast mid rate
+    spawnOffsetY: -14,     // virtual px above player.y — places spawn near the nose tip
+
+    audio: Object.freeze({
+      src: 'assets/audio/bullet-shoot.mp3',
+      volume: 0.20,
+      poolSize: 6,         // pre-created Audio elements so rapid retrigger layers cleanly
+    }),
+  }),
+
+  /**
    * The opening prompt: a static "swipe up to continue" label over the
    * same void backdrop the gameplay scene uses, so the handoff between
    * the two is visually seamless (no background color change).

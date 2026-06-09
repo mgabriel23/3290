@@ -164,7 +164,15 @@ export class Renderer {
    * @param {Array<{points: Array<[number, number]>, closed?: boolean}>} paths
    * @param {{x?: number, y?: number, scale?: number, rotation?: number, alpha?: number, color: string, lineWidth: number, glowColor?: string, glowBlur?: number}} style
    */
-  strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0 }) {
+  /**
+   * @param {Array<{points: Array<[number, number]>, closed?: boolean}>} paths
+   * @param {{x?: number, y?: number, scale?: number, rotation?: number, alpha?: number, color: string, lineWidth: number, glowColor?: string, glowBlur?: number, lineCap?: CanvasLineCap, singleStroke?: boolean}} style
+   *   `singleStroke: true` merges every sub-path into one `ctx.stroke()` call so
+   *   the shadow-blur GPU pass runs exactly once regardless of path count — use
+   *   this for large batches of identically-styled paths (e.g. bullets) where
+   *   per-path stroke calls would cost one blur pass each.
+   */
+  strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0, lineCap = 'butt', singleStroke = false }) {
     const { ctx } = this;
     ctx.save();
     ctx.translate(x, y);
@@ -176,17 +184,29 @@ export class Renderer {
     // regardless of how the shape itself is scaled (the scale transform
     // would otherwise thin out the stroke along with the geometry).
     ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
+    if (lineCap !== 'butt') ctx.lineCap = lineCap;
     if (glowBlur > 0) {
       ctx.shadowColor = glowColor ?? color;
       ctx.shadowBlur = glowBlur;
     }
 
-    for (const { points, closed = true } of paths) {
+    if (singleStroke) {
+      // All sub-paths in one beginPath/stroke → one shadow-blur GPU pass total.
       ctx.beginPath();
-      ctx.moveTo(points[0][0], points[0][1]);
-      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
-      if (closed) ctx.closePath();
+      for (const { points, closed = true } of paths) {
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+        if (closed) ctx.closePath();
+      }
       ctx.stroke();
+    } else {
+      for (const { points, closed = true } of paths) {
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+        if (closed) ctx.closePath();
+        ctx.stroke();
+      }
     }
 
     ctx.restore();
