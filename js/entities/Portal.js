@@ -11,17 +11,20 @@
  * rather than a shield or HUD reticle — concentric rings (an earlier
  * pass at this) just look like targeting graphics; arms curling toward
  * a center read immediately as something pulling inward. One arm shape
- * is precomputed once into SPIRAL_ARM (the usual bake-once pattern,
- * since its points in local space never change) and then re-stroked at
- * `armCount` evenly fanned rotations every frame — so the swirl is
- * built from a single baked curve, not `armCount` separate ones. The
- * small core polygon (CORE_SHAPE, the same faceted-ring technique as
- * before) anchors the center and spins counter to the arms, the better
- * to sell "alien machinery" over "natural phenomenon".
+ * is precomputed once into SPIRAL_ARM and then re-stroked at `armCount`
+ * evenly fanned rotations every frame — so the swirl is built from a
+ * single baked curve, not `armCount` separate ones.
  *
- * `delay` staggers when an instance starts its own appear animation,
- * letting PrologueScene stand up several portals that burst into view
- * one after another rather than all at once.
+ * Performance: all geometry (arms + core) is batched into ONE
+ * `strokePaths` call per portal per frame. Canvas shadow-blur is the
+ * most expensive 2D operation on low-end GPU drivers — it fires a full
+ * blur-filter pass over every drawn pixel — so going from 5 calls
+ * (4 arms + 1 core, each setting shadowBlur separately) to 1 is the
+ * single largest frame-time saving available. The per-arm rotation is
+ * applied by mutating a pre-allocated `this._paths` buffer in-place
+ * (see `_rotatePaths`) — zero per-frame allocations once constructed,
+ * so no GC pressure during the render loop regardless of how long the
+ * portals stay on screen.
  */
 import { Config } from '../core/Config.js';
 
@@ -32,16 +35,14 @@ const CORE_SHAPE = buildPolygon(core.sides, core.radius);
 
 /**
  * One arm's curve in local space: a polyline winding outward from
- * `innerRadius` to `outerRadius` over `turns` revolutions. Multiple
- * copies of this same shape, fanned at evenly-spaced rotations, are
- * what produce the whirlpool/galaxy silhouette.
+ * `innerRadius` to `outerRadius` over `turns` revolutions.
  */
 function buildSpiralArm({ innerRadius, outerRadius, turns, segments }) {
   const sweep = turns * Math.PI * 2;
   const points = [];
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
-    const angle = t * sweep - Math.PI / 2; // start pointing "up", like the polygons below
+    const angle = t * sweep - Math.PI / 2;
     const radius = innerRadius + t * (outerRadius - innerRadius);
     points.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
   }
@@ -69,6 +70,16 @@ export class Portal {
     this.y = y;
     this.delay = delay;
     this._age = 0;
+
+    // Pre-allocated paths buffer — one slot per arm + one for the core.
+    // _rotatePaths writes the rotated point coordinates into these arrays
+    // every frame (in-place mutation) so strokePaths can read them without
+    // any new allocation on the hot path.
+    this._paths = [];
+    for (let i = 0; i < spiral.armCount; i++) {
+      this._paths.push({ points: SPIRAL_ARM.map(([px, py]) => [px, py]), closed: false });
+    }
+    this._paths.push({ points: CORE_SHAPE.map(([px, py]) => [px, py]) }); // closed: true (default)
   }
 
   update(dt) {
@@ -80,33 +91,56 @@ export class Portal {
     const elapsed = this._age - this.delay;
     if (elapsed <= 0) return;
 
-    const { appearDuration, color, glowColor, lineWidth, glowBlur } = Config.prologue.portals;
+    const { appearDuration, color, lineWidth, glowBlur } = Config.prologue.portals;
     const appearT = Math.min(elapsed / appearDuration, 1);
-    const eased = 1 - (1 - appearT) ** 3; // ease-out cubic — fast start, soft settle
+    const eased = 1 - (1 - appearT) ** 3; // ease-out cubic
 
-    const shared = {
+    // Rotate all geometry in JS then hand the whole portal to strokePaths
+    // as one call — one shadow-blur pass instead of (armCount + 1).
+    this._rotatePaths(elapsed);
+
+    renderer.strokePaths(this._paths, {
       x: this.x,
       y: this.y,
-      scale: 0.5 + eased * 0.5, // grows from half-size up to full as it "tears open"
+      scale: 0.5 + eased * 0.5,
       alpha: eased,
       color,
-      glowColor,
       lineWidth,
       glowBlur,
-    };
-
-    this._renderArms(renderer, elapsed, shared);
-    renderer.strokePaths([{ points: CORE_SHAPE }], { ...shared, rotation: elapsed * core.rotationSpeed });
+    });
   }
 
-  /** Fan `armCount` copies of the same baked curve evenly around the center, all spinning together as one swirl. */
-  _renderArms(renderer, elapsed, shared) {
-    const { armCount, rotationSpeed } = spiral;
-    const spin = elapsed * rotationSpeed;
+  /**
+   * Write rotated coordinates directly into `this._paths[i].points[j]`
+   * — reuses the same arrays every frame (no allocation). The rotation
+   * math is cheap float arithmetic; doing it in JS so the GPU sees only
+   * a single shadow-blur stroke rather than one per arm.
+   */
+  _rotatePaths(elapsed) {
+    const spin = elapsed * spiral.rotationSpeed;
 
-    for (let i = 0; i < armCount; i++) {
-      const fanOffset = (i / armCount) * Math.PI * 2;
-      renderer.strokePaths([{ points: SPIRAL_ARM, closed: false }], { ...shared, rotation: spin + fanOffset });
+    for (let i = 0; i < spiral.armCount; i++) {
+      const angle = spin + (i / spiral.armCount) * Math.PI * 2;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const pts = this._paths[i].points;
+      for (let j = 0; j < SPIRAL_ARM.length; j++) {
+        const px = SPIRAL_ARM[j][0];
+        const py = SPIRAL_ARM[j][1];
+        pts[j][0] = px * cosA - py * sinA;
+        pts[j][1] = px * sinA + py * cosA;
+      }
+    }
+
+    const coreAngle = elapsed * core.rotationSpeed;
+    const cosC = Math.cos(coreAngle);
+    const sinC = Math.sin(coreAngle);
+    const corePts = this._paths[spiral.armCount].points;
+    for (let j = 0; j < CORE_SHAPE.length; j++) {
+      const px = CORE_SHAPE[j][0];
+      const py = CORE_SHAPE[j][1];
+      corePts[j][0] = px * cosC - py * sinC;
+      corePts[j][1] = px * sinC + py * cosC;
     }
   }
 }

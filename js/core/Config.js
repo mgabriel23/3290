@@ -132,9 +132,8 @@ export const Config = Object.freeze({
      */
     portals: Object.freeze({
       color: '#9D7BFF',
-      glowColor: '#9D7BFF',
       lineWidth: 2,
-      glowBlur: 22,
+      glowBlur: 14, // reduced from 22 — blur cost scales roughly with area (radius²), so 14 vs 22 is ~60% cheaper per pass; still visibly glowing
       appearDuration: 1.6, // seconds for one portal's grow-and-fade-in (also syncs the sky's own reveal — see PrologueScene._renderPortals)
       staggerDelay: 1.2,   // seconds between each portal starting its own appear animation
       holdDuration: 1.8,   // seconds all three linger after the last one finishes appearing

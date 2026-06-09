@@ -68,6 +68,11 @@ export class Player {
     this._startY = vH + height * scale; // fully below the visible area, at its rendered size
     this.y = this._startY;
     this._age = 0;
+
+    // Pre-allocated flame triangle — only the tip's y-value changes each
+    // frame (mutated in _renderFlame), so no new arrays are created on
+    // the hot path.
+    this._flame = [[-6, 38], [0, 38], [6, 38]];
   }
 
   /** Advance the entrance animation and thruster flicker by `dt` seconds. */
@@ -113,15 +118,11 @@ export class Player {
       Math.sin(this._age * flickerSpeeds[1]) * flickerAmplitudes[1];
     const length = Math.max(baseLength + flicker, 4);
 
-    const flame = [
-      [-6, 38],
-      [0, 38 + length],
-      [6, 38],
-    ];
+    this._flame[1][1] = 38 + length; // mutate tip y in-place — avoids creating a new array each frame
 
     // Same `scale` as the hull — the flame is authored in ship-local
     // coordinates too, so it must shrink and stay anchored to the tail.
-    renderer.strokePaths([{ points: flame }], {
+    renderer.strokePaths([{ points: this._flame }], {
       x: this.x,
       y: this.y,
       scale: Config.player.scale,

@@ -64,7 +64,8 @@ export class PrologueScene {
     this._revealedWordCount = 0;
     this._briefingHoldAge = 0;
     this._blipTimer = 0; // ticks on its own faster clock — see _advanceBlips for why it's decoupled from the word reveal
-    this._blipTemplate = null;
+    this._blipPool = null;  // lazily filled on first play — see _playBlip
+    this._blipPoolIdx = 0;
   }
 
   /** Advance whichever beat is current; each one decides for itself when it's done. */
@@ -314,13 +315,30 @@ export class PrologueScene {
     return index;
   }
 
-  /** Each blip clones a lazily-created template `Audio` so overlapping plays layer instead of cutting each other off. */
+  /**
+   * Cycles through a small pre-created pool of Audio elements rather
+   * than cloning a new one for every blip — blips fire at up to
+   * ~12/sec (year card) or ~7/sec (briefing), so cloneNode would create
+   * hundreds of short-lived DOM objects during the prologue, adding GC
+   * pressure on low-end devices. The pool size (8) covers the maximum
+   * number of clips that can overlap at once — blip clip length × rate
+   * — with headroom, so rewinding a slot never audibly cuts off a
+   * still-playing instance.
+   */
   _playBlip() {
     const { src, volume } = Config.prologue.briefing.blip;
-    if (!this._blipTemplate) this._blipTemplate = new Audio(src);
 
-    const blip = this._blipTemplate.cloneNode();
-    blip.volume = volume;
+    if (!this._blipPool) {
+      this._blipPool = Array.from({ length: 8 }, () => {
+        const a = new Audio(src);
+        a.volume = volume;
+        return a;
+      });
+    }
+
+    const blip = this._blipPool[this._blipPoolIdx % this._blipPool.length];
+    this._blipPoolIdx++;
+    blip.currentTime = 0;
     blip.play().catch(() => {});
   }
 
