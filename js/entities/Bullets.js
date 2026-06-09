@@ -27,25 +27,22 @@ export class Bullets {
 
     // Pre-allocated path objects — mutated in place per render frame,
     // then passed as a batch to strokePaths (no per-frame allocation).
+    // strokePaths accepts a `count` arg so we pass _pool directly and
+    // skip the frame without a separate auxiliary array.
     this._pool = Array.from({ length: MAX }, () => ({
       points: [[0, 0], [0, 0]],
       closed: false,
     }));
-    this._renderBatch = []; // emptied (length=0) and refilled each frame
 
     const { color, lineWidth, glowBlur } = Config.bullet;
     // singleStroke: all bullets share one ctx.stroke() call → one shadow-blur
     // GPU pass per frame regardless of how many bullets are on screen.
     this._style = { color, lineWidth, glowBlur, lineCap: 'round', singleStroke: true };
 
-    // Audio pool — pre-created so rapid retrigger layers rather than cuts
-    const { src, volume, poolSize } = Config.bullet.audio;
-    this._audioPool = Array.from({ length: poolSize }, () => {
-      const a = new Audio(src);
-      a.volume = volume;
-      return a;
-    });
-    this._audioIdx = 0;
+    // Audio pool — lazy: created on first _fire() so scene construction
+    // doesn't allocate 12 HTMLMediaElement objects before a shot is fired.
+    this._audioPool = null;
+    this._audioIdx  = 0;
   }
 
   /**
@@ -87,16 +84,16 @@ export class Bullets {
     if (this._count === 0) return;
 
     const hLen = Config.bullet.halfLen;
-    this._renderBatch.length = 0;
     for (let i = 0; i < this._count; i++) {
       const p = this._pool[i];
       p.points[0][0] = this._bx[i];
       p.points[0][1] = this._by[i] - hLen;
       p.points[1][0] = this._bx[i];
       p.points[1][1] = this._by[i] + hLen;
-      this._renderBatch.push(p);
     }
-    renderer.strokePaths(this._renderBatch, this._style);
+    // Pass _pool with explicit count so strokePaths reads only active slots —
+    // no auxiliary array needed, no per-frame allocations.
+    renderer.strokePaths(this._pool, this._style, this._count);
   }
 
   // ---------------------------------------------------------------------------
@@ -107,6 +104,16 @@ export class Bullets {
     this._by[this._count] = y;
     this._count++;
 
+    // Lazy-init on first shot so scene construction doesn't front-load
+    // 12 HTMLMediaElement allocations before the player ever fires.
+    if (!this._audioPool) {
+      const { src, volume, poolSize } = Config.bullet.audio;
+      this._audioPool = Array.from({ length: poolSize }, () => {
+        const a = new Audio(src);
+        a.volume = volume;
+        return a;
+      });
+    }
     const a = this._audioPool[this._audioIdx];
     this._audioIdx = (this._audioIdx + 1) % this._audioPool.length;
     a.currentTime = 0;

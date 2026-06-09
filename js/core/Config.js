@@ -74,7 +74,7 @@ export const Config = Object.freeze({
     // Large enough to dominate the screen; Audiowide at 72 vp ≈ 360 px wide for "LEVEL 1" — fits within 540
     font: '400 72px "Audiowide", "Courier New", monospace',
     color: '#4DEFFF',
-    glowBlur: 22,           // wider halo than normal UI — makes the text feel heavy and threatening
+    glowBlur: 16,           // wider halo than normal UI — makes the text feel heavy and threatening; kept at 16 (47% cheaper than 22 per blur cost ∝ radius²)
   }),
 
   /**
@@ -90,7 +90,7 @@ export const Config = Object.freeze({
     halfLen: 6,            // virtual px — segment half-length; with round caps total visual height ≈ 17px
     glowBlur: 8,           // reduced from 12 — blur cost ∝ radius², so 8 vs 12 is ~56% cheaper; singleStroke batching means this runs once regardless of bullet count
     speed: 1500,            // virtual px/sec, upward
-    fireRate: 7,           // shots per second — fast mid rate
+    fireRate: 9,           // shots per second — fast mid rate
     spawnOffsetY: -14,     // virtual px above player.y — places spawn near the nose tip
 
     audio: Object.freeze({

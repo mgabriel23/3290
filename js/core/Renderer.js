@@ -150,29 +150,19 @@ export class Renderer {
   }
 
   /**
-   * Stroke one or more hand-authored vector paths — each an array of
-   * `[x, y]` points in a shape's own local space — translated as a
-   * group to a world position, with an optional neon-style glow (a
-   * soft colored halo behind the line). This is the primitive for
-   * outline-only "wireframe" shapes (ships, debris, UI iconography)
-   * that are drawn as strokes rather than filled sprites.
-   * `rotation` (radians) spins the group about its local origin —
-   * applied between translate and scale in the transform stack, so a
-   * shape authored around `[0, 0]` rotates in place. `alpha` (0–1)
-   * fades the whole group, e.g. for an "appearing" wireframe — same
-   * opt-in convention as `drawImage`/`drawText`.
+   * Stroke one or more hand-authored vector paths in a single call.
+   *
    * @param {Array<{points: Array<[number, number]>, closed?: boolean}>} paths
-   * @param {{x?: number, y?: number, scale?: number, rotation?: number, alpha?: number, color: string, lineWidth: number, glowColor?: string, glowBlur?: number}} style
+   * @param {{x?: number, y?: number, scale?: number, rotation?: number, alpha?: number,
+   *          color: string, lineWidth: number, glowColor?: string, glowBlur?: number,
+   *          lineCap?: CanvasLineCap, singleStroke?: boolean}} style
+   * @param {number} [count]  how many entries in `paths` to draw; defaults to
+   *   `paths.length`. Pass a smaller value to use only a leading slice of a
+   *   pre-allocated pool without slicing the array (zero allocation).
+   *   `singleStroke: true` draws all sub-paths with one `ctx.stroke()` call so
+   *   the shadow-blur GPU pass runs once total — use for large same-style batches.
    */
-  /**
-   * @param {Array<{points: Array<[number, number]>, closed?: boolean}>} paths
-   * @param {{x?: number, y?: number, scale?: number, rotation?: number, alpha?: number, color: string, lineWidth: number, glowColor?: string, glowBlur?: number, lineCap?: CanvasLineCap, singleStroke?: boolean}} style
-   *   `singleStroke: true` merges every sub-path into one `ctx.stroke()` call so
-   *   the shadow-blur GPU pass runs exactly once regardless of path count — use
-   *   this for large batches of identically-styled paths (e.g. bullets) where
-   *   per-path stroke calls would cost one blur pass each.
-   */
-  strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0, lineCap = 'butt', singleStroke = false }) {
+  strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0, lineCap = 'butt', singleStroke = false }, count = paths.length) {
     const { ctx } = this;
     ctx.save();
     ctx.translate(x, y);
@@ -180,9 +170,8 @@ export class Renderer {
     if (scale !== 1) ctx.scale(scale, scale);
     if (alpha < 1) ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
-    // Counter-scale so `lineWidth` always reads as that many virtual px,
-    // regardless of how the shape itself is scaled (the scale transform
-    // would otherwise thin out the stroke along with the geometry).
+    // Counter-scale so `lineWidth` stays constant in virtual px regardless of
+    // how the shape itself is scaled.
     ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
     if (lineCap !== 'butt') ctx.lineCap = lineCap;
     if (glowBlur > 0) {
@@ -191,20 +180,24 @@ export class Renderer {
     }
 
     if (singleStroke) {
-      // All sub-paths in one beginPath/stroke → one shadow-blur GPU pass total.
+      // One beginPath/stroke for every sub-path → one shadow-blur GPU pass total.
       ctx.beginPath();
-      for (const { points, closed = true } of paths) {
-        ctx.moveTo(points[0][0], points[0][1]);
-        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
-        if (closed) ctx.closePath();
+      for (let i = 0; i < count; i++) {
+        const path = paths[i];
+        const pts  = path.points;
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+        if (path.closed !== false) ctx.closePath();
       }
       ctx.stroke();
     } else {
-      for (const { points, closed = true } of paths) {
+      for (let i = 0; i < count; i++) {
+        const path = paths[i];
+        const pts  = path.points;
         ctx.beginPath();
-        ctx.moveTo(points[0][0], points[0][1]);
-        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
-        if (closed) ctx.closePath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+        if (path.closed !== false) ctx.closePath();
         ctx.stroke();
       }
     }

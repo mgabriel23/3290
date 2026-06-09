@@ -120,6 +120,7 @@ export class GameplayScene {
     } else {
       alpha = Math.max(0, 1 - (t - holdEnd) / fadeOutDuration); // clean fall
     }
+    if (alpha < 0.02) return; // skip shadow computation when invisible
 
     // Micro-tremor only during the hold phase — tiny but adds to the instability
     const jitter = (t >= fadeInDuration && t < holdEnd)
