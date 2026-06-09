@@ -250,6 +250,7 @@ export const Config = Object.freeze({
       chromeLineWidth: 1,
       chromeGlowBlur: 6,
       fadeInDuration: 1.0,
+      exitFadeDuration: 0.55, // seconds — black veil that falls over the title when PLAY is tapped
 
       playButton: Object.freeze({
         label: 'PLAY',
@@ -333,6 +334,8 @@ export const Config = Object.freeze({
    * UI element it describes.
    */
   tutorial: Object.freeze({
+    fadeInDuration: 0.5,   // seconds — backdrop fades in from black (covers handoff from PrologueScene's fade-out)
+    hintStartDelay: 1.4,   // seconds before the first hint appears: fade-in (0.5s) + breathing room (0.9s)
     textFont: '400 20px "Audiowide", "Courier New", monospace',
     textColor: '#aab4d4',
     lineHeight: 28,      // virtual px between lines of a multi-line hint

@@ -89,13 +89,19 @@ export class PrologueScene {
       case 'briefing': return this._updateBriefing(dt);
       case 'fadeOut': return this._updateFadeOut();
       case 'title': return; // waits for a tap on PLAY — see handleTap
+      case 'exitFade': return this._updateExitFade();
     }
   }
 
   /** PLAY is the only interactive element here, and only once the title beat arrives. */
   handleTap(x, y) {
     if (this._beat !== 'title') return;
-    if (this._isInsidePlayButton(x, y)) this.onContinue();
+    if (this._isInsidePlayButton(x, y)) {
+      // Save the current beat age so the exit-fade can hold the title frozen
+      // at the exact frame the tap landed, rather than restarting its animation.
+      this._frozenTitleAge = this._beatAge;
+      this._advanceBeat('exitFade');
+    }
   }
 
   render() {
@@ -105,6 +111,7 @@ export class PrologueScene {
       case 'briefing': return this._renderBriefing();
       case 'fadeOut': return this._renderFadeOut();
       case 'title': return this._renderTitle();
+      case 'exitFade': return this._renderExitFade();
     }
   }
 
@@ -481,6 +488,31 @@ export class PrologueScene {
 
     this.renderer.strokePaths(this._buttonPaths, { color, lineWidth, glowBlur, alpha: btnAlpha });
     this.renderer.drawText(label, this._buttonCX, this._buttonCY, { font, color, alpha: btnAlpha });
+  }
+
+  // --- Beat 6: exit fade (play button tapped → black → onContinue) -----------------
+
+  _updateExitFade() {
+    if (this._beatAge >= Config.prologue.title.exitFadeDuration) this.onContinue();
+  }
+
+  /**
+   * Hold the title frozen at the moment PLAY was tapped, then raise a
+   * black veil over it. Temporarily swapping `_beatAge` back to the saved
+   * value lets `_renderTitle` reuse its own alpha and pulse math without
+   * any duplication here — the swap is invisible to callers since it's
+   * restored before this method returns.
+   */
+  _renderExitFade() {
+    const { exitFadeDuration } = Config.prologue.title;
+    const overlayAlpha = Math.min(this._beatAge / exitFadeDuration, 1);
+
+    const liveAge = this._beatAge;
+    this._beatAge = this._frozenTitleAge;
+    this._renderTitle();
+    this._beatAge = liveAge;
+
+    this.renderer.clear(Config.colors.void, overlayAlpha);
   }
 
   // --- Shared helpers -----------------------------------------------------------------

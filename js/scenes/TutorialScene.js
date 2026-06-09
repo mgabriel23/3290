@@ -92,21 +92,39 @@ export class TutorialScene {
 
   update(dt) {
     this._age += dt;
-    this._hintAge += dt;
     this._starfield.update(dt);
+    // Don't advance hint state during the intro delay — hints haven't appeared yet.
+    // _hintAge only starts counting once hints are actually visible so its fade-in
+    // and blink timings stay relative to when the first hint is shown, not scene start.
+    if (this._age < Config.tutorial.hintStartDelay) return;
+    this._hintAge += dt;
     this._updateTypewriter(dt);
   }
 
   render() {
     const { renderer } = this;
+    const { fadeInDuration, hintStartDelay, overlayAlpha } = Config.tutorial;
+
     renderer.clear(Config.colors.void);
-    // Gameplay backdrop — real elements so arrows point at the actual UI
-    const starAlpha = Math.min(this._age / 0.8, 1);
+    // Gameplay backdrop — real elements so arrows point at the actual UI.
+    // Stars fade in alongside the black veil so the reveal feels like one motion.
+    const starAlpha = Math.min(this._age / fadeInDuration, 1);
     this._starfield.render(renderer, starAlpha);
     this._barrier.render(renderer);
     this._hud.render(renderer);
-    // Dimming overlay — makes hint text legible over the busy backdrop
-    renderer.clear(Config.colors.void, Config.tutorial.overlayAlpha);
+
+    // Fade in from black — covers the cut from PrologueScene's black fade-out
+    if (this._age < fadeInDuration) {
+      renderer.clear(Config.colors.void, 1 - this._age / fadeInDuration);
+      return;
+    }
+
+    // Breathing room: backdrop fully lit, no hints yet
+    if (this._age < hintStartDelay) return;
+
+    // Dimming overlay fades in over 0.3 s as hints begin — avoids a jarring pop
+    renderer.clear(Config.colors.void, Math.min((this._age - hintStartDelay) / 0.3, 1) * overlayAlpha);
+
     this._renderHint();
     this._renderArrow();
     this._renderControlsDemo();
@@ -120,6 +138,7 @@ export class TutorialScene {
   // ---------------------------------------------------------------------------
 
   _advance() {
+    if (this._age < Config.tutorial.hintStartDelay) return; // ignore taps during breathing room
     if (!this._tapReady) {
       // Fast-forward: reveal all words instantly so the second tap can advance
       this._revealedWordCount = this._hintTotalWords[this._hintIndex];
