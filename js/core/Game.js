@@ -11,6 +11,7 @@ import { Config } from './Config.js';
 import { Renderer } from './Renderer.js';
 import { SwipeInput } from './SwipeInput.js';
 import { TapInput } from './TapInput.js';
+import { DragInput } from './DragInput.js';
 import { IntroScene } from '../scenes/IntroScene.js';
 import { PrologueScene } from '../scenes/PrologueScene.js';
 import { TutorialScene } from '../scenes/TutorialScene.js';
@@ -46,6 +47,17 @@ export class Game {
         const { x, y } = this.renderer.toVirtualCoords(clientX, clientY);
         this.scene.handleTap?.(x, y);
       },
+    });
+    this.dragInput = new DragInput(stage, {
+      onPointerDown: (clientX, clientY) => {
+        const { x, y } = this.renderer.toVirtualCoords(clientX, clientY);
+        this.scene.handlePointerDown?.(x, y);
+      },
+      onPointerMove: (clientX, clientY) => {
+        const { x, y } = this.renderer.toVirtualCoords(clientX, clientY);
+        this.scene.handlePointerMove?.(x, y);
+      },
+      onPointerUp: () => this.scene.handlePointerUp?.(),
     });
   }
 

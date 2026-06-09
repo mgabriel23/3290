@@ -11,6 +11,12 @@
  * Its thruster flame flickers continuously beneath it the whole time,
  * including during the entrance, since the ship is always under power.
  *
+ * After the entry animation completes the ship becomes controllable:
+ * `moveTo(x, y)` repositions it instantly (clamped to the play-area
+ * bounds) and is called by the scene on every pointer-move event while
+ * the player's finger or mouse button is held. While no pointer is
+ * active the ship holds its last position.
+ *
  * This is the game's first entity: a plain object with its own
  * `update(dt)` / `render(renderer)`, composed into GameplayScene rather
  * than owning a Renderer or touching anything outside itself.
@@ -68,11 +74,37 @@ export class Player {
     this._startY = vH + height * scale; // fully below the visible area, at its rendered size
     this.y = this._startY;
     this._age = 0;
+    this._entryDone = false;
+
+    // Target position — the ship snaps here each frame once the entry
+    // animation completes; held at last pointer position when no pointer
+    // is active.
+    this._targetX = vW / 2;
+    this._targetY = this._restY;
+
+    // Play-area movement bounds — derived from ship rendered half-extents
+    // and the HUD/barrier layout so the ship never overlaps chrome.
+    const halfW = (Config.player.width  / 2) * scale; // 16 virtual px
+    const halfH = (Config.player.height / 2) * scale; // 20 virtual px
+    this._minX = halfW + 4;                            // clear left edge
+    this._maxX = vW - halfW - 4;                       // clear right edge
+    this._minY = 80;                                   // below HUD value text (~y 64)
+    this._maxY = Config.barrier.baseY - Config.barrier.arcHeight - halfH - 10; // above barrier arc
 
     // Pre-allocated flame triangle — only the tip's y-value changes each
     // frame (mutated in _renderFlame), so no new arrays are created on
     // the hot path.
     this._flame = [[-6, 38], [0, 38], [6, 38]];
+  }
+
+  /**
+   * Move the ship to (x, y) in virtual coordinates, clamped to the play area.
+   * Silently ignored while the entry animation is still running.
+   */
+  moveTo(x, y) {
+    if (!this._entryDone) return;
+    this._targetX = Math.max(this._minX, Math.min(this._maxX, x));
+    this._targetY = Math.max(this._minY, Math.min(this._maxY, y));
   }
 
   /** Advance the entrance animation and thruster flicker by `dt` seconds. */
@@ -81,8 +113,23 @@ export class Player {
 
     const { entryDuration } = Config.player;
     const t = Math.min(this._age / entryDuration, 1);
-    const eased = 1 - (1 - t) ** 3; // ease-out cubic: brisk launch, gentle settle
-    this.y = this._startY + (this._restY - this._startY) * eased;
+
+    if (t < 1) {
+      // Entry animation — ease-out cubic: brisk launch, gentle settle.
+      const eased = 1 - (1 - t) ** 3;
+      this.y = this._startY + (this._restY - this._startY) * eased;
+      // this.x stays at vW/2 from the constructor
+    } else {
+      if (!this._entryDone) {
+        // First frame past entry: lock in starting target so the ship
+        // holds its resting position until the player touches the screen.
+        this._entryDone = true;
+        this._targetX = this.x;
+        this._targetY = this.y;
+      }
+      this.x = this._targetX;
+      this.y = this._targetY;
+    }
   }
 
   /** Draw the thruster flame, then the ship's neon wireframe on top of it. */

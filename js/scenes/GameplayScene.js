@@ -32,6 +32,7 @@ export class GameplayScene {
     this.player = new Player();
     this.hud = new HUD();
     this._age = 0; // seconds since this scene started — drives the fade-in
+    this._pointerDown = false;
   }
 
   /** Advance the backdrop and the player by `dt` seconds. */
@@ -48,6 +49,20 @@ export class GameplayScene {
     this.barrier.render(this.renderer);
     this.player.render(this.renderer);
     this.hud.render(this.renderer);
+  }
+
+  handlePointerDown(x, y) {
+    this._pointerDown = true;
+    this.player.moveTo(x, y);
+  }
+
+  handlePointerMove(x, y) {
+    if (!this._pointerDown) return;
+    this.player.moveTo(x, y);
+  }
+
+  handlePointerUp() {
+    this._pointerDown = false;
   }
 
   /** Ease the whole starfield in from transparent over `Config.starfield.fadeInDuration` — see class doc's "Entrance" note. */
