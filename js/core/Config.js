@@ -294,41 +294,70 @@ export const Config = Object.freeze({
    * the player on a fixed reload cycle.
    */
   enemy: Object.freeze({
+    /**
+     * Scout — basic fighter. Enters, parks at a fixed rest position,
+     * fires aimed bullet bursts at the player.
+     */
     scout: Object.freeze({
-      size:             22,          // virtual px — scaled-down from the authored hull geometry
-      health:           3,           // one-shot kill — fast, frantic combat
-      color:            '#ff3ec9',   // magenta neon
+      size:             22,
+      health:           3,
+      color:            '#ff3ec9',   // magenta
       fillColor:        '#1a0a20',
       lineWidth:        1.5,
       glowBlur:         12,
-      hitGlowBlur:      22,          // wider halo on the hit-white flash frame
+      hitGlowBlur:      22,
       engineCoreColor:  '#ff5f00',
       flameColor:       '#ff3ec9',
       flameHalfWidth:   3,
-      entrySpeed:       320,         // virtual px/sec — noticeably faster than before
+      entrySpeed:       320,
       restXMargin:      80,
-      restYMin:         0.08,        // can park quite high
+      restYMin:         0.08,
       restYMax:         0.35,
-      aimPause:         0.5,         // seconds pause before each shot
-      reloadTime:       2.2,         // seconds between shots
-      hitRadius:        16,          // collision circle radius
-      minSeparation:    60,          // virtual px — direct push-apart fires every frame when closer than this
-
+      aimPause:         0.5,
+      reloadTime:       2.2,
+      hitRadius:        16,
+      minSeparation:    60,
       audio: Object.freeze({
-        src:      'assets/audio/explosion.mp3',
-        volume:   0.40,   // hero event sound — rare, should clearly punch through everything
-        poolSize: 4,      // covers rapid multi-kill bursts without exhausting slots
+        src: 'assets/audio/explosion.mp3', volume: 0.40, poolSize: 4,
+      }),
+    }),
+
+    /**
+     * Rocketeer — same hull silhouette as the Scout, amber coloring.
+     * Fires homing rockets instead of bullets; slower to shoot but
+     * rockets track and detonate on proximity, making them harder to dodge.
+     */
+    rocketeer: Object.freeze({
+      size:             22,
+      health:           2,
+      color:            '#FFB020',   // amber/gold — warm, distinct from scout magenta
+      fillColor:        '#1a1000',   // very dark amber
+      lineWidth:        1.5,
+      glowBlur:         12,
+      hitGlowBlur:      22,
+      engineCoreColor:  '#FF6A00',   // orange core, same family as enemy bullets
+      flameColor:       '#FFB020',
+      flameHalfWidth:   3,
+      entrySpeed:       280,
+      restXMargin:      80,
+      restYMin:         0.08,
+      restYMax:         0.35,
+      aimPause:         1.0,         // longer lock-on pause before launch
+      reloadTime:       3.8,         // slow reload — rockets are powerful
+      hitRadius:        16,
+      minSeparation:    64,
+      audio: Object.freeze({
+        src: 'assets/audio/explosion.mp3', volume: 0.50, poolSize: 4,
       }),
     }),
   }),
 
   /**
-   * Enemy projectile pool. All enemies in a wave share one EnemyBullets
-   * instance — aimed capsules that fly from the enemy toward the player.
+   * Enemy bullet pool — aimed, straight-line capsules fired by Scouts.
    */
   enemyBullet: Object.freeze({
-    speed:     420,           // virtual px/sec
-    color:     '#ff6a00',     // orange — distinct from player cyan and enemy magenta
+    speed:     420,
+    color:     '#ff6a00',
     lineWidth: 4,
     halfLen:   5,
     glowBlur:  8,
@@ -336,19 +365,52 @@ export const Config = Object.freeze({
   }),
 
   /**
-   * Wave / level definitions. Each entry in `levels` maps to one level.
-   * `spawnInterval` is the gap in seconds between successive enemy spawns.
-   * Extend this array to add more levels — WaveManager caps the index at
-   * the last entry so levels beyond the array repeat the final wave.
+   * Homing rocket pool — fired by Rocketeers. Rockets continuously
+   * steer toward the player after launch and detonate either when
+   * they get close enough (proximity) or when their fuel runs out (timer).
+   */
+  rocket: Object.freeze({
+    speed:           190,          // vp/sec — slow and relentless
+    turnRate:        2.2,          // radians/sec — how fast it steers (≈126°/s)
+    maxLife:         4.5,          // seconds before self-destruct
+    proximityRadius: 38,           // vp — detonate when this close to player
+    fadeStart:       3.5,          // seconds — alpha begins fading toward self-destruct
+    color:           '#FFB020',    // matches Rocketeer hull
+    lineWidth:       2.5,
+    halfLen:         13,
+    glowBlur:        10,
+    poolSize:        16,
+  }),
+
+  /**
+   * Wave / level definitions. `type` maps to a key in `Config.enemy`.
+   * WaveManager caps the index at the last entry — levels beyond the
+   * array repeat the final wave indefinitely.
    */
   waves: Object.freeze({
     levels: Object.freeze([
-      // Level 1 — slow trickle, lets the player get a feel for the enemy
-      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 4, spawnInterval: 2.5 })]) }),
-      // Level 2
-      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 8, spawnInterval: 2.3 })]) }),
-      // Level 3 — dense wave
-      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 12, spawnInterval: 2.0 })]) }),
+      // Level 1 — scouts only, slow trickle
+      Object.freeze({ enemies: Object.freeze([
+        Object.freeze({ type: 'rocketeer', count: 5, spawnInterval: 4 }),
+      ]) }),
+      // Level 2 — more scouts
+      Object.freeze({ enemies: Object.freeze([
+        Object.freeze({ type: 'scout', count: 10, spawnInterval: 3.2 }),
+      ]) }),
+      // Level 3 — dense scout wave
+      Object.freeze({ enemies: Object.freeze([
+        Object.freeze({ type: 'scout', count: 15, spawnInterval: 2.5 }),
+      ]) }),
+      // Level 4 — first rocketeers alongside scouts
+      Object.freeze({ enemies: Object.freeze([
+        Object.freeze({ type: 'scout',     count: 4, spawnInterval: 2.0 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 3.0 }),
+      ]) }),
+      // Level 5 — heavier rocketeer presence
+      Object.freeze({ enemies: Object.freeze([
+        Object.freeze({ type: 'scout',     count: 5, spawnInterval: 1.8 }),
+        Object.freeze({ type: 'rocketeer', count: 4, spawnInterval: 2.4 }),
+      ]) }),
     ]),
   }),
 

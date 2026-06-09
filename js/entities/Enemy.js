@@ -38,17 +38,21 @@ export class Enemy {
    * @param {number} spawnX  entry column (x at top of screen)
    * @param {number} restX   x of the resting position
    * @param {number} restY   y of the resting position
+   * @param {string} [type]  key into Config.enemy — 'scout' | 'rocketeer'
    */
-  constructor(spawnX, restX, restY) {
+  constructor(spawnX, restX, restY, type = 'scout') {
     this.x     = spawnX;
     this.y     = -S;
     this.alive = true;
+
+    this._type  = type;
+    this._cfg   = Config.enemy[type]; // cached once — all per-type constants live here
 
     this._spawnX  = spawnX;
     this._restX   = restX;
     this._restY   = restY;
     this._angle   = 0; // recomputed every frame to track the player
-    this._health  = Config.enemy.scout.health;
+    this._health  = this._cfg.health;
     this._enginePhase = Math.random() * Math.PI * 2;
     this._hitFlash    = 0;     // seconds remaining in hit-white flash
     this._dying       = false; // true once health hits 0; waits for flash to finish
@@ -56,6 +60,9 @@ export class Enemy {
     this._state    = 'entering';
     this._stateAge = 0;
   }
+
+  /** Enemy variant — used by WaveManager to route rendering and projectile creation. */
+  get type() { return this._type; }
 
   /**
    * Set a new rest target and smoothly move there — kept for future use
@@ -76,7 +83,7 @@ export class Enemy {
    * @param {(ox:number, oy:number, tx:number, ty:number) => void} onFire
    */
   update(dt, playerX, playerY, onFire) {
-    const cfg = Config.enemy.scout;
+    const cfg = this._cfg;
     this._stateAge    += dt;
     this._enginePhase += dt * 9;
     if (this._hitFlash > 0) this._hitFlash -= dt;
@@ -164,7 +171,7 @@ export class Enemy {
 
   /** Engine exhaust triangle — must be drawn BEFORE the hull so it appears behind it. */
   renderFlame(renderer) {
-    const cfg = Config.enemy.scout;
+    const cfg = this._cfg;
     renderer.drawFlame(0, -S * 0.30, S * 0.45 + Math.sin(this._enginePhase) * 2, {
       x: this.x, y: this.y, rotation: this._angle,
       halfWidth: cfg.flameHalfWidth,
@@ -174,7 +181,7 @@ export class Enemy {
 
   /** Engine core orb — must be drawn AFTER the hull so it sits on top of it. */
   renderCore(renderer) {
-    const cfg = Config.enemy.scout;
+    const cfg = this._cfg;
     renderer.fillEllipse(0, S * 0.05, S * 0.14, S * 0.10, {
       x: this.x, y: this.y, rotation: this._angle,
       fillColor: this._hitFlash > 0 ? cfg.color : cfg.engineCoreColor,
