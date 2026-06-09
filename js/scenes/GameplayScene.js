@@ -18,6 +18,7 @@
  * when or how it should appear; it just knows how to draw and scroll.
  */
 import { Config } from '../core/Config.js';
+import { Barrier } from '../entities/Barrier.js';
 import { HUD } from '../entities/HUD.js';
 import { Player } from '../entities/Player.js';
 import { Starfield } from '../entities/Starfield.js';
@@ -27,6 +28,7 @@ export class GameplayScene {
   constructor(renderer) {
     this.renderer = renderer;
     this.starfield = new Starfield();
+    this.barrier = new Barrier();
     this.player = new Player();
     this.hud = new HUD();
     this._age = 0; // seconds since this scene started — drives the fade-in
@@ -39,10 +41,11 @@ export class GameplayScene {
     this.player.update(dt);
   }
 
-  /** Render one frame: void backdrop, fading-in starfield, player, then HUD on top. */
+  /** Render one frame: starfield → barrier → player → HUD (back to front). */
   render() {
     this.renderer.clear(Config.colors.void);
     this._drawStarfield();
+    this.barrier.render(this.renderer);
     this.player.render(this.renderer);
     this.hud.render(this.renderer);
   }

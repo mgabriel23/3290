@@ -260,6 +260,25 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * The planetary shield barrier: a wide shallow dome spanning the full
+   * screen width along the bottom edge. The arc's geometry is derived from
+   * the chord/sagitta formula so `baseY` and `arcHeight` are the only two
+   * values needed to fully describe its shape. Everything else controls
+   * visual detail and is read once at construction time (see Barrier.js).
+   */
+  barrier: Object.freeze({
+    color: '#4DEFFF',
+    lineWidth: 2,
+    glowBlur: 12,
+    baseY: 940,        // virtual px — where the arc endpoints sit (bottom edge margin)
+    arcHeight: 70,     // virtual px — how high the arc rises at center
+    arcSegments: 48,   // polyline resolution — higher = smoother curve
+    innerInset: 10,    // inner echo arc is this many px shallower than the main arc
+    strutCount: 5,     // upward structural tick marks along the arc
+    strutDepth: 14,    // virtual px — how far each strut extends toward screen center
+  }),
+
+  /**
    * Gameplay HUD: score (top-left) and gold (top-right) displayed as
    * compact neon panels. Same sci-fi design language as the title screen —
    * L-bracket corner accent, dim label, bright neon value with glow.
