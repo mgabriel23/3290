@@ -95,11 +95,11 @@ export const Config = Object.freeze({
 
     audio: Object.freeze({
       src: 'assets/audio/bullet-shoot.mp3',
-      // At 7/sec with ~2 sounds simultaneously, combined perceived volume ≈ 0.28 —
-      // sits clearly below BGM at 0.40 so bullets add presence without competing.
-      volume: 0.14,
-      // Pool of 12 → each slot isn't reused until 12/7 ≈ 1.7s after it was claimed,
-      // giving any reasonably-lengthed shoot clip time to finish before it's reset.
+      // At 9/sec, 2–3 clips overlap at any moment → effective stacked volume ≈ 0.18–0.27.
+      // That places bullets clearly above BGM (0.22) as rhythmic SFX texture without fatigue.
+      volume: 0.09,
+      // Pool of 12 → each slot isn't reused until 12/9 ≈ 1.3s after it was claimed,
+      // giving a short shoot clip time to finish well before its element is reset.
       poolSize: 12,
     }),
   }),
@@ -240,9 +240,9 @@ export const Config = Object.freeze({
        */
       blip: Object.freeze({
         src: 'assets/audio/typewriter-blip.mp3',
-        // Fires at up to 12/sec (year card) and 6/sec (briefing) — individual volume
-        // must be low so rapid stacking doesn't overwhelm the BGM at 0.45.
-        volume: 0.10,
+        // Fires at up to 12/sec (year card) and 6/sec (briefing) — kept very low
+        // so rapid stacking stays as subtle texture beneath BGM at 0.22.
+        volume: 0.06,
         perSecond: 6,
       }),
     }),
@@ -289,12 +289,76 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Scout enemy — the first enemy type. Enters from the top, glides to a
+   * random resting position in the upper third, then fires aimed shots at
+   * the player on a fixed reload cycle.
+   */
+  enemy: Object.freeze({
+    scout: Object.freeze({
+      size:             22,          // virtual px — scaled-down from the authored hull geometry
+      health:           3,           // one-shot kill — fast, frantic combat
+      color:            '#ff3ec9',   // magenta neon
+      fillColor:        '#1a0a20',
+      lineWidth:        1.5,
+      glowBlur:         12,
+      hitGlowBlur:      22,          // wider halo on the hit-white flash frame
+      engineCoreColor:  '#ff5f00',
+      flameColor:       '#ff3ec9',
+      flameHalfWidth:   3,
+      entrySpeed:       320,         // virtual px/sec — noticeably faster than before
+      restXMargin:      80,
+      restYMin:         0.08,        // can park quite high
+      restYMax:         0.35,
+      aimPause:         0.5,         // seconds pause before each shot
+      reloadTime:       2.2,         // seconds between shots
+      hitRadius:        16,          // collision circle radius
+      minSeparation:    56,          // virtual px — direct push-apart fires every frame when closer than this
+
+      audio: Object.freeze({
+        src:      'assets/audio/explosion.mp3',
+        volume:   0.40,   // hero event sound — rare, should clearly punch through everything
+        poolSize: 4,      // covers rapid multi-kill bursts without exhausting slots
+      }),
+    }),
+  }),
+
+  /**
+   * Enemy projectile pool. All enemies in a wave share one EnemyBullets
+   * instance — aimed capsules that fly from the enemy toward the player.
+   */
+  enemyBullet: Object.freeze({
+    speed:     420,           // virtual px/sec
+    color:     '#ff6a00',     // orange — distinct from player cyan and enemy magenta
+    lineWidth: 4,
+    halfLen:   5,
+    glowBlur:  8,
+    poolSize:  32,
+  }),
+
+  /**
+   * Wave / level definitions. Each entry in `levels` maps to one level.
+   * `spawnInterval` is the gap in seconds between successive enemy spawns.
+   * Extend this array to add more levels — WaveManager caps the index at
+   * the last entry so levels beyond the array repeat the final wave.
+   */
+  waves: Object.freeze({
+    levels: Object.freeze([
+      // Level 1 — slow trickle, lets the player get a feel for the enemy
+      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 3, spawnInterval: 1.8 })]) }),
+      // Level 2
+      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 5, spawnInterval: 1.2 })]) }),
+      // Level 3 — dense wave
+      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 8, spawnInterval: 0.9 })]) }),
+    ]),
+  }),
+
+  /**
    * Background music. A single looping theme track, started the moment
    * the player swipes past the intro prompt.
    */
   audio: Object.freeze({
     themeSrc: 'assets/audio/bg-music.mp3',
-    themeVolume: 0.40, // BGM anchor — loud enough to feel immersive, with headroom for SFX layers above it
+    themeVolume: 0.22, // BGM bed — lower than SFX so bullets and explosions always sit clearly on top
     themeLoop: true,
   }),
 
@@ -370,9 +434,9 @@ export const Config = Object.freeze({
     progressColor: '#4DEFFF',
     blip: Object.freeze({
       src: 'assets/audio/typewriter-blip.mp3',
-      // Fires at 8/sec — slightly louder than the prologue blip since it's
-      // slower and the tutorial context makes each blip more deliberate.
-      volume: 0.13,
+      // Fires at 8/sec — slightly louder than the prologue blip since tutorial
+      // blips are paced more deliberately and each one marks a word landing.
+      volume: 0.08,
       perSecond: 8,
     }),
   }),

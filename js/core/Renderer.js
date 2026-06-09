@@ -205,4 +205,163 @@ export class Renderer {
     ctx.restore();
   }
 
+  /**
+   * Fill AND stroke closed polygons in one transformed pass.
+   *
+   * `singleStroke: true` — the key batching optimisation for same-style shapes
+   * (e.g. all enemy hulls in a frame). Fills each polygon individually (fill
+   * needs no shadow, so no GPU pass), then builds all outlines into ONE compound
+   * path and calls `stroke()` once — a single GPU shadow-blur pass regardless of
+   * how many polygons are in the batch. Points must already be in the coordinate
+   * space set by `{x, y, rotation}` (pass world-space points with defaults to
+   * draw pre-transformed geometry without an additional translate/rotate).
+   *
+   * `singleStroke: false` (default) — original per-path fill+stroke behaviour,
+   * each with its own shadow pass. Use when paths need different styles.
+   *
+   * @param {Array<{points: Array<[number,number]>, closed?: boolean}>} paths
+   * @param {{x?:number,y?:number,rotation?:number,alpha?:number,
+   *          fillColor:string, strokeColor:string, lineWidth:number,
+   *          glowColor?:string, glowBlur?:number, singleStroke?:boolean}} style
+   * @param {number} [count]
+   */
+  fillStrokePaths(paths, { x = 0, y = 0, rotation = 0, alpha = 1,
+                            fillColor, strokeColor, lineWidth,
+                            glowColor, glowBlur = 0, singleStroke = false }, count = paths.length) {
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(x, y);
+    if (rotation !== 0) ctx.rotate(rotation);
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.fillStyle   = fillColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth   = lineWidth;
+
+    if (singleStroke) {
+      // Phase 1: fill each polygon — no shadow needed, cheap
+      ctx.shadowBlur = 0;
+      for (let i = 0; i < count; i++) {
+        const pts = paths[i].points;
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+        if (paths[i].closed !== false) ctx.closePath();
+        ctx.fill();
+      }
+      // Phase 2: build compound path for all outlines, stroke once — 1 GPU shadow pass total
+      if (glowBlur > 0) {
+        ctx.shadowColor = glowColor ?? strokeColor;
+        ctx.shadowBlur  = glowBlur;
+      }
+      ctx.beginPath();
+      for (let i = 0; i < count; i++) {
+        const pts = paths[i].points;
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+        if (paths[i].closed !== false) ctx.closePath();
+      }
+      ctx.stroke();
+    } else {
+      if (glowBlur > 0) {
+        ctx.shadowColor = glowColor ?? strokeColor;
+        ctx.shadowBlur  = glowBlur;
+      }
+      for (let i = 0; i < count; i++) {
+        const pts = paths[i].points;
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+        if (paths[i].closed !== false) ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Fill an ellipse whose centre is at `(localCx, localCy)` in the local
+   * space defined by `{x, y, rotation}`. Used for engine core orbs that
+   * live at a fixed offset inside a rotating ship.
+   * @param {number} localCx @param {number} localCy
+   * @param {number} rx @param {number} ry
+   * @param {{x?:number, y?:number, rotation?:number, fillColor:string, alpha?:number}} style
+   */
+  fillEllipse(localCx, localCy, rx, ry, { x = 0, y = 0, rotation = 0, fillColor, alpha = 1 }) {
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(x, y);
+    if (rotation !== 0) ctx.rotate(rotation);
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.fillStyle  = fillColor;
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.ellipse(localCx, localCy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * Stroke a full circle in virtual coordinates — the expanding-ring primitive
+   * for explosion shockwave effects. `ctx.arc` is natively GPU-accelerated and
+   * produces a smoother curve than a polyline approximation.
+   * @param {number} x @param {number} y @param {number} radius
+   * @param {{color:string, lineWidth:number, glowBlur?:number, glowColor?:string, alpha?:number}} style
+   */
+  strokeCircle(x, y, radius, { color, lineWidth, glowBlur = 0, glowColor, alpha = 1 }) {
+    if (radius <= 0) return;
+    const { ctx } = this;
+    ctx.save();
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = lineWidth;
+    if (glowBlur > 0) {
+      ctx.shadowColor = glowColor ?? color;
+      ctx.shadowBlur  = glowBlur;
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * Draw a gradient engine-exhaust flame triangle with additive (`lighter`)
+   * compositing. The flame base sits at `(localBaseX, localBaseY)` in the
+   * ship's local space and extends `length` virtual px in the local −y
+   * direction (i.e. "upward" in local space — engine exhaust trails away
+   * from the direction of thrust regardless of world rotation).
+   * @param {number} localBaseX @param {number} localBaseY @param {number} length
+   * @param {{x?:number, y?:number, rotation?:number, halfWidth?:number,
+   *          color:string, alpha?:number}} style
+   */
+  drawFlame(localBaseX, localBaseY, length, { x = 0, y = 0, rotation = 0, halfWidth = 4, color, alpha = 1 }) {
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(x, y);
+    if (rotation !== 0) ctx.rotate(rotation);
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Cache hex → solid rgba string per unique color — avoids per-frame parseInt
+    // and createLinearGradient allocations (8 enemies × 60fps = 480 GC objects/sec avoided).
+    // At this scale the solid fill is visually indistinguishable from a gradient.
+    if (!this._rgbaCache) this._rgbaCache = new Map();
+    let rgba = this._rgbaCache.get(color);
+    if (!rgba) {
+      const h = color.replace('#', '');
+      rgba = `rgba(${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)},0.70)`;
+      this._rgbaCache.set(color, rgba);
+    }
+    ctx.fillStyle = rgba;
+    const tipY = localBaseY - length;
+    ctx.beginPath();
+    ctx.moveTo(localBaseX - halfWidth, localBaseY);
+    ctx.lineTo(localBaseX + halfWidth, localBaseY);
+    ctx.lineTo(localBaseX, tipY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
 }

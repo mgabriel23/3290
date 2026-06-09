@@ -96,6 +96,30 @@ export class Bullets {
     renderer.strokePaths(this._pool, this._style, this._count);
   }
 
+  /**
+   * Test whether any active bullet is within `radius` virtual px of `(ex, ey)`.
+   * If one is found, remove it (compact swap) and return `true`. Used by
+   * GameplayScene to resolve player-bullet vs. enemy collisions each frame.
+   * @param {number} ex @param {number} ey @param {number} radius
+   * @returns {boolean}
+   */
+  checkHit(ex, ey, radius) {
+    const r2 = radius * radius;
+    for (let i = 0; i < this._count; i++) {
+      const dx = this._bx[i] - ex;
+      const dy = this._by[i] - ey;
+      if (dx * dx + dy * dy <= r2) {
+        this._count--;
+        if (i < this._count) {
+          this._bx[i] = this._bx[this._count];
+          this._by[i] = this._by[this._count];
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ---------------------------------------------------------------------------
 
   _fire(x, y) {

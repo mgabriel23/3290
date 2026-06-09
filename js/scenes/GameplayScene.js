@@ -23,6 +23,7 @@ import { Bullets } from '../entities/Bullets.js';
 import { HUD } from '../entities/HUD.js';
 import { Player } from '../entities/Player.js';
 import { Starfield } from '../entities/Starfield.js';
+import { WaveManager } from '../entities/WaveManager.js';
 
 export class GameplayScene {
   /** @param {import('../core/Renderer.js').Renderer} renderer */
@@ -40,9 +41,12 @@ export class GameplayScene {
     // 'intro'  — level indicator is on screen; bullets are suppressed
     // 'active' — normal gameplay (enemies, bullets, scoring all live)
     // When enemies exist, 'active' → 'intro' fires once the wave is cleared.
-    this._level     = 1;
+    this._level      = 1;
     this._levelState = 'intro';
     this._levelAge   = 0; // seconds spent in the current level state
+
+    /** @type {WaveManager|null} created when a level's active phase begins */
+    this._waveManager = null;
   }
 
   /** Advance the backdrop and the player by `dt` seconds. */
@@ -52,27 +56,37 @@ export class GameplayScene {
 
     // Transition from intro → active once the indicator animation is done
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
-      this._levelState = 'active';
+      this._levelState  = 'active';
+      this._waveManager = new WaveManager(this._level);
     }
 
     this.starfield.update(dt);
     this.player.update(dt);
 
-    // Bullets are suppressed during the level intro so the dramatic
-    // announcement isn't cluttered with gunfire. Once enemies exist and
-    // waves cycle, this same gate will keep the field clear between waves.
+    // Bullets and enemies are suppressed during the level intro.
     if (this._levelState === 'active') {
       this.bullets.update(dt, this.player);
+      this._waveManager.update(dt, this.player.x, this.player.y);
+      this._checkCollisions();
+
+      // Wave cleared AND all death effects finished → begin the next level intro
+      if (this._waveManager.isDone) {
+        this._level++;
+        this._levelState  = 'intro';
+        this._levelAge    = 0;
+        this._waveManager = null;
+      }
     }
   }
 
-  /** Render one frame: starfield → barrier → player → bullets → HUD → level intro. */
+  /** Render one frame. */
   render() {
     this.renderer.clear(Config.colors.void);
     this._drawStarfield();
     this.barrier.render(this.renderer);
     this.player.render(this.renderer);
     this.bullets.render(this.renderer);
+    this._waveManager?.render(this.renderer);
     this.hud.render(this.renderer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
@@ -90,6 +104,22 @@ export class GameplayScene {
 
   handlePointerUp() {
     this._pointerDown = false;
+  }
+
+  /**
+   * Test every active enemy against the player bullet pool. Each hit consumes
+   * one bullet and calls `enemy.hit()` — enemies handle their own health and
+   * death-flash logic. Called once per frame during 'active' state.
+   */
+  _checkCollisions() {
+    const enemies = this._waveManager.enemies;
+    const { hitRadius } = Config.enemy.scout;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (this.bullets.checkHit(e.x, e.y, hitRadius)) {
+        this._waveManager.handleBulletHit(e);
+      }
+    }
   }
 
   /**
