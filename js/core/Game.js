@@ -64,6 +64,15 @@ export class Game {
   /** Wire up listeners, perform the first layout + paint, and start the loop. */
   start() {
     window.addEventListener('resize', this._onResize);
+
+    // When the tab returns from background, discard the accumulated idle time
+    // so the next tick gets dt=0 rather than however long the tab was hidden.
+    // Without this, _lastTimestamp could be minutes behind, producing a massive
+    // dt that causes bullet bursts, enemy teleports, and particle pop-ins.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) this._lastTimestamp = 0;
+    });
+
     this._onResize();
     requestAnimationFrame(this._tick);
   }
@@ -100,7 +109,11 @@ export class Game {
    * @param {number} timestamp  high-resolution time in ms, supplied by rAF
    */
   _tick(timestamp) {
-    const dt = this._lastTimestamp ? (timestamp - this._lastTimestamp) / 1000 : 0;
+    // Cap dt at 100 ms — safety net if visibilitychange didn't fire (some mobile
+    // browsers, iframe embeds) or for ordinary frame-rate hiccups. At 100 ms max,
+    // a bullet cooldown can only go −0.1 s negative → fires at most one extra shot.
+    const raw = this._lastTimestamp ? (timestamp - this._lastTimestamp) / 1000 : 0;
+    const dt  = Math.min(raw, 0.1);
     this._lastTimestamp = timestamp;
 
     this.scene.update(dt);

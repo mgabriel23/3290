@@ -312,7 +312,7 @@ export const Config = Object.freeze({
       aimPause:         0.5,         // seconds pause before each shot
       reloadTime:       2.2,         // seconds between shots
       hitRadius:        16,          // collision circle radius
-      minSeparation:    56,          // virtual px — direct push-apart fires every frame when closer than this
+      minSeparation:    60,          // virtual px — direct push-apart fires every frame when closer than this
 
       audio: Object.freeze({
         src:      'assets/audio/explosion.mp3',
@@ -344,11 +344,11 @@ export const Config = Object.freeze({
   waves: Object.freeze({
     levels: Object.freeze([
       // Level 1 — slow trickle, lets the player get a feel for the enemy
-      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 3, spawnInterval: 1.8 })]) }),
+      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 4, spawnInterval: 2.5 })]) }),
       // Level 2
-      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 5, spawnInterval: 1.2 })]) }),
+      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 8, spawnInterval: 2.3 })]) }),
       // Level 3 — dense wave
-      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 8, spawnInterval: 0.9 })]) }),
+      Object.freeze({ enemies: Object.freeze([Object.freeze({ type: 'scout', count: 12, spawnInterval: 2.0 })]) }),
     ]),
   }),
 
