@@ -47,18 +47,23 @@ export class PrologueScene {
     this._beat = 'yearCard';
     this._beatAge = 0;
 
+    this._yearRevealedCount = 0; // fractional char count — drives letter-by-letter reveal
+    this._yearHoldAge = 0;       // accumulates AFTER the text is fully typed (hold + fade-out)
+
     this._starfield = new Starfield();
     this._portals = this._createPortals();
 
-    // Wrapped + flattened up front, exactly like the typewriter overlay
-    // this superseded — the reveal counter and blips both walk the
-    // flattened sequence so they can never drift from what's on screen.
+    // Wrapped up front (text and font never change), then split into
+    // per-line word lists with each line's starting word-index recorded —
+    // the reveal counter walks *words*, not characters, so the typewriter
+    // unveils a whole word at a time (see _updateBriefing/_drawBriefingText).
     this._briefingLines = this._wrapBriefing(renderer);
-    this._briefingLineOffsets = this._computeLineOffsets(this._briefingLines);
-    this._briefingRevealText = this._briefingLines.join('');
-    this._revealedCount = 0;
+    this._briefingLineWords = this._briefingLines.map((line) => line.split(' '));
+    this._briefingLineWordOffsets = this._computeWordOffsets(this._briefingLineWords);
+    this._briefingWordCount = this._briefingLineWords.reduce((sum, words) => sum + words.length, 0);
+    this._revealedWordCount = 0;
     this._briefingHoldAge = 0;
-    this._nonSpaceRevealCount = 0; // walks alongside the reveal — see _playBlipsBetween for why it's not 1:1 with characters
+    this._blipTimer = 0; // ticks on its own faster clock — see _advanceBlips for why it's decoupled from the word reveal
     this._blipTemplate = null;
   }
 
@@ -76,7 +81,7 @@ export class PrologueScene {
     }
 
     switch (this._beat) {
-      case 'yearCard': return this._updateYearCard();
+      case 'yearCard': return this._updateYearCard(dt);
       case 'portals': return this._updatePortals();
       case 'briefing': return this._updateBriefing(dt);
       case 'fadeOut': return this._updateFadeOut();
@@ -107,18 +112,55 @@ export class PrologueScene {
 
   // --- Beat 1: year card ------------------------------------------------------
 
-  _updateYearCard() {
-    const { fadeInDuration, holdDuration, fadeOutDuration } = Config.prologue.yearCard;
-    if (this._beatAge >= fadeInDuration + holdDuration + fadeOutDuration) this._advanceBeat('portals');
+  _updateYearCard(dt) {
+    const { text, charsPerSecond, holdDuration, fadeOutDuration } = Config.prologue.yearCard;
+
+    // Phase 1 — type letters in one by one; play a blip on each non-space char.
+    if (this._yearRevealedCount < text.length) {
+      const previous = Math.floor(this._yearRevealedCount);
+      this._yearRevealedCount = Math.min(this._yearRevealedCount + charsPerSecond * dt, text.length);
+      const current = Math.floor(this._yearRevealedCount);
+      for (let i = previous; i < current; i++) {
+        if (text[i] !== ' ') this._playBlip();
+      }
+      return;
+    }
+
+    // Phase 2 — hold then fade out; beat ends once both are done.
+    this._yearHoldAge += dt;
+    if (this._yearHoldAge >= holdDuration + fadeOutDuration) this._advanceBeat('portals');
   }
 
   _renderYearCard() {
-    const { text, font, textColor, fadeInDuration, holdDuration, fadeOutDuration } = Config.prologue.yearCard;
+    const { text, font, textColor, holdDuration, fadeOutDuration } = Config.prologue.yearCard;
     const { width: vW, height: vH } = Config.virtual;
-    const alpha = this._inOutAlpha(this._beatAge, fadeInDuration, holdDuration, fadeOutDuration);
+
+    // Fade-out alpha: only kicks in after hold is done, ramps 1 → 0.
+    let fadeAlpha = 1;
+    if (this._yearRevealedCount >= text.length) {
+      const inFadeOut = Math.max(0, this._yearHoldAge - holdDuration);
+      fadeAlpha = Math.max(0, 1 - inFadeOut / fadeOutDuration);
+    }
+
+    // Signal-interference flicker layered on top — the whole line
+    // randomly dips toward transparent as if the transmission is weak.
+    const alpha = fadeAlpha * this._yearCardFlickerAlpha(this._beatAge);
+    const visible = text.slice(0, Math.floor(this._yearRevealedCount));
 
     this.renderer.clear(Config.colors.void);
-    this.renderer.drawText(text, vW / 2, vH * 0.46, { font, color: textColor, alpha });
+    this.renderer.drawText(visible, vW / 2, vH * 0.46, { font, color: textColor, alpha });
+  }
+
+  /**
+   * Three incommensurate sine waves summed together — their interference
+   * pattern produces signal-drop moments that feel quasi-random without
+   * being literally random (consistent flicker shape from any given t,
+   * no state needed). Frequencies chosen to create dips at a cinematic
+   * 1–3 Hz rather than a 60 fps frame-by-frame strobe.
+   */
+  _yearCardFlickerAlpha(t) {
+    const noise = (Math.sin(t * 7.3) + Math.sin(t * 11.7 + 2.0) + Math.cos(t * 19.1 + 0.8)) / 3;
+    return Math.max(0.08, Math.min(1, 0.8 + noise * 0.85));
   }
 
   // --- Beat 2: portals ---------------------------------------------------------
@@ -178,24 +220,23 @@ export class PrologueScene {
     return lines;
   }
 
-  /** Each line's starting index within the flattened reveal text — maps the reveal count back to lines. */
-  _computeLineOffsets(lines) {
+  /** Each line's starting index in the whole-paragraph word sequence — maps the reveal count back to lines (the word equivalent of the old per-character line-offsets). */
+  _computeWordOffsets(lineWords) {
     const offsets = [];
     let offset = 0;
-    for (const line of lines) {
+    for (const words of lineWords) {
       offsets.push(offset);
-      offset += line.length;
+      offset += words.length;
     }
     return offsets;
   }
 
   _updateBriefing(dt) {
-    const { charsPerSecond, holdDuration } = Config.prologue.briefing;
+    const { wordsPerSecond, holdDuration } = Config.prologue.briefing;
 
-    if (this._revealedCount < this._briefingRevealText.length) {
-      const previous = Math.floor(this._revealedCount);
-      this._revealedCount = Math.min(this._revealedCount + charsPerSecond * dt, this._briefingRevealText.length);
-      this._playBlipsBetween(previous, Math.floor(this._revealedCount));
+    if (this._revealedWordCount < this._briefingWordCount) {
+      this._revealedWordCount = Math.min(this._revealedWordCount + wordsPerSecond * dt, this._briefingWordCount);
+      this._advanceBlips(dt);
       return;
     }
 
@@ -203,12 +244,29 @@ export class PrologueScene {
     if (this._briefingHoldAge >= holdDuration) this._advanceBeat('fadeOut');
   }
 
+  /**
+   * Fire blips on their own fixed-rate clock (`blip.perSecond`) rather
+   * than once per revealed word — deliberately faster than the word
+   * reveal, so the "typing" sounds like a busy teletype clattering
+   * underneath the calmer pace the words actually pop up at. A `while`
+   * loop (not `if`) covers any frame slow enough to cross more than one
+   * tick at once, so the cadence holds steady regardless of frame rate.
+   */
+  _advanceBlips(dt) {
+    const interval = 1 / Config.prologue.briefing.blip.perSecond;
+    this._blipTimer += dt;
+    while (this._blipTimer >= interval) {
+      this._blipTimer -= interval;
+      this._playBlip();
+    }
+  }
+
   /** The portals stay on screen, still churning above, while the commander's voice plays out below them. */
   _renderBriefing() {
     this.renderer.clear(Config.colors.void);
     this._starfield.render(this.renderer);
     for (const portal of this._portals) portal.render(this.renderer);
-    this._drawBriefingText(Math.floor(this._revealedCount));
+    this._drawBriefingText(Math.floor(this._revealedWordCount));
   }
 
   /**
@@ -221,20 +279,20 @@ export class PrologueScene {
    * fixed slot (unlike the corner-anchored overlay this superseded,
    * which had to fit its whole paragraph on screen at once).
    */
-  _drawBriefingText(revealedCount) {
+  _drawBriefingText(revealedWordCount) {
     const { font, textColor, lineHeight, maxVisibleLines } = Config.prologue.briefing;
     const { width: vW } = Config.virtual;
     const anchorY = this._briefingAnchorY();
-    const currentLine = this._currentBriefingLine(revealedCount);
+    const currentLine = this._currentBriefingLine(revealedWordCount);
     const firstVisibleLine = Math.max(0, currentLine - maxVisibleLines + 1);
 
     for (let i = firstVisibleLine; i <= currentLine; i++) {
-      const line = this._briefingLines[i];
-      const visibleLength = Math.max(0, Math.min(line.length, revealedCount - this._briefingLineOffsets[i]));
-      if (visibleLength === 0) continue;
+      const words = this._briefingLineWords[i];
+      const visibleWordCount = Math.max(0, Math.min(words.length, revealedWordCount - this._briefingLineWordOffsets[i]));
+      if (visibleWordCount === 0) continue;
 
       const y = anchorY - (currentLine - i) * lineHeight;
-      this.renderer.drawText(line.slice(0, visibleLength), vW / 2, y, {
+      this.renderer.drawText(words.slice(0, visibleWordCount).join(' '), vW / 2, y, {
         font,
         color: textColor,
         align: 'center',
@@ -247,29 +305,13 @@ export class PrologueScene {
     return Config.virtual.height - Config.prologue.briefing.bottomMargin;
   }
 
-  /** Index of the line the reveal is currently inside (or resting on, once finished). `_briefingLineOffsets` is ascending, so the last one at or before `revealedCount` wins. */
-  _currentBriefingLine(revealedCount) {
+  /** Index of the line the reveal is currently inside (or resting on, once finished). `_briefingLineWordOffsets` is ascending, so the last one at or before `revealedWordCount` wins. */
+  _currentBriefingLine(revealedWordCount) {
     let index = 0;
-    for (let i = 0; i < this._briefingLineOffsets.length; i++) {
-      if (this._briefingLineOffsets[i] <= revealedCount) index = i;
+    for (let i = 0; i < this._briefingLineWordOffsets.length; i++) {
+      if (this._briefingLineWordOffsets[i] <= revealedWordCount) index = i;
     }
     return index;
-  }
-
-  /**
-   * One blip per `everyNChars`-th newly-revealed non-space character —
-   * not every single one (see Config.prologue.briefing.blip for why:
-   * one-per-letter at a readable pace piles overlapping clips into a
-   * stutter rather than a smooth cadence).
-   */
-  _playBlipsBetween(fromIndex, toIndex) {
-    const { everyNChars } = Config.prologue.briefing.blip;
-
-    for (let i = fromIndex; i < toIndex; i++) {
-      if (this._briefingRevealText[i] === ' ') continue;
-      this._nonSpaceRevealCount++;
-      if (this._nonSpaceRevealCount % everyNChars === 0) this._playBlip();
-    }
   }
 
   /** Each blip clones a lazily-created template `Audio` so overlapping plays layer instead of cutting each other off. */
@@ -293,7 +335,7 @@ export class PrologueScene {
     this.renderer.clear(Config.colors.void);
     this._starfield.render(this.renderer);
     for (const portal of this._portals) portal.render(this.renderer);
-    this._drawBriefingText(this._briefingRevealText.length);
+    this._drawBriefingText(this._briefingWordCount);
 
     const overlayAlpha = Math.min(this._beatAge / Config.prologue.fadeOutDuration, 1);
     this.renderer.clear(Config.colors.void, overlayAlpha);
@@ -344,11 +386,4 @@ export class PrologueScene {
   }
 
   // --- Shared helpers -----------------------------------------------------------------
-
-  /** Fade in over `fadeIn`, hold at full opacity for `hold`, then fade out over `fadeOut` — drives the year card. */
-  _inOutAlpha(age, fadeIn, hold, fadeOut) {
-    if (age < fadeIn) return age / fadeIn;
-    if (age < fadeIn + hold) return 1;
-    return Math.max(0, 1 - (age - fadeIn - hold) / fadeOut);
-  }
 }

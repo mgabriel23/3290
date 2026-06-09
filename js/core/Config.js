@@ -107,14 +107,19 @@ export const Config = Object.freeze({
    * button that gates entry into actual gameplay.
    */
   prologue: Object.freeze({
-    /** Beat 1: a stark "when" title card, in and out before the portals appear. */
+    /**
+     * Beat 1: a stark "when" title card — letters type in one by one with
+     * a signal-interference alpha flicker on the whole line throughout
+     * (see PrologueScene._yearCardFlickerAlpha), so it reads as a weak
+     * transmission barely coming through rather than a clean title card.
+     */
     yearCard: Object.freeze({
       text: 'EARTH — YEAR 3290',
       font: '400 28px "Audiowide", "Courier New", monospace',
       textColor: '#aab4d4',
-      fadeInDuration: 1.0,
-      holdDuration: 1.8,
-      fadeOutDuration: 1.0,
+      charsPerSecond: 12, // letter by letter — slower than the briefing for dramatic weight
+      holdDuration: 2.4,   // seconds the finished year card lingers before the next beat starts
+      fadeOutDuration: 0.8,
     }),
 
     /**
@@ -131,8 +136,8 @@ export const Config = Object.freeze({
       lineWidth: 2,
       glowBlur: 22,
       appearDuration: 1.6, // seconds for one portal's grow-and-fade-in (also syncs the sky's own reveal — see PrologueScene._renderPortals)
-      staggerDelay: 0.9,   // seconds between each portal starting its own appear animation
-      holdDuration: 1.6,   // seconds all three linger after the last one finishes appearing
+      staggerDelay: 1.2,   // seconds between each portal starting its own appear animation
+      holdDuration: 1.8,   // seconds all three linger after the last one finishes appearing
 
       /** The swirling vortex body: one spiral-arm shape, baked once and re-stroked at evenly fanned rotations — see Portal._renderArms. */
       spiral: Object.freeze({
@@ -141,7 +146,7 @@ export const Config = Object.freeze({
         outerRadius: 50,  // virtual px — how far each arm reaches outward
         turns: 1.4,       // revolutions an arm sweeps through end to end — higher reads as "tighter"
         segments: 28,     // polyline resolution along the curve — higher = smoother
-        rotationSpeed: 1.1, // radians/second — the whole swirl's spin
+        rotationSpeed: 1.2, // radians/second — the whole swirl's spin
       }),
 
       /** A small faceted "event horizon" at the very center, counter-spinning against the arms for a layered, alien feel. */
@@ -180,21 +185,21 @@ export const Config = Object.freeze({
       sideMargin: 56,     // virtual px — bounds the wrapped paragraph's width
       bottomMargin: 64,   // virtual px from the bottom edge to the newest line's baseline (see PrologueScene._briefingAnchorY) — sits low, beneath the portals
       maxVisibleLines: 4, // the "subtitle window" never shows more than this many lines at once — older ones fall away as new ones reveal (see PrologueScene._drawBriefingText)
-      charsPerSecond: 20, // slowed from the sample overlay's pace — gives the commander's words more weight
+      wordsPerSecond: 4,  // the briefing reveals a whole word at a time, not letter by letter — see PrologueScene._updateBriefing for why that reads (and sounds) more like typing
       holdDuration: 1.6,  // seconds the finished briefing stays up before fading out
 
       /**
-       * A short blip accompanying the reveal — cloned per-play so rapid
-       * retriggers can overlap cleanly (see _playBlip). `everyNChars`
-       * fires it only on every Nth revealed *non-space* character rather
-       * than each one: at this reading pace, one-per-letter piles clips
-       * up into a stuttering chatter; spacing them out turns it into a
-       * calmer, more deliberate "transmission" pulse.
+       * Ticks on its OWN clock — deliberately faster than `wordsPerSecond`
+       * — so the typewriter sounds like a busy teletype clattering away
+       * underneath the calmer, readable pace the words actually pop up
+       * at, rather than one polite blip per word landing in lockstep
+       * with the text (see PrologueScene._advanceBlips). Cloned per-play
+       * so overlapping retriggers layer instead of cutting each other off.
        */
       blip: Object.freeze({
         src: 'assets/audio/typewriter-blip.mp3',
         volume: 0.5,
-        everyNChars: 4,
+        perSecond: 6,
       }),
     }),
 
