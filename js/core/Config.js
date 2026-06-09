@@ -79,8 +79,12 @@ export const Config = Object.freeze({
 
     audio: Object.freeze({
       src: 'assets/audio/bullet-shoot.mp3',
-      volume: 0.20,
-      poolSize: 6,         // pre-created Audio elements so rapid retrigger layers cleanly
+      // At 7/sec with ~2 sounds simultaneously, combined perceived volume ≈ 0.28 —
+      // sits clearly below BGM at 0.40 so bullets add presence without competing.
+      volume: 0.14,
+      // Pool of 12 → each slot isn't reused until 12/7 ≈ 1.7s after it was claimed,
+      // giving any reasonably-lengthed shoot clip time to finish before it's reset.
+      poolSize: 12,
     }),
   }),
 
@@ -274,7 +278,7 @@ export const Config = Object.freeze({
    */
   audio: Object.freeze({
     themeSrc: 'assets/audio/bg-music.mp3',
-    themeVolume: 0.45, // BGM is the loudest persistent layer — sits above all other sounds
+    themeVolume: 0.40, // BGM anchor — loud enough to feel immersive, with headroom for SFX layers above it
     themeLoop: true,
   }),
 
