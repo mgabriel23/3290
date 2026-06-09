@@ -3,16 +3,18 @@
  * Orchestrates spawning, separation, and owns all active entities for
  * one level's wave (enemies of any type, their projectiles, explosions).
  *
- * Hull rendering is batched by (type × flash) into at most 3 fillStrokePaths
- * calls per frame — 3 GPU shadow passes regardless of enemy count:
- *   scout-normal | rocketeer-normal | flash (white, shared across types)
+ * Hull rendering is batched by (type × flash) into at most 4 fillStrokePaths
+ * calls per frame — 4 GPU shadow passes regardless of enemy count:
+ *   scout-normal | rocketeer-normal | sniper-normal | flash (white, shared)
  *
- * Each enemy type routes its onFire callback to a different projectile pool:
+ * Each enemy type routes its onFire callback differently:
  *   scout     → EnemyBullets (straight aimed capsule)
  *   rocketeer → Rockets (homing, detonates on proximity or timer)
+ *   sniper    → no-op (_onFire unused; sniper manages its own laser internally)
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
+import { SniperEnemy } from './SniperEnemy.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { Particles } from './Particles.js';
@@ -24,7 +26,11 @@ const _mkPool   = () => Array.from({ length: MAX_BATCH }, () =>
   ({ points: Array.from({ length: _PTS }, () => [0, 0]), closed: true }));
 const _scoutNormalHulls     = _mkPool();
 const _rocketeerNormalHulls = _mkPool();
+const _sniperNormalHulls    = _mkPool();
 const _flashHulls           = _mkPool();
+
+// Sniper fire: laser is managed internally by SniperEnemy — callback is a no-op.
+const _noFire = () => {};
 
 export class WaveManager {
   /**
@@ -50,13 +56,13 @@ export class WaveManager {
 
     this._particles          = new Particles(Config.enemy.scout.color);
     this._rocketeerParticles = new Particles(Config.enemy.rocketeer.color);
+    this._sniperParticles    = new Particles(Config.enemy.sniper.color);
 
-    // Lazy SFX pool — single shared pool for both enemy types (same audio file).
-    // Volume is set per-play so scout vs rocketeer kills can differ.
+    // Lazy SFX pool (same audio file across all types; volume set per-play).
     this._sfxPool = null;
     this._sfxIdx  = 0;
 
-    // Pre-bound fire callbacks — stored once so update() creates no closures per frame.
+    // Pre-bound fire callbacks — stored once, zero closures per frame.
     this._fireBullet = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
     this._fireRocket = (ox, oy, tx, ty) => this._rockets.fire(ox, oy, tx, ty);
 
@@ -69,10 +75,11 @@ export class WaveManager {
    * @param {number} playerY
    */
   update(dt, playerX, playerY) {
-    // These all drain past waveClear so in-flight effects finish animating before
-    // isDone returns true and the level transitions.
+    // All particle/projectile systems drain past waveClear so effects finish
+    // before isDone returns true and the level transitions.
     this._particles.update(dt);
     this._rocketeerParticles.update(dt);
+    this._sniperParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
 
     if (this.waveClear) return;
@@ -90,8 +97,11 @@ export class WaveManager {
     // ── Update enemies ────────────────────────────────────────────────────────
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      e.update(dt, playerX, playerY,
-        e.type === 'rocketeer' ? this._fireRocket : this._fireBullet);
+      let cb;
+      if      (e.type === 'rocketeer') cb = this._fireRocket;
+      else if (e.type === 'sniper')    cb = _noFire;
+      else                             cb = this._fireBullet;
+      e.update(dt, playerX, playerY, cb);
     }
 
     this._resolveOverlaps();
@@ -122,21 +132,24 @@ export class WaveManager {
       this._enemies[i].renderFlame(renderer);
     }
 
-    // ── Hull batch — ≤3 GPU shadow passes regardless of enemy count ───────────
-    const sCfg = Config.enemy.scout;
-    const rCfg = Config.enemy.rocketeer;
-    let snCount = 0, rnCount = 0, fCount = 0;
+    // ── Hull batch — ≤4 GPU shadow passes regardless of enemy count ───────────
+    const sCfg  = Config.enemy.scout;
+    const rCfg  = Config.enemy.rocketeer;
+    const snCfg = Config.enemy.sniper;
+    let scCount = 0, rnCount = 0, snCount = 0, fCount = 0;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e       = this._enemies[i];
       const isFlash = e._hitFlash > 0;
       let pool, idx;
       if (isFlash) {
-        pool = _flashHulls; idx = fCount++;
+        pool = _flashHulls;           idx = fCount++;
       } else if (e.type === 'rocketeer') {
         pool = _rocketeerNormalHulls; idx = rnCount++;
+      } else if (e.type === 'sniper') {
+        pool = _sniperNormalHulls;    idx = snCount++;
       } else {
-        pool = _scoutNormalHulls; idx = snCount++;
+        pool = _scoutNormalHulls;     idx = scCount++;
       }
       const c    = Math.cos(e.angle);
       const s    = Math.sin(e.angle);
@@ -149,19 +162,24 @@ export class WaveManager {
       }
     }
 
-    if (snCount > 0) renderer.fillStrokePaths(_scoutNormalHulls, {
-      fillColor: sCfg.fillColor, strokeColor: sCfg.color,
-      lineWidth:  sCfg.lineWidth, glowBlur:   sCfg.glowBlur,
-      glowColor:  sCfg.color,    singleStroke: true,
-    }, snCount);
+    if (scCount > 0) renderer.fillStrokePaths(_scoutNormalHulls, {
+      fillColor: sCfg.fillColor,  strokeColor: sCfg.color,
+      lineWidth:  sCfg.lineWidth, glowBlur:    sCfg.glowBlur,
+      glowColor:  sCfg.color,     singleStroke: true,
+    }, scCount);
     if (rnCount > 0) renderer.fillStrokePaths(_rocketeerNormalHulls, {
-      fillColor: rCfg.fillColor, strokeColor: rCfg.color,
-      lineWidth:  rCfg.lineWidth, glowBlur:   rCfg.glowBlur,
-      glowColor:  rCfg.color,    singleStroke: true,
+      fillColor: rCfg.fillColor,  strokeColor: rCfg.color,
+      lineWidth:  rCfg.lineWidth, glowBlur:    rCfg.glowBlur,
+      glowColor:  rCfg.color,     singleStroke: true,
     }, rnCount);
+    if (snCount > 0) renderer.fillStrokePaths(_sniperNormalHulls, {
+      fillColor: snCfg.fillColor,  strokeColor: snCfg.color,
+      lineWidth:  snCfg.lineWidth, glowBlur:    snCfg.glowBlur,
+      glowColor:  snCfg.color,     singleStroke: true,
+    }, snCount);
     if (fCount > 0) renderer.fillStrokePaths(_flashHulls, {
       fillColor: '#ffffff', strokeColor: '#ffffff',
-      lineWidth:  sCfg.lineWidth, glowBlur:  sCfg.hitGlowBlur,
+      lineWidth:  sCfg.lineWidth, glowBlur:   sCfg.hitGlowBlur,
       glowColor: '#ffffff', singleStroke: true,
     }, fCount);
 
@@ -170,9 +188,15 @@ export class WaveManager {
       this._enemies[i].renderCore(renderer);
     }
 
+    // ── Sniper extras: ! warning markers and laser flash beams ───────────────
+    for (let i = 0; i < this._enemies.length; i++) {
+      this._enemies[i].renderExtras?.(renderer);
+    }
+
     // ── Explosions ────────────────────────────────────────────────────────────
     this._particles.render(renderer);
     this._rocketeerParticles.render(renderer);
+    this._sniperParticles.render(renderer);
   }
 
   /** Called by GameplayScene when a player bullet hits an enemy. */
@@ -182,6 +206,9 @@ export class WaveManager {
       if (enemy.type === 'rocketeer') {
         this._rocketeerParticles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.rocketeer.audio.volume);
+      } else if (enemy.type === 'sniper') {
+        this._sniperParticles.emit(enemy.x, enemy.y);
+        this._playExplosionSfx(Config.enemy.sniper.audio.volume);
       } else {
         this._particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
@@ -193,21 +220,19 @@ export class WaveManager {
   get enemies() { return this._enemies; }
 
   /**
-   * True once all enemies are dead AND every effect (particles, rockets) has
-   * finished animating. GameplayScene delays advancing to the next level until
-   * this returns true so no explosion is cut short mid-animation.
+   * True once all enemies are dead AND every effect has finished animating.
    */
   get isDone() {
     return this.waveClear
       && !this._particles.active
       && !this._rocketeerParticles.active
+      && !this._sniperParticles.active
       && !this._rockets.active;
   }
 
   // ---------------------------------------------------------------------------
 
   _resolveOverlaps() {
-    // Use scout bounds as the common play-zone — both types share identical margins.
     const { restXMargin, restYMin, restYMax } = Config.enemy.scout;
     const { width: vW, height: vH } = Config.virtual;
     const xLo = restXMargin,   xHi = vW - restXMargin;
@@ -221,7 +246,6 @@ export class WaveManager {
         const b = this._enemies[j];
         if (b._state === 'entering') continue;
 
-        // Respect the stricter separation requirement of the two enemies
         const minSep = Math.max(a._cfg.minSeparation, b._cfg.minSeparation);
         const ddx    = b.x - a.x;
         const ddy    = b.y - a.y;
@@ -249,7 +273,12 @@ export class WaveManager {
     const spawnX = eCfg.restXMargin + Math.random() * (vW - eCfg.restXMargin * 2);
     const restX  = eCfg.restXMargin + Math.random() * (vW - eCfg.restXMargin * 2);
     const restY  = vH * (eCfg.restYMin + Math.random() * (eCfg.restYMax - eCfg.restYMin));
-    this._enemies.push(new Enemy(spawnX, restX, restY, type));
+
+    const enemy = type === 'sniper'
+      ? new SniperEnemy(spawnX, restX, restY)
+      : new Enemy(spawnX, restX, restY, type);
+    this._enemies.push(enemy);
+
     this._spawnIdx++;
     if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;
   }
@@ -270,7 +299,7 @@ export class WaveManager {
     }
     const a = this._sfxPool[this._sfxIdx];
     this._sfxIdx  = (this._sfxIdx + 1) % this._sfxPool.length;
-    a.volume      = volume; // set fresh each play — scout vs rocketeer kills differ
+    a.volume      = volume;
     a.currentTime = 0;
     a.play().catch(() => {});
   }

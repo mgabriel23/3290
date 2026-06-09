@@ -323,6 +323,39 @@ export const Config = Object.freeze({
     }),
 
     /**
+     * Sniper — same hull silhouette, electric violet. High health (8 hits).
+     * Continuously records the player's position history; when it fires it
+     * targets where the player WAS 1.3 seconds ago, giving a skilled player
+     * a chance to dodge if they read the warning indicator.
+     * Charge sequence: 2 s warmup (nose orb grows) → 1 s locked (! shown,
+     * nose blinking) → instant laser flash → immediately recharge.
+     */
+    sniper: Object.freeze({
+      size:             22,
+      health:           8,
+      color:            '#BF5FFF',   // electric violet — reads as energy/laser weapon
+      fillColor:        '#110022',
+      lineWidth:        1.5,
+      glowBlur:         12,
+      hitGlowBlur:      22,
+      engineCoreColor:  '#8833CC',   // deeper violet for the engine orb
+      flameColor:       '#BF5FFF',
+      flameHalfWidth:   3,
+      entrySpeed:       280,
+      restXMargin:      80,
+      restYMin:         0.08,
+      restYMax:         0.35,
+      chargeWarmup:     2.0,         // seconds of nose charge before ! appears
+      warningDuration:  1.0,         // seconds ! is shown before the shot fires
+      historyWindow:    1.3,         // seconds into the past to sample player position
+      hitRadius:        16,
+      minSeparation:    64,
+      audio: Object.freeze({
+        src: 'assets/audio/explosion.mp3', volume: 0.55, poolSize: 4,
+      }),
+    }),
+
+    /**
      * Rocketeer — same hull silhouette as the Scout, amber coloring.
      * Fires homing rockets instead of bullets; slower to shoot but
      * rockets track and detonate on proximity, making them harder to dodge.
@@ -365,6 +398,18 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Sniper laser beam — an instant full-screen flash fired by the Sniper.
+   * Rendered as a single glowing line segment that fades out in flashDuration
+   * seconds. No projectile travels; the hit is instantaneous (future milestone).
+   */
+  laser: Object.freeze({
+    color:         '#BF5FFF',   // matches Sniper hull
+    lineWidth:     3,
+    glowBlur:      20,
+    flashDuration: 0.20,        // seconds the beam remains visible
+  }),
+
+  /**
    * Homing rocket pool — fired by Rocketeers. Rockets continuously
    * steer toward the player after launch and detonate either when
    * they get close enough (proximity) or when their fuel runs out (timer).
@@ -391,7 +436,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scouts only, slow trickle
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'scout', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'sniper', count: 5, spawnInterval: 4 }),
       ]) }),
       // Level 2 — more scouts
       Object.freeze({ enemies: Object.freeze([
@@ -406,10 +451,17 @@ export const Config = Object.freeze({
         Object.freeze({ type: 'scout',     count: 4, spawnInterval: 2.0 }),
         Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 3.0 }),
       ]) }),
-      // Level 5 — heavier rocketeer presence
+      // Level 5 — first sniper introduced alongside a light escort
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'scout',     count: 5, spawnInterval: 1.8 }),
-        Object.freeze({ type: 'rocketeer', count: 4, spawnInterval: 2.4 }),
+        Object.freeze({ type: 'scout',     count: 4, spawnInterval: 1.8 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.4 }),
+        Object.freeze({ type: 'sniper',    count: 1, spawnInterval: 4.0 }),
+      ]) }),
+      // Level 6 — heavy mix; two snipers, rocketeers, and scouts
+      Object.freeze({ enemies: Object.freeze([
+        Object.freeze({ type: 'scout',     count: 5, spawnInterval: 1.6 }),
+        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.0 }),
+        Object.freeze({ type: 'sniper',    count: 2, spawnInterval: 5.0 }),
       ]) }),
     ]),
   }),
