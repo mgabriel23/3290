@@ -247,7 +247,7 @@ export const Config = Object.freeze({
    * the player swipes past the intro prompt.
    */
   audio: Object.freeze({
-    themeSrc: 'assets/audio/theme.mp3',
+    themeSrc: 'assets/audio/bg-music.mp3',
     themeVolume: 0.4, // kept moderate so future sound effects can sit on top without competing
     themeLoop: true,
   }),
@@ -269,7 +269,7 @@ export const Config = Object.freeze({
   barrier: Object.freeze({
     color: '#4DEFFF',
     lineWidth: 2,
-    glowBlur: 12,
+    glowBlur: 10,      // reduced from 12 — blur cost ∝ radius², so 10 vs 12 is ~31% cheaper
     baseY: 940,        // virtual px — where the arc endpoints sit (bottom edge margin)
     arcHeight: 70,     // virtual px — how high the arc rises at center
     arcSegments: 48,   // polyline resolution — higher = smoother curve
@@ -280,7 +280,7 @@ export const Config = Object.freeze({
     healthLabelFont: '400 9px "Audiowide", "Courier New", monospace',
     healthValueFont: '400 14px "Audiowide", "Courier New", monospace',
     healthColor: '#4DEFFF',
-    healthGlowBlur: 5,
+    healthGlowBlur: 3, // kept low — small radius means cheap shadow pass
   }),
 
   /**
@@ -294,10 +294,10 @@ export const Config = Object.freeze({
     labelColor: '#aab4d4',
     valueFont: '400 20px "Audiowide", "Courier New", monospace',
     valueColor: '#4DEFFF',
-    valueGlowBlur: 8,    // neon halo on the score/gold numbers
+    valueGlowBlur: 6,    // reduced from 8 — 44% cheaper shadow pass (blur cost ∝ radius²)
     chromeColor: '#4DEFFF',
     chromeLineWidth: 1,
-    chromeGlowBlur: 5,
+    chromeGlowBlur: 4,   // reduced from 5
     bracketSize: 12,     // leg length (virtual px) of the L-bracket corner accent
   }),
 
@@ -317,7 +317,7 @@ export const Config = Object.freeze({
     tapColor: '#4DEFFF',
     overlayAlpha: 0.60,  // how much the gameplay backdrop dims behind the hint text
     arrowColor: '#4DEFFF',
-    arrowGlowBlur: 10,
+    arrowGlowBlur: 8,    // reduced from 10 — tutorial arrows are short so a smaller halo still reads clearly
     progressFont: '400 10px "Audiowide", "Courier New", monospace',
     progressColor: '#4DEFFF',
     blip: Object.freeze({

@@ -23,8 +23,31 @@ export class HUD {
 
   /** Draw both panels over whatever was rendered before this call. */
   render(renderer) {
-    this._renderScorePanel(renderer);
-    this._renderGoldPanel(renderer);
+    const {
+      margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur,
+      chromeColor, chromeLineWidth, chromeGlowBlur,
+    } = Config.hud;
+
+    // Both brackets in one strokePaths call → one shadow-blur GPU pass instead of two.
+    renderer.strokePaths(this._allBrackets, {
+      color: chromeColor, lineWidth: chromeLineWidth, glowBlur: chromeGlowBlur,
+    });
+
+    // Score panel (left)
+    renderer.drawText('SCORE', this._scoreTX, margin + 22, {
+      font: labelFont, color: labelColor, align: 'left', alpha: 0.65,
+    });
+    renderer.drawText(String(this.score), this._scoreTX, margin + 44, {
+      font: valueFont, color: valueColor, align: 'left', glowBlur: valueGlowBlur,
+    });
+
+    // Gold panel (right)
+    renderer.drawText('GOLD', this._goldTX, margin + 22, {
+      font: labelFont, color: labelColor, align: 'right', alpha: 0.65,
+    });
+    renderer.drawText(String(this.gold), this._goldTX, margin + 44, {
+      font: valueFont, color: valueColor, align: 'right', glowBlur: valueGlowBlur,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -34,50 +57,14 @@ export class HUD {
     const { width: vW } = Config.virtual;
     const rx = vW - margin; // right-side x anchor
 
-    // One L-bracket per panel, baked in world space
-    this._scoreBracket = [
+    // Both L-brackets in one array — shared strokePaths call halves chrome shadow passes.
+    this._allBrackets = [
       { points: [[margin + leg, margin], [margin, margin], [margin, margin + leg]], closed: false },
-    ];
-    this._goldBracket = [
-      { points: [[rx - leg, margin], [rx, margin], [rx, margin + leg]], closed: false },
+      { points: [[rx - leg,     margin], [rx,     margin], [rx,     margin + leg]], closed: false },
     ];
 
-    // Text x anchors — inset a few virtual px from the bracket edge
+    // Text x anchors — inset a few virtual px from each bracket edge
     this._scoreTX = margin + 8;
     this._goldTX  = vW - margin - 8;
-  }
-
-  _renderScorePanel(renderer) {
-    const {
-      margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur,
-      chromeColor, chromeLineWidth, chromeGlowBlur,
-    } = Config.hud;
-
-    renderer.strokePaths(this._scoreBracket, {
-      color: chromeColor, lineWidth: chromeLineWidth, glowBlur: chromeGlowBlur,
-    });
-    renderer.drawText('SCORE', this._scoreTX, margin + 22, {
-      font: labelFont, color: labelColor, align: 'left', alpha: 0.65,
-    });
-    renderer.drawText(String(this.score), this._scoreTX, margin + 44, {
-      font: valueFont, color: valueColor, align: 'left', glowBlur: valueGlowBlur,
-    });
-  }
-
-  _renderGoldPanel(renderer) {
-    const {
-      margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur,
-      chromeColor, chromeLineWidth, chromeGlowBlur,
-    } = Config.hud;
-
-    renderer.strokePaths(this._goldBracket, {
-      color: chromeColor, lineWidth: chromeLineWidth, glowBlur: chromeGlowBlur,
-    });
-    renderer.drawText('GOLD', this._goldTX, margin + 22, {
-      font: labelFont, color: labelColor, align: 'right', alpha: 0.65,
-    });
-    renderer.drawText(String(this.gold), this._goldTX, margin + 44, {
-      font: valueFont, color: valueColor, align: 'right', glowBlur: valueGlowBlur,
-    });
   }
 }

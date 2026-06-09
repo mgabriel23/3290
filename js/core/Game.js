@@ -68,6 +68,16 @@ export class Game {
 
   /** Swap the tutorial out for the gameplay scene once all hints are dismissed. */
   _startGameplay() {
+    // Start background music here — we're inside the user-gesture call chain
+    // (last tutorial hint tap → onContinue → here), so audio.play() is permitted.
+    // The guard prevents a second play if _startGameplay is somehow called again.
+    if (!this._themeAudio) {
+      const { themeSrc, themeVolume, themeLoop } = Config.audio;
+      this._themeAudio = new Audio(themeSrc);
+      this._themeAudio.volume = themeVolume;
+      this._themeAudio.loop = themeLoop;
+      this._themeAudio.play().catch(() => {});
+    }
     this.scene = new GameplayScene(this.renderer);
   }
 

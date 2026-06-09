@@ -193,12 +193,17 @@ export class TutorialScene {
       font: progressFont, color: progressColor, alpha: fadeIn * 0.45,
     });
 
-    // Hint text — word-by-word typewriter reveal
+    // Hint text — word-by-word typewriter reveal.
+    // Fully-revealed lines use the pre-joined string to avoid per-frame slice+join allocations.
+    const fullLines = this._hintFullLines[idx];
     for (let i = 0; i < lineCount; i++) {
       const words = lineWords[i];
       const visible = Math.max(0, Math.min(words.length, revealed - wordOffsets[i]));
       if (visible === 0) continue;
-      this.renderer.drawText(words.slice(0, visible).join(' '), vW / 2, topLineY + i * lineHeight, {
+      const text = visible >= words.length
+        ? fullLines[i]
+        : words.slice(0, visible).join(' ');
+      this.renderer.drawText(text, vW / 2, topLineY + i * lineHeight, {
         font: textFont, color: textColor,
       });
     }
@@ -261,6 +266,7 @@ export class TutorialScene {
     this._hintLineWords = [];
     this._hintLineWordOffsets = [];
     this._hintTotalWords = [];
+    this._hintFullLines = [];  // pre-joined strings — avoids slice+join allocations on fully-revealed lines
     this._hintArrows = [];
     this._hintTapPromptY = [];
 
@@ -289,6 +295,9 @@ export class TutorialScene {
       this._hintLineWords.push(lineWordArrays);
       this._hintLineWordOffsets.push(offsets);
       this._hintTotalWords.push(off);
+      // Pre-join each line's full text — used by _renderHint when the line is
+      // completely revealed so the hot path skips slice() + join() allocations.
+      this._hintFullLines.push(lineWordArrays.map(lw => lw.join(' ')));
 
       // Text bounding box half-height — needed for both arrow-free and arrow hints
       const lineCount = lineWordArrays.length;
