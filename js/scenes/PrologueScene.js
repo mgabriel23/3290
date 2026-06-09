@@ -66,6 +66,8 @@ export class PrologueScene {
     this._blipTimer = 0; // ticks on its own faster clock — see _advanceBlips for why it's decoupled from the word reveal
     this._blipPool = null;  // lazily filled on first play — see _playBlip
     this._blipPoolIdx = 0;
+
+    this._initTitleGeometry(); // pre-allocate all title-beat paths and bounds — see _initTitleGeometry
   }
 
   /** Advance whichever beat is current; each one decides for itself when it's done. */
@@ -361,46 +363,124 @@ export class PrologueScene {
 
   // --- Beat 5: title + PLAY --------------------------------------------------------
 
-  _renderTitle() {
-    const { text, font, textColor, fadeInDuration } = Config.prologue.title;
-    const { width: vW } = Config.virtual;
-    const alpha = Math.min(this._beatAge / fadeInDuration, 1);
+  /**
+   * Pre-bake all title-beat geometry into flat path arrays. All positions are
+   * pure constants (config values + virtual dimensions) so they never change
+   * after construction — baking here gives zero per-frame allocations and lets
+   * the entire chrome layer render as a single `strokePaths` call.
+   *
+   * Geometry produced:
+   *   _chromePaths   — 10 paths: two HRules (3 each) + 4 corner bracket ticks,
+   *                    all sharing the same color/lineWidth/glowBlur so they
+   *                    batch into one shadow-blur pass
+   *   _buttonPaths   — 4 L-bracket corner paths for the PLAY button
+   *   _buttonBounds  — hit-test rect (used by _isInsidePlayButton)
+   *   _buttonCX/CY   — button center for text placement
+   */
+  _initTitleGeometry() {
+    const { width: vW, height: vH } = Config.virtual;
+    const ty = vH * 0.40; // must match _titleY()
+    const cx = vW / 2;
+    const gap = 18, dSize = 4, lx = 52, rx = vW - 52;
 
+    const r1y = ty - 68; // HRule above title
+    const r2y = ty + 82; // HRule below subtitle
+
+    // Title corner bracket frame
+    const bx1 = cx - 112, bx2 = cx + 112;
+    const by1 = ty - 40,  by2 = ty + 28;
+    const leg = 12;
+
+    this._chromePaths = [
+      // HRule 1 (above title): two line segments + diamond
+      { points: [[lx, r1y], [cx - gap, r1y]], closed: false },
+      { points: [[cx + gap, r1y], [rx, r1y]], closed: false },
+      { points: [[cx, r1y - dSize], [cx + dSize, r1y], [cx, r1y + dSize], [cx - dSize, r1y]] },
+      // HRule 2 (below subtitle): same pattern
+      { points: [[lx, r2y], [cx - gap, r2y]], closed: false },
+      { points: [[cx + gap, r2y], [rx, r2y]], closed: false },
+      { points: [[cx, r2y - dSize], [cx + dSize, r2y], [cx, r2y + dSize], [cx - dSize, r2y]] },
+      // Corner bracket ticks enclosing the title glyph
+      { points: [[bx1 + leg, by1], [bx1, by1], [bx1, by1 + leg]], closed: false },
+      { points: [[bx2 - leg, by1], [bx2, by1], [bx2, by1 + leg]], closed: false },
+      { points: [[bx1 + leg, by2], [bx1, by2], [bx1, by2 - leg]], closed: false },
+      { points: [[bx2 - leg, by2], [bx2, by2], [bx2, by2 - leg]], closed: false },
+    ];
+
+    const btn = Config.prologue.title.playButton;
+    const btnCY = ty + btn.offsetBelowTitle;
+    const btnL = cx - btn.width / 2, btnR = cx + btn.width / 2;
+    const btnT = btnCY - btn.height / 2, btnB = btnCY + btn.height / 2;
+    const bl = btn.cornerSize;
+
+    this._buttonPaths = [
+      { points: [[btnL + bl, btnT], [btnL, btnT], [btnL, btnT + bl]], closed: false },
+      { points: [[btnR - bl, btnT], [btnR, btnT], [btnR, btnT + bl]], closed: false },
+      { points: [[btnL + bl, btnB], [btnL, btnB], [btnL, btnB - bl]], closed: false },
+      { points: [[btnR - bl, btnB], [btnR, btnB], [btnR, btnB - bl]], closed: false },
+    ];
+    this._buttonCX = cx;
+    this._buttonCY = btnCY;
+    this._buttonBounds = { left: btnL, top: btnT, right: btnR, bottom: btnB };
+  }
+
+  _renderTitle() {
+    const alpha = Math.min(this._beatAge / Config.prologue.title.fadeInDuration, 1);
     this.renderer.clear(Config.colors.void);
-    this.renderer.drawText(text, vW / 2, this._titleY(), { font, color: textColor, alpha });
+    this._renderTitleChrome(alpha);
+    this._renderTitleText(alpha);
     this._renderPlayButton(alpha);
   }
 
   _titleY() {
-    return Config.virtual.height * 0.42;
+    return Config.virtual.height * 0.40;
   }
 
-  _playButtonBounds() {
-    const { width, height, offsetBelowTitle } = Config.prologue.title.playButton;
-    const centerX = Config.virtual.width / 2;
-    const centerY = this._titleY() + offsetBelowTitle;
-    return {
-      left: centerX - width / 2,
-      top: centerY - height / 2,
-      right: centerX + width / 2,
-      bottom: centerY + height / 2,
-    };
+  _renderTitleText(alpha) {
+    const { text, font, textColor, glowBlur, subtitleText, subtitleFont, subtitleColor } =
+      Config.prologue.title;
+    const { width: vW } = Config.virtual;
+    const ty = this._titleY();
+
+    this.renderer.drawText(text, vW / 2, ty, { font, color: textColor, alpha, glowBlur });
+    this.renderer.drawText(subtitleText, vW / 2, ty + 55, {
+      font: subtitleFont,
+      color: subtitleColor,
+      alpha: alpha * 0.85,
+    });
+  }
+
+  /** All chrome batched into one strokePaths call — one shadow-blur pass for the entire decorative layer. */
+  _renderTitleChrome(alpha) {
+    const { chromeColor, chromeLineWidth, chromeGlowBlur, taglineFont, taglineColor } =
+      Config.prologue.title;
+    const { width: vW } = Config.virtual;
+    const ty = this._titleY();
+
+    this.renderer.strokePaths(this._chromePaths, {
+      color: chromeColor, lineWidth: chromeLineWidth, glowBlur: chromeGlowBlur, alpha: alpha * 0.48,
+    });
+    this.renderer.drawText('LAST DEFENSE PROTOCOL', vW / 2, ty - 89, {
+      font: taglineFont, color: taglineColor, alpha: alpha * 0.35,
+    });
+    this.renderer.drawText('SYSTEM: ONLINE  ·  SECTOR SOL', vW / 2, ty + 200, {
+      font: taglineFont, color: taglineColor, alpha: alpha * 0.28,
+    });
   }
 
   _isInsidePlayButton(x, y) {
-    const { left, top, right, bottom } = this._playButtonBounds();
+    const { left, top, right, bottom } = this._buttonBounds;
     return x >= left && x <= right && y >= top && y <= bottom;
   }
 
   _renderPlayButton(alpha) {
-    const { label, font, color, lineWidth, glowBlur } = Config.prologue.title.playButton;
-    const { left, top, right, bottom } = this._playButtonBounds();
+    const { label, font, color, lineWidth, glowBlur, pulseSpeed, pulseDepth } =
+      Config.prologue.title.playButton;
+    const pulse = 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._beatAge * pulseSpeed));
+    const btnAlpha = alpha * pulse;
 
-    this.renderer.strokePaths(
-      [{ points: [[left, top], [right, top], [right, bottom], [left, bottom]] }],
-      { color, lineWidth, glowBlur, alpha }
-    );
-    this.renderer.drawText(label, (left + right) / 2, (top + bottom) / 2, { font, color, alpha });
+    this.renderer.strokePaths(this._buttonPaths, { color, lineWidth, glowBlur, alpha: btnAlpha });
+    this.renderer.drawText(label, this._buttonCX, this._buttonCY, { font, color, alpha: btnAlpha });
   }
 
   // --- Shared helpers -----------------------------------------------------------------

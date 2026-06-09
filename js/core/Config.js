@@ -215,17 +215,29 @@ export const Config = Object.freeze({
       text: '3290',
       font: '400 64px "Audiowide", "Courier New", monospace',
       textColor: '#4DEFFF',
+      glowBlur: 14,               // neon halo on the title glyph — matches all other neon elements; blur cost scales with radius² so 14 vs 20 is ~51% cheaper
+      subtitleText: 'DEFEND EARTH',
+      subtitleFont: '400 15px "Audiowide", "Courier New", monospace',
+      subtitleColor: '#7af0ff',   // softer cyan — reads as a secondary register below the title
+      taglineFont: '400 10px "Audiowide", "Courier New", monospace',
+      taglineColor: '#aab4d4',    // same as other UI text, kept dim via alpha in render
+      chromeColor: '#4DEFFF',     // decorative HUD lines and bracket ticks
+      chromeLineWidth: 1,
+      chromeGlowBlur: 6,
       fadeInDuration: 1.0,
 
       playButton: Object.freeze({
         label: 'PLAY',
-        font: '400 22px "Audiowide", "Courier New", monospace',
+        font: '400 20px "Audiowide", "Courier New", monospace',
         color: '#4DEFFF',
-        lineWidth: 2.5,
+        lineWidth: 1.5,
         glowBlur: 14,
-        width: 160,
+        width: 168,
         height: 52,
-        offsetBelowTitle: 90, // virtual px from the title's baseline to the button's center
+        offsetBelowTitle: 148,  // more vertical room for the subtitle + decorative rules below it
+        cornerSize: 14,         // leg length (virtual px) of each L-bracket corner tick
+        pulseSpeed: 2.2,        // radians/second — drives the breathing alpha on the button
+        pulseDepth: 0.28,       // how far the alpha dips at the trough of each breath
       }),
     }),
   }),

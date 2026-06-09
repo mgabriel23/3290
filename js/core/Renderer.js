@@ -114,20 +114,25 @@ export class Renderer {
    * @param {string} text @param {number} x @param {number} y
    * @param {{font: string, color: string, align?: CanvasTextAlign, baseline?: CanvasTextBaseline, alpha?: number}} style
    */
-  drawText(text, x, y, { font, color, align = 'center', baseline = 'middle', alpha = 1 }) {
+  drawText(text, x, y, { font, color, align = 'center', baseline = 'middle', alpha = 1, glowBlur = 0, glowColor }) {
     const { ctx } = this;
     ctx.font = font;
     ctx.fillStyle = color;
     ctx.textAlign = align;
     ctx.textBaseline = baseline;
-    if (alpha >= 1) {
+    if (alpha >= 1 && glowBlur === 0) {
       ctx.fillText(text, x, y);
       return;
     }
-    const previousAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = alpha;
+    const prevAlpha = ctx.globalAlpha;
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    if (glowBlur > 0) {
+      ctx.shadowColor = glowColor ?? color;
+      ctx.shadowBlur = glowBlur;
+    }
     ctx.fillText(text, x, y);
-    ctx.globalAlpha = previousAlpha;
+    ctx.globalAlpha = prevAlpha;
+    if (glowBlur > 0) ctx.shadowBlur = 0;
   }
 
   /**
