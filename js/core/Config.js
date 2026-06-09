@@ -62,6 +62,22 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Level / wave system. Each level begins with a full-screen indicator —
+   * a large cyan "LEVEL N" that fades in, holds with an unstable flicker,
+   * then fades out before gameplay (enemies, bullets) is unblocked.
+   * LocalStorage progress persistence is deferred — see project notes.
+   */
+  level: Object.freeze({
+    introDuration:   2.8,   // total seconds the indicator occupies the screen
+    fadeInDuration:  0.35,  // initial fade-in phase
+    fadeOutDuration: 0.55,  // closing fade-out phase
+    // Large enough to dominate the screen; Audiowide at 72 vp ≈ 360 px wide for "LEVEL 1" — fits within 540
+    font: '400 72px "Audiowide", "Courier New", monospace',
+    color: '#4DEFFF',
+    glowBlur: 22,           // wider halo than normal UI — makes the text feel heavy and threatening
+  }),
+
+  /**
    * Player bullets: auto-fired as a continuous stream once the player's
    * ship has landed, rendered as short glowing capsule strokes in the same
    * neon-cyan as the hull so they read as energy bolts rather than solid
