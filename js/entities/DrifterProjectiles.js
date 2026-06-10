@@ -25,14 +25,29 @@ export class DrifterProjectiles {
     this._ty = new Float32Array(MAX);
     this._count = 0;
 
-    const { color, glowBlur } = Config.enemy.drifter;
-    this._style = { color, lineWidth: 2.5, glowBlur, glowColor: color };
+    // Per-orb stroke style — varies by the firing clone's palette (variety
+    // #1 amber vs variety #2 magenta). Cached by color so repeated fires
+    // from the same variant reuse the same style object (no per-shot
+    // allocation).
+    this._glowBlur = Config.enemy.drifter.glowBlur;
+    this._styleCache = new Map();
+    this._color = new Array(MAX);
+  }
+
+  _styleFor(color) {
+    let style = this._styleCache.get(color);
+    if (!style) {
+      style = { color, lineWidth: 2.5, glowBlur: this._glowBlur, glowColor: color };
+      this._styleCache.set(color, style);
+    }
+    return style;
   }
 
   /**
-   * Launch one orb from `(ox, oy)` toward the locked target `(tx, ty)`.
+   * Launch one orb from `(ox, oy)` toward the locked target `(tx, ty)`,
+   * stroked in `color` (the firing clone's palette color).
    */
-  fire(ox, oy, tx, ty) {
+  fire(ox, oy, tx, ty, color) {
     if (this._count >= MAX) return;
     const { projectileSpeed } = Config.enemy.drifter;
     const dx  = tx - ox;
@@ -45,6 +60,7 @@ export class DrifterProjectiles {
     this._vy[i] = (dy / len) * projectileSpeed;
     this._tx[i] = tx;
     this._ty[i] = ty;
+    this._color[i] = color;
   }
 
   /** @param {number} dt */
@@ -62,7 +78,7 @@ export class DrifterProjectiles {
                    || (dxNew * this._vx[i] + dyNew * this._vy[i]) <= 0;
 
       if (arrived) {
-        this._onImpact(this._tx[i], this._ty[i]);
+        this._onImpact(this._tx[i], this._ty[i], this._color[i]);
         continue;
       }
 
@@ -73,6 +89,7 @@ export class DrifterProjectiles {
         this._x[w]  = this._x[i];  this._y[w]  = this._y[i];
         this._vx[w] = this._vx[i]; this._vy[w] = this._vy[i];
         this._tx[w] = this._tx[i]; this._ty[w] = this._ty[i];
+        this._color[w] = this._color[i];
       }
       w++;
     }
@@ -83,7 +100,7 @@ export class DrifterProjectiles {
   render(renderer) {
     const { projectileRadius } = Config.enemy.drifter;
     for (let i = 0; i < this._count; i++) {
-      renderer.strokeCircle(this._x[i], this._y[i], projectileRadius, this._style);
+      renderer.strokeCircle(this._x[i], this._y[i], projectileRadius, this._styleFor(this._color[i]));
     }
   }
 

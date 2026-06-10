@@ -73,7 +73,10 @@ export class WaveManager {
       },
     });
     this._drifterProjectiles = new DrifterProjectiles({
-      onImpact: (x, y) => this._drifterParticles.emit(x, y),
+      onImpact: (x, y, color) => {
+        const isSweeper = color === Config.enemy.drifter.sweeper.color;
+        (isSweeper ? this._sweeperParticles : this._drifterParticles).emit(x, y);
+      },
     });
 
     this._particles          = new Particles(Config.enemy.scout.color);
@@ -89,7 +92,7 @@ export class WaveManager {
     // Pre-bound fire callbacks — stored once, zero closures per frame.
     this._fireBullet           = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
     this._fireRocket           = (ox, oy, tx, ty) => this._rockets.fire(ox, oy, tx, ty);
-    this._fireDrifterProjectile = (ox, oy, tx, ty) => this._drifterProjectiles.fire(ox, oy, tx, ty);
+    this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
 
     this.waveClear = false;
   }

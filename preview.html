@@ -246,6 +246,54 @@ const SWEEPER_DOME  = '#ffd0ee';
 const SWEEPER_FIRE_INTERVAL_MULT = 1.4;
 const SWEEPER_PALETTE = { color: SWEEPER_COLOR, fillColor: SWEEPER_FILL, domeColor: SWEEPER_DOME, fireIntervalMult: SWEEPER_FIRE_INTERVAL_MULT };
 
+// ── Variety #3 — "Diver" ─────────────────────────────────────────────────────
+// A small V-shaped wedge (5 clones) that drops straight down, accelerating as
+// it falls — reads as an aggressive, fast "incoming" pack rather than a
+// grazing formation. Always faces straight down (head toward the player,
+// tentacles trailing above), same as the sweeper's vertical-step pose.
+// Neon green — distinct from amber (#1) and magenta (#2).
+const DIVER_COLOR = '#39ff14';
+const DIVER_FILL  = '#06190a';
+const DIVER_DOME  = '#c8ffb0';
+const DIVER_PALETTE = { color: DIVER_COLOR, fillColor: DIVER_FILL, domeColor: DIVER_DOME, fireIntervalMult: 1 };
+// Offsets from the wedge's leader (tip), local to the formation — a V
+// pointing in the direction of travel (down).
+const DIVER_OFFSETS = [[0,0], [-35,-35], [35,-35], [-70,-70], [70,-70]];
+const DIVER_START_SPEED = 140;  // vp/sec at spawn
+const DIVER_ACCEL       = 90;   // vp/sec^2 — speeds up as it falls
+const DIVER_MARGIN      = 80;   // horizontal spawn bounds
+
+// ── Variety #4 — "Weaver" ────────────────────────────────────────────────────
+// A single conga-line of 6 clones descending in a continuous sine-wave path —
+// reads as an erratic, hard-to-predict drift compared to #1's smooth loop and
+// #2's straight rows. Cyan-blue — distinct from the other three.
+const WEAVER_COLOR = '#39c5ff';
+const WEAVER_FILL  = '#001824';
+const WEAVER_DOME  = '#b0eaff';
+const WEAVER_PALETTE = { color: WEAVER_COLOR, fillColor: WEAVER_FILL, domeColor: WEAVER_DOME, fireIntervalMult: 1 };
+const WEAVER_COUNT   = 6;
+const WEAVER_SPACING = 50;     // distance along path between trailing clones
+const WEAVER_SPEED   = 200;    // vp/sec along the path
+const WEAVER_AMP     = 90;     // horizontal sway amplitude, vp
+const WEAVER_FREQ    = 0.012;  // radians per vp traveled — wave tightness
+
+// ── Variety #5 — "Orbiter" ───────────────────────────────────────────────────
+// A trio that flies in from the top, settles into the upper third, circles a
+// fixed point for a few seconds (a lingering threat rather than a pass-through
+// formation), then breaks off straight down and exits. Gold — distinct from
+// the other three.
+const ORBITER_COLOR = '#ffe14d';
+const ORBITER_FILL  = '#1a1500';
+const ORBITER_DOME  = '#fff8c0';
+const ORBITER_PALETTE = { color: ORBITER_COLOR, fillColor: ORBITER_FILL, domeColor: ORBITER_DOME, fireIntervalMult: 1 };
+const ORBIT_COUNT       = 3;
+const ORBIT_RADIUS      = 60;   // vp
+const ORBIT_ANGSPEED    = 1.5;  // rad/sec
+const ORBIT_CENTER      = { x: VW / 2, y: VH * 0.28 };
+const ORBIT_ENTER_SPEED = 220;  // vp/sec while flying in
+const ORBIT_EXIT_SPEED  = 260;  // vp/sec while flying out
+const ORBIT_DURATION    = 4;    // seconds spent orbiting before breaking off
+
 // ── Tentacle-lash AOE attack ────────────────────────────────────────────────
 const FIRE_MIN_INTERVAL = 2.5; // seconds idle before the next lash
 const FIRE_MAX_INTERVAL = 5.0;
@@ -265,11 +313,14 @@ const cloneStates = Array.from({ length: 18 }, () => ({
   timer: randInterval(), state: 'idle', age: 0, tentacleIdx: 0,
 }));
 
-// Press 1 / 2 to switch between variety previews.
+// Press 1-5 to switch between variety previews.
 let variety = 2;
 window.addEventListener('keydown', (e) => {
   if (e.key === '1') variety = 1;
   if (e.key === '2') variety = 2;
+  if (e.key === '3') variety = 3;
+  if (e.key === '4') variety = 4;
+  if (e.key === '5') variety = 5;
 });
 
 let age = 0;
@@ -537,12 +588,118 @@ function renderVariety2(dt) {
   }
 }
 
+// ── Variety #3 — "Diver" wedge ───────────────────────────────────────────────
+let diverX = VW / 2, diverY = -70, diverSpeed = DIVER_START_SPEED;
+
+function renderVariety3(dt) {
+  diverSpeed += DIVER_ACCEL * dt;
+  diverY += diverSpeed * dt;
+
+  for (let i = 0; i < DIVER_OFFSETS.length; i++) {
+    const [ox, oy] = DIVER_OFFSETS[i];
+    const x = diverX + ox, y = diverY + oy;
+    if (y < -40 || y > VH + 40) continue;
+    updateAndRenderClone(dt, i, x, y, Math.PI, cloneStates[i], DIVER_PALETTE);
+  }
+
+  // Respawn once the trailing (topmost) clone clears the bottom edge.
+  const trailingY = diverY + DIVER_OFFSETS[DIVER_OFFSETS.length - 1][1];
+  if (trailingY > VH + 40) {
+    diverY = -70;
+    diverSpeed = DIVER_START_SPEED;
+    diverX = DIVER_MARGIN + Math.random() * (VW - 2 * DIVER_MARGIN);
+  }
+}
+
+// ── Variety #4 — "Weaver" sine-wave conga line ──────────────────────────────
+let weaverU = 0;
+const WEAVER_BASE_X = VW / 2;
+
+/** Position + heading at distance `dist` traveled along the sine path. */
+function weaverPos(dist) {
+  const y = -60 + dist;
+  const x = WEAVER_BASE_X + Math.sin(dist * WEAVER_FREQ) * WEAVER_AMP;
+
+  // Tangent direction of travel: (dx/dd, dy/dd), normalized.
+  const dx = WEAVER_AMP * WEAVER_FREQ * Math.cos(dist * WEAVER_FREQ);
+  const dy = 1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  return { x, y, heading: Math.atan2(dx / len, -dy / len) };
+}
+
+function renderVariety4(dt) {
+  weaverU += WEAVER_SPEED * dt;
+
+  for (let i = 0; i < WEAVER_COUNT; i++) {
+    const dist = weaverU - i * WEAVER_SPACING;
+    if (dist < 0) continue;
+    const { x, y, heading } = weaverPos(dist);
+    if (y > VH + 40) continue;
+    updateAndRenderClone(dt, i, x, y, heading, cloneStates[i], WEAVER_PALETTE);
+  }
+
+  // Respawn once the trailing clone clears the bottom edge.
+  const tailDist = weaverU - (WEAVER_COUNT - 1) * WEAVER_SPACING;
+  if (tailDist >= 0 && weaverPos(tailDist).y > VH + 40) {
+    weaverU = 0;
+  }
+}
+
+// ── Variety #5 — "Orbiter" lingering trio ───────────────────────────────────
+let orbiterState = 'entering'; // 'entering' | 'orbiting' | 'exiting'
+let orbiterX = ORBIT_CENTER.x, orbiterY = -60;
+let orbiterAngle = 0;
+let orbiterTimer = 0;
+
+function orbiterOffset(i, angleBase) {
+  const a = angleBase + i * (2 * Math.PI / ORBIT_COUNT);
+  return { dx: Math.cos(a) * ORBIT_RADIUS, dy: Math.sin(a) * ORBIT_RADIUS };
+}
+
+function renderVariety5(dt) {
+  if (orbiterState === 'entering') {
+    orbiterY += ORBIT_ENTER_SPEED * dt;
+    if (orbiterY >= ORBIT_CENTER.y) {
+      orbiterY = ORBIT_CENTER.y;
+      orbiterState = 'orbiting';
+      orbiterTimer = 0;
+    }
+  } else if (orbiterState === 'orbiting') {
+    orbiterAngle += ORBIT_ANGSPEED * dt;
+    orbiterTimer += dt;
+    if (orbiterTimer >= ORBIT_DURATION) orbiterState = 'exiting';
+  } else { // exiting
+    orbiterY += ORBIT_EXIT_SPEED * dt;
+    if (orbiterY - ORBIT_RADIUS > VH + 40) {
+      orbiterState = 'entering';
+      orbiterX = ORBIT_CENTER.x;
+      orbiterY = -60;
+      orbiterAngle = 0;
+    }
+  }
+
+  for (let i = 0; i < ORBIT_COUNT; i++) {
+    const { dx, dy } = orbiterOffset(i, orbiterAngle);
+    const x = orbiterX + dx, y = orbiterY + dy;
+    // Tangent-to-circle heading while orbiting; straight down otherwise.
+    const heading = orbiterState === 'orbiting'
+      ? orbiterAngle + i * (2 * Math.PI / ORBIT_COUNT) + Math.PI / 2
+      : Math.PI;
+    updateAndRenderClone(dt, i, x, y, heading, cloneStates[i], ORBITER_PALETTE);
+  }
+}
+
+const VARIETY_NAMES = { 1: 'Looper', 2: 'Sweeper', 3: 'Diver', 4: 'Weaver', 5: 'Orbiter' };
+
 function render(dt) {
   age += dt;
   clear('#05060c');
 
-  if (variety === 1) renderVariety1(dt);
-  else renderVariety2(dt);
+  if      (variety === 1) renderVariety1(dt);
+  else if (variety === 2) renderVariety2(dt);
+  else if (variety === 3) renderVariety3(dt);
+  else if (variety === 4) renderVariety4(dt);
+  else                     renderVariety5(dt);
 
   // Player marker — move the pointer over the canvas to reposition it.
   fillStrokePaths([{ points: [[0,-10],[8,8],[0,4],[-8,8]], closed: true }], {
@@ -552,7 +709,7 @@ function render(dt) {
   });
 
   // Variety indicator
-  drawText(`Variety #${variety}  (press 1 / 2)`, VW / 2, 24, {
+  drawText(`Variety #${variety} — ${VARIETY_NAMES[variety]}  (press 1-5)`, VW / 2, 24, {
     font: '16px sans-serif', color: '#888',
   });
 }

@@ -270,7 +270,7 @@ export class DrifterEnemy {
         const tipLX = lbx + dirX * cfg.lashLen, tipLY = lby + dirY * cfg.lashLen;
         const tipX  = x + c * tipLX - s * tipLY;
         const tipY  = y + s * tipLX + c * tipLY;
-        onFire(tipX, tipY, this._targetX, this._targetY);
+        onFire(tipX, tipY, this._targetX, this._targetY, this._palette.color);
 
         this._fireState = 'idle';
         this._fireTimer = randInterval(cfg, this._fireMult);
