@@ -335,20 +335,22 @@ export const Config = Object.freeze({
       health:           8,
       color:            '#BF5FFF',   // electric violet — reads as energy/laser weapon
       fillColor:        '#110022',
-      lineWidth:        1.5,
+      lineWidth:        1.8,
       glowBlur:         12,
       hitGlowBlur:      22,
       engineCoreColor:  '#8833CC',   // deeper violet for the engine orb
       flameColor:       '#BF5FFF',
       flameHalfWidth:   3,
-      entrySpeed:       280,
+      entrySpeed:       300,
       restXMargin:      80,
       restYMin:         0.08,
       restYMax:         0.35,
-      chargeWarmup:     2.0,         // seconds of nose charge before ! appears
-      warningDuration:  1.0,         // seconds ! is shown before the shot fires
-      historyWindow:    1.3,         // seconds into the past to sample player position
-      hitRadius:        16,
+      chargeWarmup:     1.5,         // seconds of nose charge before ! appears
+      warningDuration:  0.7,         // seconds ! is shown before the shot fires
+      historyWindow:    0.3,         // seconds into the past to sample player position
+      recoverDuration:  1.0,         // seconds after firing before player-tracking resumes
+      recoverTurnRate:  4,           // rad/sec — slow turn back toward the player during recovery
+      hitRadius:        24,
       minSeparation:    64,
       audio: Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.55, poolSize: 4,
@@ -405,7 +407,7 @@ export const Config = Object.freeze({
   laser: Object.freeze({
     color:         '#BF5FFF',   // matches Sniper hull
     lineWidth:     3,
-    glowBlur:      20,
+    glowBlur:      12,          // 20→12: blur cost ∝ radius², ~64% cheaper, still reads as a hot beam
     flashDuration: 0.20,        // seconds the beam remains visible
   }),
 

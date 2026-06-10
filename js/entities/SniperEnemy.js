@@ -24,9 +24,14 @@ const S            = 22;
 const HIST_STEP    = 0.05;  // seconds between position samples
 const HIST_SAMPLES = Math.round(Config.enemy.sniper.historyWindow / HIST_STEP); // = 26
 
-// Nose tip in local space — top-centre hull vertex; laser fires from here
+// Engine-flame anchor in local space — same vertex Scout uses for its exhaust.
 const NOSE_LX = 0;
 const NOSE_LY = -S * 0.30;
+
+// Gun muzzle in local space — the hull's single sharp tip, where the charge
+// orb glows and the laser actually fires from.
+const GUN_LX = 0;
+const GUN_LY = S * 0.70;
 
 export class SniperEnemy {
   /**
@@ -46,6 +51,11 @@ export class SniperEnemy {
     this._restY  = restY;
 
     this._angle       = 0;
+    // Cached cos/sin of _angle — recomputed only on the frames the angle
+    // actually changes (charging/entering/recovering), then reused by both
+    // renderCore and renderExtras instead of each calling Math.cos/sin again.
+    this._cosA        = 1;
+    this._sinA        = 0;
     this._health      = this._cfg.health;
     this._enginePhase = Math.random() * Math.PI * 2;
     this._hitFlash    = 0;
@@ -99,11 +109,29 @@ export class SniperEnemy {
     // Locked/flashing: angle frozen at whatever it was — no tracking, no snap,
     // no sweep. The laser fires from the nose toward _targetX/Y directly, so
     // the beam direction is independent of the ship's visual orientation.
-    if (this._state !== 'locked' && this._state !== 'flashing') {
+    // Recovering: slowly turns back to face away from the player again, so
+    // the post-fire reorientation reads as a deliberate motion, not an instant snap.
+    if (this._state === 'recovering') {
+      const dx          = playerX - this.x;
+      const dy          = playerY - this.y;
+      const targetAngle = Math.atan2(-dx, dy);
+      const diff = Math.atan2(
+        Math.sin(targetAngle - this._angle),
+        Math.cos(targetAngle - this._angle),
+      );
+      const step = cfg.recoverTurnRate * dt;
+      this._angle += Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
+      this._cosA = Math.cos(this._angle);
+      this._sinA = Math.sin(this._angle);
+    } else if (this._state !== 'locked' && this._state !== 'flashing') {
       const dx    = playerX - this.x;
       const dy    = playerY - this.y;
       this._angle = Math.atan2(-dx, dy);
+      this._cosA  = Math.cos(this._angle);
+      this._sinA  = Math.sin(this._angle);
     }
+    // Locked/flashing: angle frozen — _cosA/_sinA still hold the values from
+    // the last frame they changed, so renderCore/renderExtras need no new trig calls.
 
     // ── Record player position history ───────────────────────────────────────
     this._histTick += dt;
@@ -141,7 +169,12 @@ export class SniperEnemy {
 
     } else if (this._state === 'flashing') {
       if (this._stateAge >= Config.laser.flashDuration) {
-        this._setState('charging'); // immediately recharge
+        this._setState('recovering');
+      }
+
+    } else if (this._state === 'recovering') {
+      if (this._stateAge >= cfg.recoverDuration) {
+        this._setState('charging');
       }
     }
   }
@@ -184,11 +217,11 @@ export class SniperEnemy {
 
     if (flash) return;
 
-    // Nose world position
-    const c     = Math.cos(this._angle);
-    const s     = Math.sin(this._angle);
-    const noseX = this.x + c * NOSE_LX - s * NOSE_LY;
-    const noseY = this.y + s * NOSE_LX + c * NOSE_LY;
+    // Gun muzzle world position — reuses cos/sin cached in update()
+    const c     = this._cosA;
+    const s     = this._sinA;
+    const noseX = this.x + c * GUN_LX - s * GUN_LY;
+    const noseY = this.y + s * GUN_LX + c * GUN_LY;
 
     if (this._state === 'charging') {
       // Orb grows from nothing toward full charge
@@ -196,21 +229,32 @@ export class SniperEnemy {
       renderer.strokeCircle(noseX, noseY, 3 + t * 7, {
         color:    cfg.color,
         lineWidth: 2,
-        glowBlur:  8,
+        glowBlur:  6,
         glowColor: cfg.color,
         alpha:     0.2 + t * 0.8,
       });
 
-    } else if (this._state === 'locked' || this._state === 'flashing') {
+    } else if (this._state === 'locked') {
       // Full charge — rapid blink to signal imminent fire
       const t     = this._stateAge / cfg.warningDuration;
       const blink = 0.5 + 0.5 * Math.abs(Math.sin(t * Math.PI * 6));
       renderer.strokeCircle(noseX, noseY, 10, {
         color:    cfg.color,
         lineWidth: 2.5,
-        glowBlur:  12,
+        glowBlur:  8,
         glowColor: cfg.color,
         alpha:     blink,
+      });
+
+    } else if (this._state === 'flashing') {
+      // Charge orb releases outward into the laser — expanding ring that fades fast
+      const t = this._stateAge / Config.laser.flashDuration;
+      renderer.strokeCircle(noseX, noseY, 10 + t * 14, {
+        color:    cfg.color,
+        lineWidth: 2.5,
+        glowBlur:  8,
+        glowColor: cfg.color,
+        alpha:     1 - t,
       });
     }
   }
@@ -226,12 +270,11 @@ export class SniperEnemy {
       const base  = Math.min(1, t * 6);           // fast fade-in
       const pulse = base * (0.6 + 0.4 * Math.abs(Math.sin(t * Math.PI * 4)));
 
-      // Outer pulsing ring — white, larger than before
+      // Outer pulsing ring — no glow (alpha-only ring is cheap and still reads
+      // clearly against the inner dot + "!" which carry the glow)
       renderer.strokeCircle(this._targetX, this._targetY, 20, {
         color:    '#ffffff',
         lineWidth: 2,
-        glowBlur:  8,
-        glowColor: '#ffffff',
         alpha:     pulse * 0.6,
       });
 
@@ -248,7 +291,7 @@ export class SniperEnemy {
       renderer.drawText('!', this._targetX, this._targetY - 32, {
         font:      '400 28px "Audiowide", "Courier New", monospace',
         color:     '#ffffff',
-        glowBlur:  14,
+        glowBlur:  10,
         glowColor: '#ffffff',
         alpha:     pulse,
       });
@@ -257,12 +300,14 @@ export class SniperEnemy {
     // ── Laser flash ───────────────────────────────────────────────────────────
     if (this._state === 'flashing') {
       const flashT = this._stateAge / Config.laser.flashDuration;
-      const alpha  = Math.pow(1 - flashT, 1.5);
+      const rem    = 1 - flashT;
+      const alpha  = rem * Math.sqrt(rem); // == rem^1.5, cheaper than Math.pow
 
-      const c     = Math.cos(this._angle);
-      const s     = Math.sin(this._angle);
-      const noseX = this.x + c * NOSE_LX - s * NOSE_LY;
-      const noseY = this.y + s * NOSE_LX + c * NOSE_LY;
+      // Reuse cos/sin cached in update() — angle is frozen during flashing
+      const c     = this._cosA;
+      const s     = this._sinA;
+      const noseX = this.x + c * GUN_LX - s * GUN_LY;
+      const noseY = this.y + s * GUN_LX + c * GUN_LY;
 
       // Direction from nose through target, extended off-screen
       const ddx  = this._targetX - noseX;
