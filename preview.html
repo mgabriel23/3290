@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Enemy Design Preview</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #05060c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  canvas {
+    background: #05060c;
+    image-rendering: pixelalpha;
+    border: 1px solid #222;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+/**
+ * preview.html — standalone design sandbox.
+ *
+ * Self-contained scratch space for previewing new enemy hulls / animations
+ * before wiring them into the real entity classes. Mirrors the subset of
+ * Renderer.js's primitive API (strokePaths, fillStrokePaths, fillEllipse,
+ * strokeCircle, drawFlame, drawText) so sketches here can be ported into
+ * real entity render() methods with minimal changes. Not part of the game —
+ * delete or ignore once the design under test has been integrated.
+ */
+
+const VW = 540, VH = 960; // same virtual resolution as the game
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const cssH = Math.min(window.innerHeight - 20, 900);
+  const cssW = cssH * (VW / VH);
+  canvas.style.width  = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
+  canvas.width  = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const scale = (cssW * dpr) / VW;
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── Player marker — drag/move to test the alien's "fire toward player" aim ──
+const PLAYER_COLOR = '#00E5FF';
+let playerX = VW / 2;
+let playerY = VH * 0.82;
+
+canvas.addEventListener('pointermove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  playerX = (e.clientX - rect.left) / rect.width  * VW;
+  playerY = (e.clientY - rect.top)  / rect.height * VH;
+});
+
+// ── Renderer-equivalent primitives ──────────────────────────────────────────
+
+function clear(color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, VW, VH);
+}
+
+function strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0, lineCap = 'butt', singleStroke = false }, count = paths.length) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (rotation !== 0) ctx.rotate(rotation);
+  if (scale !== 1) ctx.scale(scale, scale);
+  if (alpha < 1) ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
+  if (lineCap !== 'butt') ctx.lineCap = lineCap;
+  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? color; ctx.shadowBlur = glowBlur; }
+
+  if (singleStroke) {
+    ctx.beginPath();
+    for (let i = 0; i < count; i++) {
+      const pts = paths[i].points;
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+      if (paths[i].closed !== false) ctx.closePath();
+    }
+    ctx.stroke();
+  } else {
+    for (let i = 0; i < count; i++) {
+      const pts = paths[i].points;
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+      if (paths[i].closed !== false) ctx.closePath();
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function fillStrokePaths(paths, { x = 0, y = 0, rotation = 0, alpha = 1, fillColor, strokeColor, lineWidth, glowColor, glowBlur = 0 }, count = paths.length) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (rotation !== 0) ctx.rotate(rotation);
+  if (alpha < 1) ctx.globalAlpha = alpha;
+  ctx.fillStyle = fillColor;
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = lineWidth;
+  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? strokeColor; ctx.shadowBlur = glowBlur; }
+  for (let i = 0; i < count; i++) {
+    const pts = paths[i].points;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+    if (paths[i].closed !== false) ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function fillEllipse(localCx, localCy, rx, ry, { x = 0, y = 0, rotation = 0, fillColor, alpha = 1 }) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (rotation !== 0) ctx.rotate(rotation);
+  if (alpha < 1) ctx.globalAlpha = alpha;
+  ctx.fillStyle = fillColor;
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.ellipse(localCx, localCy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function strokeCircle(x, y, radius, { color, lineWidth, glowBlur = 0, glowColor, alpha = 1 }) {
+  if (radius <= 0) return;
+  ctx.save();
+  if (alpha < 1) ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? color; ctx.shadowBlur = glowBlur; }
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFlame(localBaseX, localBaseY, length, { x = 0, y = 0, rotation = 0, halfWidth = 4, color, alpha = 1 }) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (rotation !== 0) ctx.rotate(rotation);
+  if (alpha < 1) ctx.globalAlpha = alpha;
+  ctx.globalCompositeOperation = 'lighter';
+  const h = color.replace('#', '');
+  const rgba = `rgba(${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)},0.70)`;
+  ctx.fillStyle = rgba;
+  const tipY = localBaseY - length;
+  ctx.beginPath();
+  ctx.moveTo(localBaseX - halfWidth, localBaseY);
+  ctx.lineTo(localBaseX + halfWidth, localBaseY);
+  ctx.lineTo(localBaseX, tipY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawText(text, x, y, { font, color, align = 'center', baseline = 'middle', alpha = 1, glowBlur = 0, glowColor }) {
+  ctx.save();
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  if (alpha < 1) ctx.globalAlpha = alpha;
+  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? color; ctx.shadowBlur = glowBlur; }
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+// ── Scene under test ─────────────────────────────────────────────────────────
+// "Drifter" — a non-firing, non-tracking alien saucer that flies a fixed path
+// and exits off-screen. Spawned as a conga-line of clones that follow the
+// exact same path, trailing behind the leader by a fixed distance.
+//
+// Path: diagonal entry from a random top corner -> one full loop-the-loop
+// partway down the diagonal -> continue in the same diagonal direction to
+// the opposite bottom corner and beyond.
+
+const ALIEN_COLOR = '#FFB020';
+const ALIEN_FILL  = '#1a1000';
+const ALIEN_DOME  = '#FFE0A0';
+
+// Bell-shaped head — rounded dome on top, flatter base where tentacles attach.
+// Local space, roughly 22 across, 22 tall.
+const BODY_PTS = [
+  [-11,-2],[-9,-8],[-3,-12],[3,-12],[9,-8],[11,-2],
+  [10,4],[6,8],[0,10],[-6,8],[-10,4],
+];
+
+// Eye sockets (local space) — pulse independently per clone.
+const EYES = [[-4,-2],[4,-2]];
+
+// Tentacle base attachment points along the bottom rim, local space.
+// Local +y = trailing edge (behind direction of travel — see samplePath heading convention).
+const TENTACLE_BASES = [[-7,7],[-2.5,9],[2.5,9],[7,7]];
+const TENTACLE_LEN   = 20;
+const TENTACLE_SEGS  = 4;
+const TENTACLE_AMP   = 6;
+const TENTACLE_SPEED = 5;
+
+const NUM_CLONES = 5;
+const SPACING    = 50;   // distance along path between trailing clones, virtual px
+const SPEED      = 220;  // virtual px/sec along the path
+const LOOP_R     = 70;   // loop-the-loop radius
+const ENTRY_MARGIN = 60;
+
+// ── Tentacle-lash AOE attack ────────────────────────────────────────────────
+const FIRE_MIN_INTERVAL = 2.5; // seconds idle before the next lash
+const FIRE_MAX_INTERVAL = 5.0;
+const LASH_DURATION  = 0.22;   // tentacle whips outward
+const LASH_LEN       = TENTACLE_LEN * 2.0;
+const BURST_DURATION = 0.35;   // AOE scatter at the impact point
+const BURST_MAX_R    = 30;
+const SPARK_ANGLES   = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
+const PROJECTILE_SPEED  = 320; // virtual px/sec
+const PROJECTILE_RADIUS = 4;
+
+const randInterval = () => FIRE_MIN_INTERVAL + Math.random() * (FIRE_MAX_INTERVAL - FIRE_MIN_INTERVAL);
+
+// Per-clone fire state — persists across frames (and across path respawns).
+const cloneStates = Array.from({ length: NUM_CLONES }, () => ({
+  timer: randInterval(), state: 'idle', age: 0, tentacleIdx: 0,
+}));
+
+let age = 0;
+let u   = 0;     // leader's distance traveled along the current path
+let path = null; // current path definition, regenerated on respawn
+
+function makePath() {
+  const fromLeft = Math.random() < 0.5;
+  const dir = fromLeft ? { x: 1 / Math.SQRT2, y: 1 / Math.SQRT2 }
+                        : { x: -1 / Math.SQRT2, y: 1 / Math.SQRT2 };
+  const entry = fromLeft
+    ? { x: -ENTRY_MARGIN, y: -ENTRY_MARGIN }
+    : { x: VW + ENTRY_MARGIN, y: -ENTRY_MARGIN };
+
+  const L1 = 250 + Math.random() * 150; // straight run before the loop
+  const P1 = { x: entry.x + dir.x * L1, y: entry.y + dir.y * L1 };
+
+  // Loop center: 90° left of travel direction, tangent-continuous at P1.
+  const perp  = { x: -dir.y, y: dir.x };
+  const C     = { x: P1.x + perp.x * LOOP_R, y: P1.y + perp.y * LOOP_R };
+  const theta0 = Math.atan2(-dir.x, dir.y);
+  const Lloop  = 2 * Math.PI * LOOP_R;
+
+  const L3 = 900; // straight run after the loop, well past the far corner
+
+  return { dir, entry, L1, P1, C, theta0, Lloop, L3, total: L1 + Lloop + L3 };
+}
+
+/** Position + heading at distance `dist` along the given path. */
+function samplePath(p, dist) {
+  if (dist < p.L1) {
+    return {
+      x: p.entry.x + p.dir.x * dist, y: p.entry.y + p.dir.y * dist,
+      heading: Math.atan2(p.dir.x, -p.dir.y),
+    };
+  }
+  if (dist < p.L1 + p.Lloop) {
+    const theta = p.theta0 + (dist - p.L1) / LOOP_R;
+    const tx = -Math.sin(theta), ty = Math.cos(theta);
+    return {
+      x: p.C.x + Math.cos(theta) * LOOP_R, y: p.C.y + Math.sin(theta) * LOOP_R,
+      heading: Math.atan2(tx, -ty),
+    };
+  }
+  const dd = dist - p.L1 - p.Lloop;
+  return {
+    x: p.P1.x + p.dir.x * dd, y: p.P1.y + p.dir.y * dd,
+    heading: Math.atan2(p.dir.x, -p.dir.y),
+  };
+}
+
+function render(dt) {
+  age += dt;
+  clear('#05060c');
+
+  if (!path) path = makePath();
+
+  u += SPEED * dt;
+  if (u - (NUM_CLONES - 1) * SPACING > path.total) {
+    path = makePath();
+    u = 0;
+  }
+
+  for (let i = 0; i < NUM_CLONES; i++) {
+    const dist = u - i * SPACING;
+    if (dist < 0 || dist > path.total) continue;
+
+    const { x, y, heading } = samplePath(path, dist);
+    const c = Math.cos(heading), s = Math.sin(heading);
+
+    // Off-screen — cancel any in-progress attack and skip entirely so it
+    // can't keep firing/bursting while invisible.
+    const cs = cloneStates[i];
+    const margin = 40;
+    if (x < -margin || x > VW + margin || y < -margin || y > VH + margin) {
+      if (cs.state !== 'idle') { cs.state = 'idle'; cs.timer = randInterval(); }
+      continue;
+    }
+
+    // ── Tentacle-lash AOE attack — fire state machine ─────────────────────────
+    if (cs.state === 'idle') {
+      cs.timer -= dt;
+      if (cs.timer <= 0) {
+        cs.state = 'lashing';
+        cs.age   = 0;
+        cs.tentacleIdx = Math.floor(Math.random() * TENTACLE_BASES.length);
+
+        // Lock the target to the player's current position at the moment of
+        // firing, and aim the lash toward it (converted to local space so it
+        // rotates with the ship).
+        const [lbx, lby] = TENTACLE_BASES[cs.tentacleIdx];
+        const baseX = x + c * lbx - s * lby;
+        const baseY = y + s * lbx + c * lby;
+        cs.targetX   = playerX;
+        cs.targetY   = playerY;
+        cs.lashAngle = Math.atan2(cs.targetY - baseY, cs.targetX - baseX) - heading;
+      }
+    } else if (cs.state === 'lashing') {
+      cs.age += dt;
+      if (cs.age >= LASH_DURATION) {
+        // Launch a projectile from the tentacle's extended tip toward the
+        // locked target — this is what actually crosses the screen.
+        const [lbx, lby] = TENTACLE_BASES[cs.tentacleIdx];
+        const dirX  = Math.cos(cs.lashAngle), dirY = Math.sin(cs.lashAngle);
+        const tipLX = lbx + dirX * LASH_LEN, tipLY = lby + dirY * LASH_LEN;
+        cs.projX = x + c * tipLX - s * tipLY;
+        cs.projY = y + s * tipLX + c * tipLY;
+        const ddx = cs.targetX - cs.projX, ddy = cs.targetY - cs.projY;
+        const dist = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+        cs.projVX = ddx / dist * PROJECTILE_SPEED;
+        cs.projVY = ddy / dist * PROJECTILE_SPEED;
+        cs.state = 'spitting';
+        cs.age = 0;
+      }
+    } else if (cs.state === 'spitting') {
+      cs.age += dt;
+      const ddx = cs.targetX - cs.projX, ddy = cs.targetY - cs.projY;
+      const remaining = Math.sqrt(ddx * ddx + ddy * ddy);
+      const step = PROJECTILE_SPEED * dt;
+      if (remaining <= step) {
+        cs.projX = cs.targetX; cs.projY = cs.targetY;
+        cs.state = 'bursting'; cs.age = 0;
+      } else {
+        cs.projX += cs.projVX * dt;
+        cs.projY += cs.projVY * dt;
+      }
+    } else if (cs.state === 'bursting') {
+      cs.age += dt;
+      if (cs.age >= BURST_DURATION) { cs.state = 'idle'; cs.age = 0; cs.timer = randInterval(); }
+    }
+
+    // Tentacles — drawn first so they trail out from behind the body.
+    for (let j = 0; j < TENTACLE_BASES.length; j++) {
+      const [bx, by] = TENTACLE_BASES[j];
+      const isLashTentacle = j === cs.tentacleIdx && cs.state === 'lashing';
+
+      let len = TENTACLE_LEN;
+      let amp = TENTACLE_AMP;
+      if (isLashTentacle) {
+        const t = cs.age / LASH_DURATION;
+        len = TENTACLE_LEN + (LASH_LEN - TENTACLE_LEN) * t; // whip outward
+        amp = TENTACLE_AMP * (1 - t * 0.7);                 // straightens as it extends
+      }
+
+      // Normal tentacles trail straight behind (local +y); a lashing tentacle
+      // points toward the player along the angle locked in at fire time.
+      const dirAngle = isLashTentacle ? cs.lashAngle : Math.PI / 2;
+      const dirX = Math.cos(dirAngle), dirY = Math.sin(dirAngle);
+      const perpX = -dirY, perpY = dirX;
+
+      const pts = [[bx, by]];
+      for (let k = 1; k <= TENTACLE_SEGS; k++) {
+        const t    = k / TENTACLE_SEGS;
+        const wave = Math.sin(age * TENTACLE_SPEED + i * 0.7 + j * 1.3 + t * 3) * (amp * t);
+        const wx   = bx + dirX * len * t + perpX * wave;
+        const wy   = by + dirY * len * t + perpY * wave;
+        pts.push([wx, wy]);
+      }
+      strokePaths([{ points: pts, closed: false }], {
+        x, y, rotation: heading,
+        color: ALIEN_COLOR, lineWidth: isLashTentacle ? 3 : 2.2, lineCap: 'round',
+        glowBlur: isLashTentacle ? 10 : 6, glowColor: ALIEN_COLOR, alpha: 0.85,
+      });
+    }
+
+    // Projectile — travels from the alien toward the locked target position.
+    if (cs.state === 'spitting') {
+      strokeCircle(cs.projX, cs.projY, PROJECTILE_RADIUS, {
+        color: ALIEN_COLOR, lineWidth: 2,
+        glowBlur: 8, glowColor: ALIEN_COLOR, alpha: 1,
+      });
+    }
+
+    // AOE scatter burst at the impact point (the locked target position).
+    if (cs.state === 'bursting') {
+      const bt = cs.age / BURST_DURATION;
+      strokeCircle(cs.targetX, cs.targetY, bt * BURST_MAX_R, {
+        color: ALIEN_COLOR, lineWidth: 2, alpha: 1 - bt,
+      });
+      for (const ang of SPARK_ANGLES) {
+        const r2 = bt * BURST_MAX_R * 0.8;
+        strokePaths([{ points: [[cs.targetX, cs.targetY], [cs.targetX + Math.cos(ang) * r2, cs.targetY + Math.sin(ang) * r2]], closed: false }], {
+          color: ALIEN_COLOR, lineWidth: 2, lineCap: 'round',
+          glowBlur: 4, glowColor: ALIEN_COLOR, alpha: 1 - bt,
+        });
+      }
+    }
+
+    // Body — bell-shaped head
+    fillStrokePaths([{ points: BODY_PTS, closed: true }], {
+      x, y, rotation: heading,
+      fillColor: ALIEN_FILL, strokeColor: ALIEN_COLOR,
+      lineWidth: 1.8, glowBlur: 8, glowColor: ALIEN_COLOR,
+    });
+
+    // Pulsing eyes
+    for (let j = 0; j < EYES.length; j++) {
+      const [lx, ly] = EYES[j];
+      const wx = x + c * lx - s * ly;
+      const wy = y + s * lx + c * ly;
+      const pulse = 0.5 + 0.5 * Math.abs(Math.sin(age * 3 + i * 0.6 + j * 1.5));
+      strokeCircle(wx, wy, 1.8, {
+        color: ALIEN_DOME, lineWidth: 2.5,
+        glowBlur: 6, glowColor: ALIEN_DOME,
+        alpha: pulse,
+      });
+    }
+  }
+
+  // Player marker — move the pointer over the canvas to reposition it.
+  fillStrokePaths([{ points: [[0,-10],[8,8],[0,4],[-8,8]], closed: true }], {
+    x: playerX, y: playerY,
+    fillColor: '#003a40', strokeColor: PLAYER_COLOR,
+    lineWidth: 1.8, glowBlur: 8, glowColor: PLAYER_COLOR,
+  });
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  render(dt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -15,8 +15,10 @@
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
 import { SniperEnemy } from './SniperEnemy.js';
+import { DrifterEnemy, createDrifterPath, BODY_PTS as DRIFTER_BODY_PTS } from './DrifterEnemy.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
+import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
@@ -28,6 +30,14 @@ const _scoutNormalHulls     = _mkPool();
 const _rocketeerNormalHulls = _mkPool();
 const _sniperNormalHulls    = _mkPool();
 const _flashHulls           = _mkPool();
+
+// Drifter bodies use a different vertex count (BODY_PTS) — separate pools,
+// same batching trick (≤2 extra fillStrokePaths calls regardless of formation size).
+const _DRIFTER_PTS = DRIFTER_BODY_PTS.length;
+const _mkDrifterPool = () => Array.from({ length: MAX_BATCH }, () =>
+  ({ points: Array.from({ length: _DRIFTER_PTS }, () => [0, 0]), closed: true }));
+const _drifterNormalHulls = _mkDrifterPool();
+const _drifterFlashHulls  = _mkDrifterPool();
 
 // Sniper fire: laser is managed internally by SniperEnemy — callback is a no-op.
 const _noFire = () => {};
@@ -53,18 +63,23 @@ export class WaveManager {
         this._playExplosionSfx(Config.enemy.rocketeer.audio.volume);
       },
     });
+    this._drifterProjectiles = new DrifterProjectiles({
+      onImpact: (x, y) => this._drifterParticles.emit(x, y),
+    });
 
     this._particles          = new Particles(Config.enemy.scout.color);
     this._rocketeerParticles = new Particles(Config.enemy.rocketeer.color);
     this._sniperParticles    = new Particles(Config.enemy.sniper.color);
+    this._drifterParticles   = new Particles(Config.enemy.drifter.color);
 
     // Lazy SFX pool (same audio file across all types; volume set per-play).
     this._sfxPool = null;
     this._sfxIdx  = 0;
 
     // Pre-bound fire callbacks — stored once, zero closures per frame.
-    this._fireBullet = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
-    this._fireRocket = (ox, oy, tx, ty) => this._rockets.fire(ox, oy, tx, ty);
+    this._fireBullet           = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
+    this._fireRocket           = (ox, oy, tx, ty) => this._rockets.fire(ox, oy, tx, ty);
+    this._fireDrifterProjectile = (ox, oy, tx, ty) => this._drifterProjectiles.fire(ox, oy, tx, ty);
 
     this.waveClear = false;
   }
@@ -80,7 +95,9 @@ export class WaveManager {
     this._particles.update(dt);
     this._rocketeerParticles.update(dt);
     this._sniperParticles.update(dt);
+    this._drifterParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
+    this._drifterProjectiles.update(dt);
 
     if (this.waveClear) return;
 
@@ -100,6 +117,7 @@ export class WaveManager {
       let cb;
       if      (e.type === 'rocketeer') cb = this._fireRocket;
       else if (e.type === 'sniper')    cb = _noFire;
+      else if (e.type === 'drifter')   cb = this._fireDrifterProjectile;
       else                             cb = this._fireBullet;
       e.update(dt, playerX, playerY, cb);
     }
@@ -126,9 +144,11 @@ export class WaveManager {
     // ── Projectiles ───────────────────────────────────────────────────────────
     this._enemyBullets.render(renderer);
     this._rockets.render(renderer);
+    this._drifterProjectiles.render(renderer);
 
     // ── Engine flames — must render behind hulls ──────────────────────────────
     for (let i = 0; i < this._enemies.length; i++) {
+      if (this._enemies[i].type === 'drifter') continue;
       this._enemies[i].renderFlame(renderer);
     }
 
@@ -136,10 +156,25 @@ export class WaveManager {
     const sCfg  = Config.enemy.scout;
     const rCfg  = Config.enemy.rocketeer;
     const snCfg = Config.enemy.sniper;
-    let scCount = 0, rnCount = 0, snCount = 0, fCount = 0;
+    let scCount = 0, rnCount = 0, snCount = 0, fCount = 0, dnCount = 0, dfCount = 0;
 
     for (let i = 0; i < this._enemies.length; i++) {
-      const e       = this._enemies[i];
+      const e = this._enemies[i];
+      if (e.type === 'drifter') {
+        if (!e._visible) continue;
+        const isFlash = e._hitFlash > 0;
+        const pool = isFlash ? _drifterFlashHulls : _drifterNormalHulls;
+        const idx  = isFlash ? dfCount++ : dnCount++;
+        const c    = e._cosA, s = e._sinA;
+        const path = pool[idx];
+        for (let j = 0; j < _DRIFTER_PTS; j++) {
+          const lx = DRIFTER_BODY_PTS[j][0];
+          const ly = DRIFTER_BODY_PTS[j][1];
+          path.points[j][0] = e.x + c * lx - s * ly;
+          path.points[j][1] = e.y + s * lx + c * ly;
+        }
+        continue;
+      }
       const isFlash = e._hitFlash > 0;
       let pool, idx;
       if (isFlash) {
@@ -183,8 +218,21 @@ export class WaveManager {
       glowColor: '#ffffff', singleStroke: true,
     }, fCount);
 
+    const dCfg = Config.enemy.drifter;
+    if (dnCount > 0) renderer.fillStrokePaths(_drifterNormalHulls, {
+      fillColor: dCfg.fillColor,  strokeColor: dCfg.color,
+      lineWidth:  dCfg.lineWidth, glowBlur:    dCfg.glowBlur,
+      glowColor:  dCfg.color,     singleStroke: true,
+    }, dnCount);
+    if (dfCount > 0) renderer.fillStrokePaths(_drifterFlashHulls, {
+      fillColor: '#ffffff', strokeColor: '#ffffff',
+      lineWidth:  dCfg.lineWidth, glowBlur:   dCfg.hitGlowBlur,
+      glowColor: '#ffffff', singleStroke: true,
+    }, dfCount);
+
     // ── Engine cores — rendered on top of hulls ───────────────────────────────
     for (let i = 0; i < this._enemies.length; i++) {
+      if (this._enemies[i].type === 'drifter') continue;
       this._enemies[i].renderCore(renderer);
     }
 
@@ -193,10 +241,18 @@ export class WaveManager {
       this._enemies[i].renderExtras?.(renderer);
     }
 
+    // ── Drifters — individually rendered (variable tentacle geometry can't
+    //    be batched into the shared hull pools above) ─────────────────────────
+    for (let i = 0; i < this._enemies.length; i++) {
+      const e = this._enemies[i];
+      if (e.type === 'drifter' && e._visible) e.render(renderer);
+    }
+
     // ── Explosions ────────────────────────────────────────────────────────────
     this._particles.render(renderer);
     this._rocketeerParticles.render(renderer);
     this._sniperParticles.render(renderer);
+    this._drifterParticles.render(renderer);
   }
 
   /** Called by GameplayScene when a player bullet hits an enemy. */
@@ -209,6 +265,9 @@ export class WaveManager {
       } else if (enemy.type === 'sniper') {
         this._sniperParticles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.sniper.audio.volume);
+      } else if (enemy.type === 'drifter') {
+        this._drifterParticles.emit(enemy.x, enemy.y);
+        this._playExplosionSfx(Config.enemy.drifter.audio.volume);
       } else {
         this._particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
@@ -227,7 +286,9 @@ export class WaveManager {
       && !this._particles.active
       && !this._rocketeerParticles.active
       && !this._sniperParticles.active
-      && !this._rockets.active;
+      && !this._drifterParticles.active
+      && !this._rockets.active
+      && !this._drifterProjectiles.active;
   }
 
   // ---------------------------------------------------------------------------
@@ -240,11 +301,11 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const a = this._enemies[i];
-      if (a._state === 'entering') continue;
+      if (a._state === 'entering' || a._type === 'drifter') continue;
 
       for (let j = i + 1; j < this._enemies.length; j++) {
         const b = this._enemies[j];
-        if (b._state === 'entering') continue;
+        if (b._state === 'entering' || b._type === 'drifter') continue;
 
         const minSep = Math.max(a._cfg.minSeparation, b._cfg.minSeparation);
         const ddx    = b.x - a.x;
@@ -266,9 +327,21 @@ export class WaveManager {
   }
 
   _spawnNext() {
+    const group = this._groupForIdx(this._spawnIdx);
+    const type  = group?.type ?? 'scout';
+
+    if (type === 'drifter') {
+      const path = createDrifterPath();
+      const cfg  = Config.enemy.drifter;
+      for (let lane = 0; lane < cfg.formationSize; lane++) {
+        this._enemies.push(new DrifterEnemy(path, lane));
+      }
+      this._spawnIdx++;
+      if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;
+      return;
+    }
+
     const { width: vW, height: vH } = Config.virtual;
-    const group  = this._groupForIdx(this._spawnIdx);
-    const type   = group?.type ?? 'scout';
     const eCfg   = Config.enemy[type];
     const spawnX = eCfg.restXMargin + Math.random() * (vW - eCfg.restXMargin * 2);
     const restX  = eCfg.restXMargin + Math.random() * (vW - eCfg.restXMargin * 2);

@@ -385,6 +385,61 @@ export const Config = Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.50, poolSize: 4,
       }),
     }),
+
+    /**
+     * Drifter — an alien "tentacle" creature, spawned in formations that
+     * share a single diagonal-entry → loop-the-loop → diagonal-exit path
+     * (see DrifterEnemy.createPath/samplePath). Each clone in a formation
+     * trails the one ahead by `spacing` along the path, conga-line style.
+     * Doesn't track or steer toward the player at all — purely follows its
+     * path and is removed once it leaves the screen during its exit run.
+     * Independently of its movement, each clone periodically whips a
+     * tentacle toward the player's current position and launches a slow
+     * projectile that bursts into a small AOE at the player's (locked)
+     * position when it arrives.
+     */
+    drifter: Object.freeze({
+      health:           3,
+      color:            '#FFB020',   // amber/gold — matches Rocketeer
+      fillColor:        '#1a1000',
+      eyeColor:         '#FFE0A0',
+      lineWidth:        1.8,
+      glowBlur:         8,
+      hitGlowBlur:      22,
+      tentacleGlowBlur: 6,
+      lashGlowBlur:     10,
+
+      // Path-following formation
+      formationSize: 8,    // clones per formation, conga-line
+      spacing:       50,   // vp along the path between trailing clones
+      speed:         220,  // vp/sec along the path
+      loopRadius:    70,   // loop-the-loop radius
+      entryMargin:   60,   // vp off-screen at the diagonal entry point
+
+      // Tentacle animation
+      tentacleLen:   20,
+      tentacleSegs:  3,    // fewer segments = fewer points per stroke and fewer per-frame sin() calls
+      tentacleAmp:   6,
+      tentacleSpeed: 5,
+
+      // Tentacle-lash projectile attack
+      fireMinInterval:  2.5,  // seconds idle before the next lash
+      fireMaxInterval:  5.0,
+      lashDuration:     0.22, // tentacle whips toward the player
+      lashLen:          40,   // tentacle extension at full lash (2x tentacleLen)
+      projectileSpeed:  320,  // vp/sec toward the locked target
+      projectileRadius: 4,
+      burstMaxR:        30,   // AOE scatter radius at impact
+      burstDuration:    0.35,
+
+      hitRadius:     18,
+      audio: Object.freeze({
+        // Lower than Rocketeer/Sniper (0.45) — formations of up to 8 clones
+        // can die in close succession, and the shared SFX pool would
+        // otherwise stack into a much louder cumulative volume.
+        src: 'assets/audio/explosion.mp3', volume: 0.3, poolSize: 4,
+      }),
+    }),
   }),
 
   /**
@@ -438,7 +493,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scouts only, slow trickle
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'sniper', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'drifter', count: 5, spawnInterval: 4 }),
       ]) }),
       // Level 2 — more scouts
       Object.freeze({ enemies: Object.freeze([
@@ -459,11 +514,12 @@ export const Config = Object.freeze({
         Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.4 }),
         Object.freeze({ type: 'sniper',    count: 1, spawnInterval: 4.0 }),
       ]) }),
-      // Level 6 — heavy mix; two snipers, rocketeers, and scouts
+      // Level 6 — heavy mix; snipers, rocketeers, scouts, and drifter formations
       Object.freeze({ enemies: Object.freeze([
         Object.freeze({ type: 'scout',     count: 5, spawnInterval: 1.6 }),
         Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.0 }),
         Object.freeze({ type: 'sniper',    count: 2, spawnInterval: 5.0 }),
+        Object.freeze({ type: 'drifter',   count: 2, spawnInterval: 8.0 }),
       ]) }),
     ]),
   }),
