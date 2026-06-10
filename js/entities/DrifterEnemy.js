@@ -36,7 +36,7 @@ const EYES = [[-4,-2],[4,-2]];
 // -y in the direction of travel, same as Scout's nose-forward convention).
 const TENTACLE_BASES = [[-7,7],[-2.5,9],[2.5,9],[7,7]];
 
-const randInterval = (cfg) => cfg.fireMinInterval + Math.random() * (cfg.fireMaxInterval - cfg.fireMinInterval);
+const randInterval = (cfg, mult = 1) => (cfg.fireMinInterval + Math.random() * (cfg.fireMaxInterval - cfg.fireMinInterval)) * mult;
 
 /**
  * Build one shared path for an entire formation: a diagonal entry from a
@@ -65,7 +65,7 @@ export function createDrifterPath() {
 
   const L3 = 900; // straight run after the loop, well past the far corner
 
-  return { dir, entry, L1, P1, C, theta0, Lloop, L3, total: L1 + Lloop + L3 };
+  return { variant: 1, dir, entry, L1, P1, C, theta0, Lloop, L3, total: L1 + Lloop + L3 };
 }
 
 /** Position + heading at distance `dist` along the given path. */
@@ -92,21 +92,73 @@ export function samplePath(p, dist) {
   };
 }
 
+/**
+ * Build the shared path for a "Sweeper" formation (variety #2): a single
+ * conga-line that starts at the left edge moving right. Unlike
+ * createDrifterPath, this path has no fixed length — it repeats
+ * indefinitely (straight run, step down, reverse) until the formation
+ * sinks off the bottom of the screen, which DrifterEnemy.update detects
+ * directly via the off-screen check.
+ */
+export function createSweeperPath() {
+  const cfg = Config.enemy.drifter.sweeper;
+  return { variant: 2, dir: 1, startY: cfg.startY, total: Infinity };
+}
+
+/**
+ * Position + heading at distance `dist` along a sweeper path: straight
+ * horizontal runs of screen width (minus margins), facing the direction of
+ * travel, each followed by a straight vertical drop of `step` (facing
+ * straight down — head toward the player, tentacles trailing above),
+ * alternating left/right after every drop.
+ */
+export function sampleSweeperPath(p, dist) {
+  const cfg = Config.enemy.drifter.sweeper;
+  const { width: vW } = Config.virtual;
+  const range    = vW - 2 * cfg.margin;
+  const cycleLen = range + cfg.step;
+
+  const cyc = Math.floor(dist / cycleLen);
+  const uic = dist - cyc * cycleLen;
+
+  const dir      = p.dir * (cyc % 2 === 0 ? 1 : -1);
+  const startX   = dir > 0 ? cfg.margin : vW - cfg.margin;
+  const rowYBase = p.startY + cyc * cfg.step;
+
+  if (uic < range) {
+    return { x: startX + dir * uic, y: rowYBase, heading: dir > 0 ? Math.PI / 2 : -Math.PI / 2 };
+  }
+  return { x: startX + dir * range, y: rowYBase + (uic - range), heading: Math.PI };
+}
+
 export class DrifterEnemy {
   /**
    * @param {ReturnType<typeof createDrifterPath>} path  shared by the whole formation
    * @param {number} laneIndex  0 = leader, 1.. = trailing clones
    */
   constructor(path, laneIndex) {
-    this._type = 'drifter';
-    this._cfg  = Config.enemy.drifter;
-    this._path = path;
-    this._u    = -laneIndex * this._cfg.spacing;
+    this._type    = 'drifter';
+    this._cfg     = Config.enemy.drifter;
+    this._variant = path.variant ?? 1;
+    this._path    = path;
+    this._sample  = this._variant === 2 ? sampleSweeperPath : samplePath;
+    this._fireMult = this._variant === 2 ? this._cfg.sweeper.fireIntervalMult : 1;
+    this._palette = this._variant === 2
+      ? this._cfg.sweeper
+      : this._cfg;
+    this._u    = -laneIndex * (this._variant === 2 ? this._cfg.sweeper.spacing : this._cfg.spacing);
 
     this.alive = true;
-    this.x = path.entry.x;
-    this.y = path.entry.y;
-    this._angle = Math.atan2(path.dir.x, -path.dir.y);
+    if (this._variant === 2) {
+      const start = this._sample(path, this._u);
+      this.x = start.x;
+      this.y = start.y;
+      this._angle = start.heading;
+    } else {
+      this.x = path.entry.x;
+      this.y = path.entry.y;
+      this._angle = Math.atan2(path.dir.x, -path.dir.y);
+    }
     this._cosA  = Math.cos(this._angle);
     this._sinA  = Math.sin(this._angle);
 
@@ -118,7 +170,7 @@ export class DrifterEnemy {
     // ── Tentacle-lash projectile attack ───────────────────────────────────────
     this._fireState   = 'idle'; // 'idle' | 'lashing'
     this._fireAge     = 0;
-    this._fireTimer   = randInterval(this._cfg);
+    this._fireTimer   = randInterval(this._cfg, this._fireMult);
     this._tentacleIdx = 0;
     this._lashAngle   = 0;
     this._targetX     = 0;
@@ -158,11 +210,12 @@ export class DrifterEnemy {
       return;
     }
 
-    this._u += cfg.speed * dt;
+    const speed = this._variant === 2 ? cfg.sweeper.speed : cfg.speed;
+    this._u += speed * dt;
     if (this._u > this._path.total) { this.alive = false; return; }
     if (this._u < 0) { this._visible = false; return; } // not yet entered
 
-    const { x, y, heading } = samplePath(this._path, this._u);
+    const { x, y, heading } = this._sample(this._path, this._u);
     this.x = x;
     this.y = y;
     this._angle = heading;
@@ -171,15 +224,18 @@ export class DrifterEnemy {
 
     // Off-screen — cancel any in-progress attack so it can't fire while
     // invisible, skip rendering, and remove the clone outright once it's
-    // off-screen during its final exit run (past the loop).
+    // off-screen during its final exit run. Variant #1 only finally exits
+    // past its loop; variant #2's path stays within the horizontal bounds,
+    // so any off-screen state (sunk past the bottom) is final.
     const { width: vW, height: vH } = Config.virtual;
     const margin   = 40;
     const onScreen = x > -margin && x < vW + margin && y > -margin && y < vH + margin;
     if (!onScreen) {
-      if (this._u >= this._path.L1 + this._path.Lloop) { this.alive = false; return; }
+      const isFinalExit = this._variant === 2 || this._u >= this._path.L1 + this._path.Lloop;
+      if (isFinalExit) { this.alive = false; return; }
       if (this._fireState !== 'idle') {
         this._fireState = 'idle';
-        this._fireTimer = randInterval(cfg);
+        this._fireTimer = randInterval(cfg, this._fireMult);
       }
       this._visible = false;
       return;
@@ -217,7 +273,7 @@ export class DrifterEnemy {
         onFire(tipX, tipY, this._targetX, this._targetY);
 
         this._fireState = 'idle';
-        this._fireTimer = randInterval(cfg);
+        this._fireTimer = randInterval(cfg, this._fireMult);
       }
     }
   }
@@ -247,7 +303,7 @@ export class DrifterEnemy {
     const cfg   = this._cfg;
     const flash = this._hitFlash > 0;
     const c     = this._cosA, s = this._sinA;
-    const bodyColor = flash ? '#ffffff' : cfg.color;
+    const bodyColor = flash ? '#ffffff' : this._palette.color;
 
     // Tentacles — drawn first so they trail out from behind the body.
     // Normal tentacles share one singleStroke pass; an actively-lashing
@@ -289,7 +345,7 @@ export class DrifterEnemy {
     renderer.strokePaths(this._normalTentacleBatch, {
       x: this.x, y: this.y, rotation: this._angle,
       color: bodyColor, lineWidth: 2.2, lineCap: 'round',
-      glowBlur: cfg.tentacleGlowBlur, glowColor: bodyColor, alpha: 0.85,
+      glowBlur: this._palette.tentacleGlowBlur, glowColor: bodyColor, alpha: 0.85,
       singleStroke: true,
     }, normalCount);
 
@@ -297,7 +353,7 @@ export class DrifterEnemy {
       renderer.strokePaths([lashPath], {
         x: this.x, y: this.y, rotation: this._angle,
         color: bodyColor, lineWidth: 3, lineCap: 'round',
-        glowBlur: cfg.lashGlowBlur, glowColor: bodyColor, alpha: 0.85,
+        glowBlur: this._palette.lashGlowBlur, glowColor: bodyColor, alpha: 0.85,
       }, 1);
     }
 
@@ -311,7 +367,7 @@ export class DrifterEnemy {
       const wy = this.y + s * lx + c * ly;
       const pulse = 0.5 + 0.5 * Math.abs(Math.sin(this._age * 3 + j * 1.5));
       renderer.strokeCircle(wx, wy, 1.8, {
-        color: cfg.eyeColor, lineWidth: 2.5,
+        color: this._palette.eyeColor, lineWidth: 2.5,
         alpha: pulse,
       });
     }

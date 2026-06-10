@@ -439,6 +439,52 @@ export const Config = Object.freeze({
         // otherwise stack into a much louder cumulative volume.
         src: 'assets/audio/explosion.mp3', volume: 0.3, poolSize: 4,
       }),
+
+      /**
+       * Variety #2 — "Sweeper": a single conga-line that travels in
+       * straight horizontal runs, stepping straight down by `step` each
+       * time it hits a screen edge (no diagonal motion). Reuses the same
+       * body/tentacle/attack shapes and tunables above, just a different
+       * path, formation size, palette, and slightly calmer fire rate
+       * (more clones on screen at once than variety #1).
+       */
+      sweeper: Object.freeze({
+        color:     '#ff3ec9',   // magenta — matches Scout
+        fillColor: '#1a0a20',
+        eyeColor:  '#ffd0ee',
+
+        formationSize: 15,   // clones per formation, conga-line
+        spacing:       50,   // vp along the path between trailing clones
+        speed:         220,  // vp/sec along the path
+        margin:        50,   // horizontal bounds the row sweeps between
+        step:          40,   // vertical drop performed at each bounce
+        startY:        60,   // starting height
+
+        // Slightly longer fire intervals than variety #1 — with up to 15
+        // clones on screen at once, firing at the same rate would feel
+        // overwhelming.
+        fireIntervalMult: 1.4,
+
+        // Smaller glow radii than variety #1 (8/22/6/10) — up to 15 clones
+        // can be on screen at once (vs 8), so each shadow-blur pass covers
+        // more ground; smaller radii keep per-pass cost down (blur cost ∝
+        // radius²) without losing the magenta neon read.
+        glowBlur:         6,   // body hull glow
+        hitGlowBlur:      16,  // hit-flash hull glow
+        tentacleGlowBlur: 4,   // per-clone tentacle glow
+        lashGlowBlur:     7,   // per-clone lash glow
+
+        audio: Object.freeze({
+          // Lower than variety #1's 0.3 — formations of up to 15 clones
+          // (vs 8) can die in close succession on the same shared SFX pool.
+          src: 'assets/audio/explosion.mp3', volume: 0.20, poolSize: 4,
+        }),
+
+        // Fewer sparks per explosion than variety #1's default 14 — up to
+        // 15 simultaneous deaths would otherwise flood the spark pool and
+        // widen the shared glow pass's bounding box.
+        sparksPerEmit: 8,
+      }),
     }),
   }),
 
@@ -493,7 +539,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scouts only, slow trickle
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'drifter', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'sweeper', count: 5, spawnInterval: 4 }),
       ]) }),
       // Level 2 — more scouts
       Object.freeze({ enemies: Object.freeze([

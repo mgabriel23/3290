@@ -194,6 +194,7 @@ function drawText(text, x, y, { font, color, align = 'center', baseline = 'middl
 const ALIEN_COLOR = '#FFB020';
 const ALIEN_FILL  = '#1a1000';
 const ALIEN_DOME  = '#FFE0A0';
+const ALIEN_PALETTE = { color: ALIEN_COLOR, fillColor: ALIEN_FILL, domeColor: ALIEN_DOME };
 
 // Bell-shaped head — rounded dome on top, flatter base where tentacles attach.
 // Local space, roughly 22 across, 22 tall.
@@ -219,6 +220,32 @@ const SPEED      = 220;  // virtual px/sec along the path
 const LOOP_R     = 70;   // loop-the-loop radius
 const ENTRY_MARGIN = 60;
 
+// ── Variety #2 — "Sweeper" row ──────────────────────────────────────────────
+// A single conga-line of 15 clones, all spawning at the same time.
+// The row travels in a straight horizontal line, then steps straight down
+// by ROW_STEP when it hits a screen edge and reverses direction — no
+// diagonal motion, just a horizontal lane stepping down repeatedly. While
+// moving horizontally the body faces that direction (head leads, tentacles
+// trail behind); during the downward step it faces straight down (head
+// toward the player, tentacles on top). Starts at the left edge moving
+// right. Reuses scout's magenta palette.
+const ROW_COUNT       = 1;
+const CLONES_PER_ROW  = 12;
+const ROW_SPACING     = 50;   // distance along the path between trailing clones
+const ROW_SPEED       = 220;  // virtual px/sec along the path
+const ROW_MARGIN      = 50;   // horizontal bounds the row sweeps between
+const ROW_STEP        = 40;   // vertical drop performed at each bounce
+const ROW_START_Y     = [60]; // starting height per row
+const ROW_DIR         = [1];  // +1 = start left edge moving right, -1 = start right edge moving left
+
+const SWEEPER_COLOR = '#ff3ec9';
+const SWEEPER_FILL  = '#1a0a20';
+const SWEEPER_DOME  = '#ffd0ee';
+// Slightly longer fire intervals than variety #1 — with 15 clones on
+// screen at once, firing at the same rate would feel overwhelming.
+const SWEEPER_FIRE_INTERVAL_MULT = 1.4;
+const SWEEPER_PALETTE = { color: SWEEPER_COLOR, fillColor: SWEEPER_FILL, domeColor: SWEEPER_DOME, fireIntervalMult: SWEEPER_FIRE_INTERVAL_MULT };
+
 // ── Tentacle-lash AOE attack ────────────────────────────────────────────────
 const FIRE_MIN_INTERVAL = 2.5; // seconds idle before the next lash
 const FIRE_MAX_INTERVAL = 5.0;
@@ -230,12 +257,20 @@ const SPARK_ANGLES   = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.
 const PROJECTILE_SPEED  = 320; // virtual px/sec
 const PROJECTILE_RADIUS = 4;
 
-const randInterval = () => FIRE_MIN_INTERVAL + Math.random() * (FIRE_MAX_INTERVAL - FIRE_MIN_INTERVAL);
+const randInterval = (mult = 1) => (FIRE_MIN_INTERVAL + Math.random() * (FIRE_MAX_INTERVAL - FIRE_MIN_INTERVAL)) * mult;
 
 // Per-clone fire state — persists across frames (and across path respawns).
-const cloneStates = Array.from({ length: NUM_CLONES }, () => ({
+// Sized for the larger of the two varieties (18 clones for variety #2).
+const cloneStates = Array.from({ length: 18 }, () => ({
   timer: randInterval(), state: 'idle', age: 0, tentacleIdx: 0,
 }));
+
+// Press 1 / 2 to switch between variety previews.
+let variety = 2;
+window.addEventListener('keydown', (e) => {
+  if (e.key === '1') variety = 1;
+  if (e.key === '2') variety = 2;
+});
 
 let age = 0;
 let u   = 0;     // leader's distance traveled along the current path
@@ -286,32 +321,20 @@ function samplePath(p, dist) {
   };
 }
 
-function render(dt) {
-  age += dt;
-  clear('#05060c');
-
-  if (!path) path = makePath();
-
-  u += SPEED * dt;
-  if (u - (NUM_CLONES - 1) * SPACING > path.total) {
-    path = makePath();
-    u = 0;
-  }
-
-  for (let i = 0; i < NUM_CLONES; i++) {
-    const dist = u - i * SPACING;
-    if (dist < 0 || dist > path.total) continue;
-
-    const { x, y, heading } = samplePath(path, dist);
+/**
+ * Runs the fire-state machine and draws tentacles + body + eyes for one
+ * clone at the given world position/heading. Shared by both varieties so
+ * the attack/visuals stay identical regardless of path shape.
+ */
+function updateAndRenderClone(dt, i, x, y, heading, cs, palette) {
     const c = Math.cos(heading), s = Math.sin(heading);
 
     // Off-screen — cancel any in-progress attack and skip entirely so it
     // can't keep firing/bursting while invisible.
-    const cs = cloneStates[i];
     const margin = 40;
     if (x < -margin || x > VW + margin || y < -margin || y > VH + margin) {
-      if (cs.state !== 'idle') { cs.state = 'idle'; cs.timer = randInterval(); }
-      continue;
+      if (cs.state !== 'idle') { cs.state = 'idle'; cs.timer = randInterval(palette.fireIntervalMult); }
+      return;
     }
 
     // ── Tentacle-lash AOE attack — fire state machine ─────────────────────────
@@ -363,7 +386,7 @@ function render(dt) {
       }
     } else if (cs.state === 'bursting') {
       cs.age += dt;
-      if (cs.age >= BURST_DURATION) { cs.state = 'idle'; cs.age = 0; cs.timer = randInterval(); }
+      if (cs.age >= BURST_DURATION) { cs.state = 'idle'; cs.age = 0; cs.timer = randInterval(palette.fireIntervalMult); }
     }
 
     // Tentacles — drawn first so they trail out from behind the body.
@@ -395,16 +418,16 @@ function render(dt) {
       }
       strokePaths([{ points: pts, closed: false }], {
         x, y, rotation: heading,
-        color: ALIEN_COLOR, lineWidth: isLashTentacle ? 3 : 2.2, lineCap: 'round',
-        glowBlur: isLashTentacle ? 10 : 6, glowColor: ALIEN_COLOR, alpha: 0.85,
+        color: palette.color, lineWidth: isLashTentacle ? 3 : 2.2, lineCap: 'round',
+        glowBlur: isLashTentacle ? 10 : 6, glowColor: palette.color, alpha: 0.85,
       });
     }
 
     // Projectile — travels from the alien toward the locked target position.
     if (cs.state === 'spitting') {
       strokeCircle(cs.projX, cs.projY, PROJECTILE_RADIUS, {
-        color: ALIEN_COLOR, lineWidth: 2,
-        glowBlur: 8, glowColor: ALIEN_COLOR, alpha: 1,
+        color: palette.color, lineWidth: 2,
+        glowBlur: 8, glowColor: palette.color, alpha: 1,
       });
     }
 
@@ -412,13 +435,13 @@ function render(dt) {
     if (cs.state === 'bursting') {
       const bt = cs.age / BURST_DURATION;
       strokeCircle(cs.targetX, cs.targetY, bt * BURST_MAX_R, {
-        color: ALIEN_COLOR, lineWidth: 2, alpha: 1 - bt,
+        color: palette.color, lineWidth: 2, alpha: 1 - bt,
       });
       for (const ang of SPARK_ANGLES) {
         const r2 = bt * BURST_MAX_R * 0.8;
         strokePaths([{ points: [[cs.targetX, cs.targetY], [cs.targetX + Math.cos(ang) * r2, cs.targetY + Math.sin(ang) * r2]], closed: false }], {
-          color: ALIEN_COLOR, lineWidth: 2, lineCap: 'round',
-          glowBlur: 4, glowColor: ALIEN_COLOR, alpha: 1 - bt,
+          color: palette.color, lineWidth: 2, lineCap: 'round',
+          glowBlur: 4, glowColor: palette.color, alpha: 1 - bt,
         });
       }
     }
@@ -426,8 +449,8 @@ function render(dt) {
     // Body — bell-shaped head
     fillStrokePaths([{ points: BODY_PTS, closed: true }], {
       x, y, rotation: heading,
-      fillColor: ALIEN_FILL, strokeColor: ALIEN_COLOR,
-      lineWidth: 1.8, glowBlur: 8, glowColor: ALIEN_COLOR,
+      fillColor: palette.fillColor, strokeColor: palette.color,
+      lineWidth: 1.8, glowBlur: 8, glowColor: palette.color,
     });
 
     // Pulsing eyes
@@ -437,18 +460,100 @@ function render(dt) {
       const wy = y + s * lx + c * ly;
       const pulse = 0.5 + 0.5 * Math.abs(Math.sin(age * 3 + i * 0.6 + j * 1.5));
       strokeCircle(wx, wy, 1.8, {
-        color: ALIEN_DOME, lineWidth: 2.5,
-        glowBlur: 6, glowColor: ALIEN_DOME,
+        color: palette.domeColor, lineWidth: 2.5,
+        glowBlur: 6, glowColor: palette.domeColor,
         alpha: pulse,
       });
     }
+}
+
+/** Variety #1 — diagonal entry, loop-the-loop, diagonal exit. */
+function renderVariety1(dt) {
+  if (!path) path = makePath();
+
+  u += SPEED * dt;
+  if (u - (NUM_CLONES - 1) * SPACING > path.total) {
+    path = makePath();
+    u = 0;
   }
+
+  for (let i = 0; i < NUM_CLONES; i++) {
+    const dist = u - i * SPACING;
+    if (dist < 0 || dist > path.total) continue;
+
+    const { x, y, heading } = samplePath(path, dist);
+    updateAndRenderClone(dt, i, x, y, heading, cloneStates[i], ALIEN_PALETTE);
+  }
+}
+
+// Each row's distance traveled along its own straight-line/step path.
+const rowU = [0, 0, 0];
+
+/**
+ * Position + heading at distance `u` along a row's path: straight
+ * horizontal runs of length `range` (facing the direction of travel),
+ * each followed by a straight vertical drop of ROW_STEP (facing straight
+ * down), alternating left/right after every drop.
+ */
+function sweeperPos(u, r) {
+  const range    = VW - 2 * ROW_MARGIN;
+  const cycleLen = range + ROW_STEP;
+
+  const cyc = Math.floor(u / cycleLen);
+  const uic = u - cyc * cycleLen;
+
+  const dir      = ROW_DIR[r] * (cyc % 2 === 0 ? 1 : -1);
+  const startX   = dir > 0 ? ROW_MARGIN : VW - ROW_MARGIN;
+  const rowYBase = ROW_START_Y[r] + cyc * ROW_STEP;
+
+  if (uic < range) {
+    // Horizontal run — head leads in the direction of travel.
+    return { x: startX + dir * uic, y: rowYBase, heading: dir > 0 ? Math.PI / 2 : -Math.PI / 2 };
+  }
+  // Vertical drop — head points straight down, tentacles trail above.
+  return { x: startX + dir * range, y: rowYBase + (uic - range), heading: Math.PI };
+}
+
+/** Variety #2 — 3 rows of 6, all spawning together, stepping downward. */
+function renderVariety2(dt) {
+  for (let r = 0; r < ROW_COUNT; r++) {
+    rowU[r] += ROW_SPEED * dt;
+
+    for (let i = 0; i < CLONES_PER_ROW; i++) {
+      const uClone = rowU[r] - i * ROW_SPACING;
+      if (uClone < 0) continue; // not yet entered
+
+      const { x, y, heading } = sweeperPos(uClone, r);
+      if (y > VH + 40) continue; // already exited off the bottom
+
+      const idx = r * CLONES_PER_ROW + i;
+      updateAndRenderClone(dt, idx, x, y, heading, cloneStates[idx], SWEEPER_PALETTE);
+    }
+
+    // Once the trailing clone has exited off the bottom, restart the row.
+    if (sweeperPos(rowU[r] - (CLONES_PER_ROW - 1) * ROW_SPACING, r).y > VH + 40) {
+      rowU[r] = 0;
+    }
+  }
+}
+
+function render(dt) {
+  age += dt;
+  clear('#05060c');
+
+  if (variety === 1) renderVariety1(dt);
+  else renderVariety2(dt);
 
   // Player marker — move the pointer over the canvas to reposition it.
   fillStrokePaths([{ points: [[0,-10],[8,8],[0,4],[-8,8]], closed: true }], {
     x: playerX, y: playerY,
     fillColor: '#003a40', strokeColor: PLAYER_COLOR,
     lineWidth: 1.8, glowBlur: 8, glowColor: PLAYER_COLOR,
+  });
+
+  // Variety indicator
+  drawText(`Variety #${variety}  (press 1 / 2)`, VW / 2, 24, {
+    font: '16px sans-serif', color: '#888',
   });
 }
 

@@ -31,8 +31,15 @@ const INNER = { life: 0.28, startR: 6,  maxR: 38 };
 const OUTER = { life: 0.52, startR: 10, maxR: 72 };
 
 export class Particles {
-  /** @param {string} color  hex color for all effects emitted by this pool */
-  constructor(color) {
+  /**
+   * @param {string} color  hex color for all effects emitted by this pool
+   * @param {number} [sparksPerEmit] sparks spawned per explosion — lower
+   *   for pools whose source can emit many explosions in close succession
+   *   (e.g. large enemy formations), keeping the shared glow pass's
+   *   bounding box smaller on low-end devices
+   */
+  constructor(color, sparksPerEmit = 14) {
+    this._sparksPerEmit = sparksPerEmit;
     // ── Spark pool (typed arrays, zero per-frame allocation) ──────────────────
     this._x    = new Float32Array(MAX);
     this._y    = new Float32Array(MAX);
@@ -75,7 +82,7 @@ export class Particles {
     this._rings.push({ x, y, age: 0, ...OUTER });
 
     // Sparks — faster than before so they burst through and past the inner ring
-    for (let i = 0; i < 14 && this._count < MAX; i++) {
+    for (let i = 0; i < this._sparksPerEmit && this._count < MAX; i++) {
       const a  = Math.random() * Math.PI * 2;
       const s  = 140 + Math.random() * 240;
       const ca = Math.cos(a), sa = Math.sin(a);
