@@ -39,6 +39,10 @@ export class DragInput {
 
   _handleDown(e) {
     this._active = true;
+    // Pointer capture keeps move/up events targeted at this element even if
+    // the finger drifts outside its bounds mid-drag — without this, a fast
+    // drag past the canvas edge silently stops delivering pointermove.
+    e.target.setPointerCapture?.(e.pointerId);
     this._onDown?.(e.clientX, e.clientY);
   }
 
@@ -47,9 +51,10 @@ export class DragInput {
     this._onMove?.(e.clientX, e.clientY);
   }
 
-  _handleEnd() {
+  _handleEnd(e) {
     if (!this._active) return;
     this._active = false;
+    e.target.releasePointerCapture?.(e.pointerId);
     this._onUp?.();
   }
 }
