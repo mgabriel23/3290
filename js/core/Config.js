@@ -485,6 +485,51 @@ export const Config = Object.freeze({
         // widen the shared glow pass's bounding box.
         sparksPerEmit: 8,
       }),
+
+      /**
+       * Variety #3 — "Diver": a small V-shaped wedge that drops straight
+       * down, accelerating as it falls (kinematics: dist = v0*t + 0.5*a*t^2
+       * — see DrifterEnemy.sampleDiverPath). Always faces straight down
+       * (head toward the player, tentacles trailing above). Reuses the same
+       * body/tentacle/attack shapes and tunables above, just a different
+       * path, formation shape, and palette. Formation (5) is smaller than
+       * variety #1's (8), but the wedge's tight [-70..70] spread means a
+       * single bullet sweep can pop several clones within the same frame
+       * or two — trimmed hit-flash/lash glow, spark count, and explosion
+       * volume below variety #1's defaults to keep those simultaneous-kill
+       * bursts cheap on low-end devices.
+       */
+      diver: Object.freeze({
+        color:     '#39ff14',   // neon green — distinct from amber (#1) and magenta (#2)
+        fillColor: '#06190a',
+        eyeColor:  '#c8ffb0',
+
+        // Fixed [dx, dy] offsets from the wedge's leader (tip), pointing in
+        // the direction of travel (down) — a rigid V formation.
+        formationSize: 5,
+        offsets: Object.freeze([
+          Object.freeze([0, 0]),
+          Object.freeze([-35, -35]), Object.freeze([35, -35]),
+          Object.freeze([-70, -70]), Object.freeze([70, -70]),
+        ]),
+
+        spawnY:     -70,  // leader's y at spawn, vp
+        margin:     80,   // horizontal spawn-x bounds
+        startSpeed: 140,  // vp/sec at spawn
+        accel:      90,   // vp/sec^2 — speeds up as it falls
+
+        fireIntervalMult: 1,
+
+        glowBlur:         8,
+        hitGlowBlur:      18,
+        tentacleGlowBlur: 5,
+        lashGlowBlur:     8,
+
+        audio: Object.freeze({
+          src: 'assets/audio/explosion.mp3', volume: 0.25, poolSize: 4,
+        }),
+        sparksPerEmit: 10,
+      }),
     }),
   }),
 
@@ -539,7 +584,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scouts only, slow trickle
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'sniper', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'diver', count: 5, spawnInterval: 4 }),
       ]) }),
       // Level 2 — more scouts
       Object.freeze({ enemies: Object.freeze([

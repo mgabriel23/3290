@@ -131,6 +131,34 @@ export function sampleSweeperPath(p, dist) {
   return { x: startX + dir * range, y: rowYBase + (uic - range), heading: Math.PI };
 }
 
+/**
+ * Build the shared "anchor" for a "Diver" formation (variety #3): a
+ * V-shaped wedge that drops straight down from a random horizontal spawn
+ * point, accelerating as it falls. Like the sweeper path, this has no fixed
+ * length — `total: Infinity` — DrifterEnemy.update detects the formation's
+ * exit directly via the off-screen check once it sinks below the bottom.
+ */
+export function createDiverPath() {
+  const cfg = Config.enemy.drifter.diver;
+  const { width: vW } = Config.virtual;
+  const x = cfg.margin + Math.random() * (vW - 2 * cfg.margin);
+  return { variant: 3, x, total: Infinity };
+}
+
+/**
+ * Position + heading at elapsed time `t` for one clone of a "Diver" wedge:
+ * the whole formation falls straight down (kinematics: dist = v0*t +
+ * 0.5*a*t^2) as a rigid body — `offset` is this clone's fixed [dx, dy]
+ * displacement from the wedge's leader. Always faces straight down (head
+ * toward the player, tentacles trailing above), same pose as the sweeper's
+ * vertical step.
+ */
+export function sampleDiverPath(p, t, offset) {
+  const cfg  = Config.enemy.drifter.diver;
+  const dist = cfg.startSpeed * t + 0.5 * cfg.accel * t * t;
+  return { x: p.x + offset[0], y: cfg.spawnY + dist + offset[1], heading: Math.PI };
+}
+
 export class DrifterEnemy {
   /**
    * @param {ReturnType<typeof createDrifterPath>} path  shared by the whole formation
@@ -141,15 +169,21 @@ export class DrifterEnemy {
     this._cfg     = Config.enemy.drifter;
     this._variant = path.variant ?? 1;
     this._path    = path;
-    this._sample  = this._variant === 2 ? sampleSweeperPath : samplePath;
-    this._fireMult = this._variant === 2 ? this._cfg.sweeper.fireIntervalMult : 1;
-    this._palette = this._variant === 2
-      ? this._cfg.sweeper
-      : this._cfg;
-    this._u    = -laneIndex * (this._variant === 2 ? this._cfg.sweeper.spacing : this._cfg.spacing);
+    this._offset  = this._variant === 3 ? this._cfg.diver.offsets[laneIndex] : null;
+    this._sample  = this._variant === 2 ? sampleSweeperPath
+                   : this._variant === 3 ? (p, t) => sampleDiverPath(p, t, this._offset)
+                   : samplePath;
+    this._fireMult = this._variant === 2 ? this._cfg.sweeper.fireIntervalMult
+                    : this._variant === 3 ? this._cfg.diver.fireIntervalMult
+                    : 1;
+    this._palette = this._variant === 2 ? this._cfg.sweeper
+                   : this._variant === 3 ? this._cfg.diver
+                   : this._cfg;
+    this._u    = this._variant === 3 ? 0
+               : -laneIndex * (this._variant === 2 ? this._cfg.sweeper.spacing : this._cfg.spacing);
 
     this.alive = true;
-    if (this._variant === 2) {
+    if (this._variant === 2 || this._variant === 3) {
       const start = this._sample(path, this._u);
       this.x = start.x;
       this.y = start.y;
@@ -210,8 +244,12 @@ export class DrifterEnemy {
       return;
     }
 
-    const speed = this._variant === 2 ? cfg.sweeper.speed : cfg.speed;
-    this._u += speed * dt;
+    if (this._variant === 3) {
+      this._u += dt; // elapsed time — sampleDiverPath applies kinematics
+    } else {
+      const speed = this._variant === 2 ? cfg.sweeper.speed : cfg.speed;
+      this._u += speed * dt;
+    }
     if (this._u > this._path.total) { this.alive = false; return; }
     if (this._u < 0) { this._visible = false; return; } // not yet entered
 
@@ -231,6 +269,14 @@ export class DrifterEnemy {
     const margin   = 40;
     const onScreen = x > -margin && x < vW + margin && y > -margin && y < vH + margin;
     if (!onScreen) {
+      // Variant #3's wedge starts above the top edge by design (trailing
+      // clones sit higher than the leader) — only a sunk-past-the-bottom
+      // exit is final; still-above-the-top just means "not visible yet".
+      if (this._variant === 3) {
+        if (y > vH + margin) { this.alive = false; return; }
+        this._visible = false;
+        return;
+      }
       const isFinalExit = this._variant === 2 || this._u >= this._path.L1 + this._path.Lloop;
       if (isFinalExit) { this.alive = false; return; }
       if (this._fireState !== 'idle') {
