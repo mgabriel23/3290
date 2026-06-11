@@ -38,8 +38,9 @@ export class SniperEnemy {
    * @param {number} spawnX  entry column
    * @param {number} restX   resting x
    * @param {number} restY   resting y
+   * @param {number} [healthBonus]  added to `Config.enemy.sniper.health` — used by WaveManager to scale health by level
    */
-  constructor(spawnX, restX, restY) {
+  constructor(spawnX, restX, restY, healthBonus = 0) {
     this.x     = spawnX;
     this.y     = -S;
     this.alive = true;
@@ -56,7 +57,7 @@ export class SniperEnemy {
     // renderCore and renderExtras instead of each calling Math.cos/sin again.
     this._cosA        = 1;
     this._sinA        = 0;
-    this._health      = this._cfg.health;
+    this._health      = this._cfg.health + healthBonus;
     this._enginePhase = Math.random() * Math.PI * 2;
     this._hitFlash    = 0;
     this._dying       = false;
@@ -181,12 +182,13 @@ export class SniperEnemy {
 
   /**
    * Register one bullet hit. Returns true if the hit was fatal.
+   * @param {number} [damage]  health points removed — scales with player level
    * @returns {boolean}
    */
-  hit() {
+  hit(damage = 1) {
     if (this._dying) return false;
     this._hitFlash = 0.15;
-    this._health--;
+    this._health -= damage;
     if (this._health <= 0) {
       this._dying = true;
       return true;

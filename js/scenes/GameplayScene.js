@@ -84,7 +84,8 @@ export class GameplayScene {
   render() {
     this.renderer.clear(Config.colors.void);
     this._drawStarfield();
-    this.barrier.render(this.renderer);
+    const playerDamage = Config.player.damage + (this._level - 1) * Config.player.damagePerLevel;
+    this.barrier.render(this.renderer, playerDamage);
     this.player.render(this.renderer);
     this.bullets.render(this.renderer);
     this._waveManager?.render(this.renderer);

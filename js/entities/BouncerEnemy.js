@@ -42,6 +42,7 @@ export class BouncerEnemy {
    * @param {number} [opts.y]   spawn y — defaults to just above the top edge
    * @param {number} [opts.vx]  initial horizontal velocity — defaults to a random value
    * @param {number} [opts.vy]  initial vertical velocity — defaults to 0
+   * @param {number} [opts.healthBonus]  added to the variant's base health — used by WaveManager to scale health by level
    */
   constructor(opts = {}) {
     const cfg     = Config.enemy.bouncer;
@@ -59,7 +60,7 @@ export class BouncerEnemy {
     this.vy = opts.vy ?? 0;
     this._angle = Math.random() * Math.PI * 2;
 
-    this._health   = stats.health;
+    this._health   = stats.health + (opts.healthBonus ?? 0);
     this._hitFlash = 0;
     this._dying    = false;
     this.alive     = true;
@@ -124,9 +125,10 @@ export class BouncerEnemy {
    * Register one bullet hit. Returns true if the hit was fatal.
    * A shielded (variant 3) clone with shield hits remaining absorbs the hit
    * into the shield instead — the core takes no damage and isn't fatal.
+   * @param {number} [damage]  health points removed — scales with player level
    * @returns {boolean}
    */
-  hit() {
+  hit(damage = 1) {
     if (this._dying) return false;
     if (this._shieldHits > 0) {
       this._shieldHits--;
@@ -134,7 +136,7 @@ export class BouncerEnemy {
       return false;
     }
     this._hitFlash = Config.enemy.bouncer.flashDuration;
-    this._health--;
+    this._health -= damage;
     if (this._health <= 0) {
       this._dying = true;
       return true;
@@ -235,7 +237,7 @@ export class BouncerEnemy {
 
     if (flash) return;
 
-    renderer.drawText(String(this._health), this.x, this.y, {
+    renderer.drawText(String(Math.max(0, Math.ceil(this._health))), this.x, this.y, {
       font: cfg.healthFont, color: cfg.healthColor,
     });
   }

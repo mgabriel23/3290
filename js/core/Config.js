@@ -50,6 +50,9 @@ export const Config = Object.freeze({
     restingYRatio: 0.78,   // resting position as a fraction down the virtual height
     entryDuration: 1.4,    // seconds for the ease-out fly-up entrance
 
+    damage:         1,     // health points removed from an enemy per bullet hit, at level 1
+    damagePerLevel: 0.25,  // added to `damage` for each level beyond 1 (level 4 → 1 + 3*0.25 = 1.75)
+
     /** The engine flame: a small pulsing neon triangle beneath the ship. */
     flame: Object.freeze({
       color: '#FF8A3D',           // warm neon orange — contrasts with the cyan hull
@@ -301,6 +304,7 @@ export const Config = Object.freeze({
     scout: Object.freeze({
       size:             22,
       health:           3,
+      healthPerLevel:   1,    // +1 health per level beyond 1
       color:            '#ff3ec9',   // magenta
       fillColor:        '#1a0a20',
       lineWidth:        1.5,
@@ -333,6 +337,7 @@ export const Config = Object.freeze({
     sniper: Object.freeze({
       size:             22,
       health:           8,
+      healthPerLevel:   2,    // +2 health per level beyond 1 — already tanky, scales faster
       color:            '#BF5FFF',   // electric violet — reads as energy/laser weapon
       fillColor:        '#110022',
       lineWidth:        1.8,
@@ -365,6 +370,7 @@ export const Config = Object.freeze({
     rocketeer: Object.freeze({
       size:             22,
       health:           2,
+      healthPerLevel:   1,    // +1 health per level beyond 1
       color:            '#FFB020',   // amber/gold — warm, distinct from scout magenta
       fillColor:        '#1a1000',   // very dark amber
       lineWidth:        1.5,
@@ -400,6 +406,7 @@ export const Config = Object.freeze({
      */
     drifter: Object.freeze({
       health:           3,
+      healthPerLevel:   1,    // +1 health per level beyond 1 — applies to all varieties (sweeper/diver/weaver share `health`)
       color:            '#FFB020',   // amber/gold — matches Rocketeer
       fillColor:        '#1a1000',
       eyeColor:         '#FFE0A0',
@@ -600,6 +607,7 @@ export const Config = Object.freeze({
      */
     bouncer: Object.freeze({
       health:     3,
+      healthPerLevel: 1,    // +1 health per level beyond 1 — applies to core, splitter, and shielded core alike
       color:      '#FFB020',   // amber — same family as Rocketeer/Drifter #1
       lineWidth:  2,
       glowBlur:   5,
@@ -782,6 +790,11 @@ export const Config = Object.freeze({
     healthValueFont: '400 14px "Audiowide", "Courier New", monospace',
     healthColor: '#4DEFFF',
     healthGlowBlur: 3, // kept low — small radius means cheap shadow pass
+
+    // Permanent power (player bullet damage) readout, offset toward the
+    // dome's left side — same font sizes/glow as the health readout.
+    powerXRatio: 0.22, // fraction of virtual width — x position of the power readout
+    powerColor: '#4DEFFF',
 
     // Impact ripple — a damped spring deformation applied to the arc near
     // an impact point (e.g. BouncerEnemy bouncing off the dome), so the

@@ -69,12 +69,16 @@ export class WaveManager {
    */
   constructor(level, barrier) {
     const levels = Config.waves.levels;
+    this._level   = level;
     this._waveCfg = levels[Math.min(level - 1, levels.length - 1)];
     this._barrierSurfaceY = (x) => barrier.surfaceY(x);
     this._onBarrierHit    = (x) => {
       barrier.takeDamage(Config.enemy.bouncer.barrierDamage);
       barrier.pulse(x);
     };
+
+    // Player bullet damage scales with level — see Config.player.damage/damagePerLevel.
+    this._playerDamage = Config.player.damage + (level - 1) * Config.player.damagePerLevel;
 
     this._totalToSpawn = this._waveCfg.enemies.reduce((s, g) => s + g.count, 0);
     this._spawnIdx   = 0;
@@ -383,7 +387,7 @@ export class WaveManager {
 
   /** Called by GameplayScene when a player bullet hits an enemy. */
   handleBulletHit(enemy) {
-    const killed = enemy.hit();
+    const killed = enemy.hit(this._playerDamage);
     if (killed) {
       if (enemy.type === 'rocketeer') {
         this._rocketeerParticles.emit(enemy.x, enemy.y);
@@ -485,7 +489,7 @@ export class WaveManager {
       let variant = 1;
       if (type === 'splitter') variant = 2;
       else if (type === 'shielded') variant = 3;
-      this._enemies.push(new BouncerEnemy({ variant }));
+      this._enemies.push(new BouncerEnemy({ variant, healthBonus: this._healthBonus(Config.enemy.bouncer) }));
       this._spawnIdx++;
       if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;
       return;
@@ -510,8 +514,9 @@ export class WaveManager {
                            : variant === 3 ? cfg.diver.formationSize
                            : variant === 4 ? cfg.weaver.formationSize
                            : cfg.formationSize;
+      const healthBonus = this._healthBonus(cfg);
       for (let lane = 0; lane < formationSize; lane++) {
-        this._enemies.push(new DrifterEnemy(path, lane));
+        this._enemies.push(new DrifterEnemy(path, lane, healthBonus));
       }
       this._spawnIdx++;
       if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;
@@ -524,9 +529,10 @@ export class WaveManager {
     const restX  = eCfg.restXMargin + Math.random() * (vW - eCfg.restXMargin * 2);
     const restY  = vH * (eCfg.restYMin + Math.random() * (eCfg.restYMax - eCfg.restYMin));
 
+    const healthBonus = this._healthBonus(eCfg);
     const enemy = type === 'sniper'
-      ? new SniperEnemy(spawnX, restX, restY)
-      : new Enemy(spawnX, restX, restY, type);
+      ? new SniperEnemy(spawnX, restX, restY, healthBonus)
+      : new Enemy(spawnX, restX, restY, type, healthBonus);
     this._enemies.push(enemy);
 
     this._spawnIdx++;
@@ -540,6 +546,11 @@ export class WaveManager {
       if (idx < offset) return group;
     }
     return null;
+  }
+
+  /** Extra health added on top of `cfg.health` for the current level — see `cfg.healthPerLevel`. */
+  _healthBonus(cfg) {
+    return (this._level - 1) * (cfg.healthPerLevel ?? 0);
   }
 
   _playExplosionSfx(volume) {

@@ -39,8 +39,9 @@ export class Enemy {
    * @param {number} restX   x of the resting position
    * @param {number} restY   y of the resting position
    * @param {string} [type]  key into Config.enemy — 'scout' | 'rocketeer'
+   * @param {number} [healthBonus]  added to `Config.enemy[type].health` — used by WaveManager to scale health by level
    */
-  constructor(spawnX, restX, restY, type = 'scout') {
+  constructor(spawnX, restX, restY, type = 'scout', healthBonus = 0) {
     this.x     = spawnX;
     this.y     = -S;
     this.alive = true;
@@ -52,7 +53,7 @@ export class Enemy {
     this._restX   = restX;
     this._restY   = restY;
     this._angle   = 0; // recomputed every frame to track the player
-    this._health  = this._cfg.health;
+    this._health  = this._cfg.health + healthBonus;
     this._enginePhase = Math.random() * Math.PI * 2;
     this._hitFlash    = 0;     // seconds remaining in hit-white flash
     this._dying       = false; // true once health hits 0; waits for flash to finish
@@ -142,12 +143,13 @@ export class Enemy {
    * Register one bullet hit. Triggers a white flash regardless of outcome.
    * Returns `true` if this hit was fatal (health reached 0) so the caller
    * (WaveManager) knows when to emit the particle burst.
+   * @param {number} [damage]  health points removed — scales with player level
    * @returns {boolean}
    */
-  hit() {
+  hit(damage = 1) {
     if (this._dying) return false; // already in death animation — ignore further hits
     this._hitFlash = 0.15;
-    this._health--;
+    this._health -= damage;
     if (this._health <= 0) {
       this._dying = true;
       return true; // killed

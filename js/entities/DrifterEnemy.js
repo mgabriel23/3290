@@ -198,8 +198,9 @@ export class DrifterEnemy {
   /**
    * @param {ReturnType<typeof createDrifterPath>} path  shared by the whole formation
    * @param {number} laneIndex  0 = leader, 1.. = trailing clones
+   * @param {number} [healthBonus]  added to `Config.enemy.drifter.health` — used by WaveManager to scale health by level
    */
-  constructor(path, laneIndex) {
+  constructor(path, laneIndex, healthBonus = 0) {
     this._type    = 'drifter';
     this._cfg     = Config.enemy.drifter;
     this._variant = path.variant ?? 1;
@@ -236,7 +237,7 @@ export class DrifterEnemy {
     this._cosA  = Math.cos(this._angle);
     this._sinA  = Math.sin(this._angle);
 
-    this._health   = this._cfg.health;
+    this._health   = this._cfg.health + healthBonus;
     this._hitFlash = 0;
     this._dying    = false;
     this._age      = Math.random() * Math.PI * 2; // phase offset — desyncs tentacle wobble/eye pulse across clones
@@ -371,12 +372,13 @@ export class DrifterEnemy {
 
   /**
    * Register one bullet hit. Returns true if the hit was fatal.
+   * @param {number} [damage]  health points removed — scales with player level
    * @returns {boolean}
    */
-  hit() {
+  hit(damage = 1) {
     if (this._dying) return false;
     this._hitFlash = 0.15;
-    this._health--;
+    this._health -= damage;
     if (this._health <= 0) {
       this._dying = true;
       return true;

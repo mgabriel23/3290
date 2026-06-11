@@ -52,7 +52,8 @@ export class Barrier {
     if (this._pulseT >= Config.barrier.pulse.duration) this._pulseT = -1;
   }
 
-  render(renderer) {
+  /** @param {number} [power]  player bullet damage — shown inside the dome's left side when given */
+  render(renderer, power) {
     const { color, lineWidth, glowBlur } = Config.barrier;
     this._applyPulse();
     // Main arc — full brightness, full lineWidth
@@ -62,6 +63,7 @@ export class Barrier {
       color, lineWidth: 1, glowBlur: glowBlur * 0.5, alpha: 0.45,
     });
     this._renderHealth(renderer);
+    if (power !== undefined) this._renderPower(renderer, power);
   }
 
   /**
@@ -98,6 +100,21 @@ export class Barrier {
     });
     renderer.drawText(String(this.health), vW / 2, peakY + 52, {
       font: healthValueFont, color: healthColor, glowBlur: healthGlowBlur,
+    });
+  }
+
+  /** Player bullet damage readout, mirroring _renderHealth's layout but offset toward the dome's left side. */
+  _renderPower(renderer, power) {
+    const { baseY, arcHeight, healthLabelFont, healthValueFont, powerColor, healthGlowBlur, powerXRatio } =
+      Config.barrier;
+    const { width: vW } = Config.virtual;
+    const peakY = baseY - arcHeight;
+    const x = vW * powerXRatio;
+    renderer.drawText('PWR', x, peakY + 26, {
+      font: healthLabelFont, color: powerColor, alpha: 0.5,
+    });
+    renderer.drawText(power.toFixed(2), x, peakY + 52, {
+      font: healthValueFont, color: powerColor, glowBlur: healthGlowBlur,
     });
   }
 
