@@ -587,13 +587,23 @@ export const Config = Object.freeze({
      * with the core and absorbs `shieldHits` bullet hits — and determines
      * the bounce/collision radius while it's up — before the core can take
      * damage like a normal Bouncer.
+     *
+     * Low-end pass: unlike Scout/Rocketeer/Sniper, Bouncers are rendered
+     * individually (not batched), each costing its own shadow-blur pass —
+     * and they persist on screen indefinitely rather than exiting, so that
+     * cost is sustained, not momentary. Splitter compounds this further:
+     * its shield ring is a second blur pass per frame, and on death it adds
+     * 3 fragment Bouncers (each with their own pass) at once. glowBlur,
+     * hitGlowBlur, and the shield blurs are trimmed accordingly, audio
+     * volume matches Drifter's low-end value, and sparksPerEmit is reduced
+     * for the same simultaneous-kill-burst reason as Diver/Weaver.
      */
     bouncer: Object.freeze({
       health:     3,
       color:      '#FFB020',   // amber — same family as Rocketeer/Drifter #1
       lineWidth:  2,
-      glowBlur:   6,
-      hitGlowBlur: 14,
+      glowBlur:   5,
+      hitGlowBlur: 12,
 
       radius:    20,    // vp — both collision radius and hull size
       sides:     6,     // hexagon
@@ -610,8 +620,9 @@ export const Config = Object.freeze({
       healthColor: '#ffffff',
 
       audio: Object.freeze({
-        src: 'assets/audio/explosion.mp3', volume: 0.4, poolSize: 4,
+        src: 'assets/audio/explosion.mp3', volume: 0.3, poolSize: 4,
       }),
+      sparksPerEmit: 10,
 
       splitter: Object.freeze({
         radius: 40,   // vp — ~2x the base hull size
@@ -627,8 +638,8 @@ export const Config = Object.freeze({
         shieldRadius:     32,        // vp — outer ring radius (core uses the base `radius` above)
         shieldHits:       2,         // bullet hits absorbed before the core starts taking damage
         shieldColor:      '#6FE0FF', // ice-blue — visually distinct from the amber core
-        shieldGlowBlur:     6,
-        shieldHitGlowBlur: 14,
+        shieldGlowBlur:     5,
+        shieldHitGlowBlur: 12,
       }),
     }),
   }),

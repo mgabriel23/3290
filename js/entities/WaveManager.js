@@ -106,7 +106,7 @@ export class WaveManager {
     this._sweeperParticles   = new Particles(Config.enemy.drifter.sweeper.color, Config.enemy.drifter.sweeper.sparksPerEmit);
     this._diverParticles     = new Particles(Config.enemy.drifter.diver.color, Config.enemy.drifter.diver.sparksPerEmit);
     this._weaverParticles    = new Particles(Config.enemy.drifter.weaver.color, Config.enemy.drifter.weaver.sparksPerEmit);
-    this._bouncerParticles   = new Particles(Config.enemy.bouncer.color);
+    this._bouncerParticles   = new Particles(Config.enemy.bouncer.color, Config.enemy.bouncer.sparksPerEmit);
 
     // Lazy SFX pool (same audio file across all types; volume set per-play).
     this._sfxPool = null;
