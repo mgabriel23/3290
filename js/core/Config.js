@@ -690,38 +690,55 @@ export const Config = Object.freeze({
    * Wave / level definitions. `type` maps to a key in `Config.enemy`.
    * WaveManager caps the index at the last entry — levels beyond the
    * array repeat the final wave indefinitely.
+   *
+   * Each level's group sequence is governed by `simultaneous`:
+   *   true  — groups can overlap; the next group starts spawning on its
+   *           own timer regardless of what's still on screen.
+   *   false — only one enemy type is ever active at a time in this level.
+   *           The next group won't start spawning until every enemy from
+   *           the previous group has been cleared.
+   * A level that omits `simultaneous` falls back to the top-level
+   * `waves.simultaneous` default below, then to `true`.
    */
   waves: Object.freeze({
+    simultaneous: true,
     levels: Object.freeze([
-      // Level 1 — scouts only, slow trickle
+      // Level 1 — scout and rocketeer
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'shielded', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 3 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 3 }),
+        Object.freeze({ type: 'scout', count: 3, spawnInterval: 3 }),
+        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 3 })
       ]) }),
-      // Level 2 — more scouts
+      // Level 2 - diver, scout, and rocketeer mix
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'scout', count: 10, spawnInterval: 3.2 }),
+        Object.freeze({ type: 'diver', count: 2, spawnInterval: 5 }),
+        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'diver', count: 1, spawnInterval: 5 }),
+        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.5 })
       ]) }),
-      // Level 3 — dense scout wave
+      // Level 3 — sniper, scout and drifter mix
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'scout', count: 15, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 3 }),
+        Object.freeze({ type: 'drifter', count: 3, spawnInterval: 3.5 }),
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 3 })
       ]) }),
-      // Level 4 — first rocketeers alongside scouts
-      Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'scout',     count: 4, spawnInterval: 2.0 }),
-        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 3.0 }),
+      // Level 4 — scout, rocketeer,drifter and sweeper mix
+      Object.freeze({ simultaneous: false, enemies: Object.freeze([
+        Object.freeze({ type: 'drifter', count: 2, spawnInterval: 5 }),
+        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'sweeper', count: 2, spawnInterval: 6 }),
+        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.8 })
       ]) }),
-      // Level 5 — first sniper introduced alongside a light escort
-      Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'scout',     count: 4, spawnInterval: 1.8 }),
-        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.4 }),
-        Object.freeze({ type: 'sniper',    count: 1, spawnInterval: 4.0 }),
-      ]) }),
-      // Level 6 — heavy mix; snipers, rocketeers, scouts, and drifter formations
-      Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'scout',     count: 5, spawnInterval: 1.6 }),
-        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.0 }),
-        Object.freeze({ type: 'sniper',    count: 2, spawnInterval: 5.0 }),
-        Object.freeze({ type: 'drifter',   count: 2, spawnInterval: 8.0 }),
+      // Level 5 — scout, rocketeer,drifter and sweeper mix
+       Object.freeze({ simultaneous: false, enemies: Object.freeze([
+        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'diver', count: 3, spawnInterval: 5 }),
+        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'diver', count: 3, spawnInterval: 5 })
       ]) }),
     ]),
   }),

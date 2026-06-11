@@ -142,12 +142,24 @@ export class WaveManager {
     if (this.waveClear) return;
 
     // ── Spawn ─────────────────────────────────────────────────────────────────
+    // When `simultaneous` is false, a new group can't start spawning until
+    // every enemy from the previous group has been cleared from the screen —
+    // only one enemy type is ever active at a time.
     if (!this._allSpawned) {
       this._spawnTimer -= dt;
       if (this._spawnTimer <= 0 && this._spawnIdx < this._totalToSpawn) {
-        this._spawnNext();
         const group = this._groupForIdx(this._spawnIdx);
-        this._spawnTimer = group ? group.spawnInterval : 1;
+        const groupChanged = this._spawnIdx > 0 && group !== this._groupForIdx(this._spawnIdx - 1);
+        const simultaneous = this._waveCfg.simultaneous ?? Config.waves.simultaneous ?? true;
+        const blocked = simultaneous === false && groupChanged && this._enemies.length > 0;
+
+        if (!blocked) {
+          this._spawnNext();
+          const nextGroup = this._groupForIdx(this._spawnIdx);
+          this._spawnTimer = nextGroup ? nextGroup.spawnInterval : 1;
+        } else {
+          this._spawnTimer = 0.25; // recheck shortly until the screen clears
+        }
       }
     }
 
@@ -481,15 +493,14 @@ export class WaveManager {
 
     if (type === 'drifter' || type === 'sweeper' || type === 'diver' || type === 'weaver') {
       const cfg = Config.enemy.drifter;
-      // 'drifter' picks randomly per formation between variety #1 (loop
-      // path), #2 (sweeper rows), #3 (diver wedge), and #4 (weaver sine
-      // descent); 'sweeper'/'diver'/'weaver' force that variety directly
-      // (used for testing a variety in isolation).
+      // 'drifter' = variety #1 (loop path), 'sweeper' = #2 (rows),
+      // 'diver' = #3 (wedge), 'weaver' = #4 (sine descent) — each config
+      // type spawns only that variety.
       let variant;
       if (type === 'sweeper') variant = 2;
       else if (type === 'diver') variant = 3;
       else if (type === 'weaver') variant = 4;
-      else variant = 1 + Math.floor(Math.random() * 4);
+      else variant = 1;
 
       const path = variant === 2 ? createSweeperPath()
                   : variant === 3 ? createDiverPath()
