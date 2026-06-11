@@ -581,6 +581,12 @@ export const Config = Object.freeze({
      * that on death breaks into `fragmentCount` small low-health Bouncer
      * clones (variant 'fragment'), kicked outward from the splitter's death
      * position — see BouncerEnemy.spawnFragments().
+     *
+     * Variety #3 ("Shielded", `shielded` below) is a normal-size core
+     * surrounded by an outer hexagonal shield ring that spins in lockstep
+     * with the core and absorbs `shieldHits` bullet hits — and determines
+     * the bounce/collision radius while it's up — before the core can take
+     * damage like a normal Bouncer.
      */
     bouncer: Object.freeze({
       health:     3,
@@ -615,6 +621,14 @@ export const Config = Object.freeze({
         fragmentRadius:   12,  // vp — smaller than the base Bouncer (20)
         fragmentHealth:   1,
         fragmentSpeedMax: 200, // vp/sec — horizontal fan-out speed (vy is solved per-fragment, see spawnFragments)
+      }),
+
+      shielded: Object.freeze({
+        shieldRadius:     32,        // vp — outer ring radius (core uses the base `radius` above)
+        shieldHits:       2,         // bullet hits absorbed before the core starts taking damage
+        shieldColor:      '#6FE0FF', // ice-blue — visually distinct from the amber core
+        shieldGlowBlur:     6,
+        shieldHitGlowBlur: 14,
       }),
     }),
   }),
@@ -670,7 +684,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scouts only, slow trickle
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'splitter', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'shielded', count: 5, spawnInterval: 4 }),
       ]) }),
       // Level 2 — more scouts
       Object.freeze({ enemies: Object.freeze([

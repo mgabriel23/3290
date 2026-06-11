@@ -467,10 +467,12 @@ export class WaveManager {
     const group = this._groupForIdx(this._spawnIdx);
     const type  = group?.type ?? 'scout';
 
-    if (type === 'bouncer' || type === 'splitter') {
-      // 'splitter' forces variant 2 (large, splits into fragments on death) —
-      // used for testing that variety in isolation.
-      const variant = type === 'splitter' ? 2 : 1;
+    if (type === 'bouncer' || type === 'splitter' || type === 'shielded') {
+      // 'splitter'/'shielded' force variant 2/3 — used for testing that
+      // variety in isolation.
+      let variant = 1;
+      if (type === 'splitter') variant = 2;
+      else if (type === 'shielded') variant = 3;
       this._enemies.push(new BouncerEnemy({ variant }));
       this._spawnIdx++;
       if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;

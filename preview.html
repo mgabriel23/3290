@@ -183,13 +183,182 @@ function drawText(text, x, y, { font, color, align = 'center', baseline = 'middl
 }
 
 // ── Scene under test ─────────────────────────────────────────────────────────
-// Empty slate — the next enemy's design goes here.
+// Bouncer variety #3 candidates — press 2 / 5 to switch:
+//   2: "Phaser"   — cycles between solid and intangible (flickering/dim) states
+//   5: "Shielded" — outer rotating shield ring absorbs hits before the core
+//                   takes damage; click/tap the shape to fire a test "bullet"
+const AMBER   = '#FFB020';
+const SHIELD_COLOR = '#6FE0FF';
+const HEALTH_FONT = '400 16px "Audiowide", "Courier New", monospace';
+const LABEL_FONT  = '400 14px "Audiowide", "Courier New", monospace';
+const GRAVITY = 300, SPIN_FACTOR = 0.04;
+const FLOOR_Y = VH - 80; // stand-in for the Barrier's surface
 
-let age = 0;
+function hexPoints(radius) {
+  const pts = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    pts.push([Math.cos(a) * radius, Math.sin(a) * radius]);
+  }
+  return pts;
+}
+
+function worldHull(localPts, x, y, angle) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  return localPts.map(([lx, ly]) => [x + c * lx - s * ly, y + s * lx + c * ly]);
+}
+
+function bouncePhysics(body, dt, radius) {
+  body.angle += body.vx * SPIN_FACTOR * dt;
+  body.vy += GRAVITY * dt;
+  body.x  += body.vx * dt;
+  body.y  += body.vy * dt;
+  if (body.x <= radius) { body.x = radius; body.vx = Math.abs(body.vx); }
+  else if (body.x >= VW - radius) { body.x = VW - radius; body.vx = -Math.abs(body.vx); }
+  if (body.y <= radius && body.vy < 0) { body.y = radius; body.vy = Math.abs(body.vy); }
+  if (body.y + radius >= FLOOR_Y && body.vy > 0) { body.y = FLOOR_Y - radius; body.vy = -Math.abs(body.vy); }
+}
+
+// ── #2 "Phaser" ──────────────────────────────────────────────────────────────
+// Cycles between a solid (hittable) phase and an intangible "phased" phase
+// (dim, flickering, no glow). While phased it would pass through both bullets
+// and the barrier untouched.
+class PhaserPreview {
+  constructor() {
+    this.x = VW / 2; this.y = 200;
+    this.vx = 140; this.vy = 0;
+    this.angle = 0;
+    this.radius = 20;
+    this.health = 3;
+    this.cycle = 0;
+    this.phased = false;
+    this.hull = hexPoints(this.radius);
+  }
+  update(dt) {
+    bouncePhysics(this, dt, this.radius);
+    this.cycle += dt;
+    const SOLID = 1.5, PHASE = 0.8;
+    this.phased = (this.cycle % (SOLID + PHASE)) >= SOLID;
+  }
+  render() {
+    const pts = worldHull(this.hull, this.x, this.y, this.angle);
+    if (this.phased) {
+      const flicker = 0.15 + Math.random() * 0.25;
+      strokePaths([{ points: pts, closed: true }], {
+        color: AMBER, lineWidth: 2, alpha: flicker,
+      });
+    } else {
+      strokePaths([{ points: pts, closed: true }], {
+        color: AMBER, lineWidth: 2, glowBlur: 6, glowColor: AMBER,
+      });
+      drawText(String(this.health), this.x, this.y, { font: HEALTH_FONT, color: '#ffffff' });
+    }
+  }
+}
+
+// ── #5 "Shielded" ────────────────────────────────────────────────────────────
+// An outer hexagonal shield ring (independent slow rotation) absorbs
+// `shieldHits` before the inner core can take damage. Click/tap the shape to
+// fire a test hit — the shield flashes and depletes first, then falls away
+// and the core behaves like a normal Bouncer.
+class ShieldedPreview {
+  constructor() {
+    this.x = VW / 2; this.y = 250;
+    this.vx = -120; this.vy = 0;
+    this.angle = 0; this.shieldAngle = 0;
+    this.radius = 20; this.shieldRadius = 32;
+    this.health = 3; this.shieldHits = 2;
+    this.flash = 0; this.shieldFlash = 0;
+    this.hull = hexPoints(this.radius);
+    this.shieldHull = hexPoints(this.shieldRadius);
+  }
+  get activeRadius() { return this.shieldHits > 0 ? this.shieldRadius : this.radius; }
+  update(dt) {
+    bouncePhysics(this, dt, this.activeRadius);
+    this.shieldAngle -= 1.2 * dt;
+    if (this.flash > 0) this.flash -= dt;
+    if (this.shieldFlash > 0) this.shieldFlash -= dt;
+  }
+  hitTest(px, py) {
+    const r = this.activeRadius;
+    const dx = px - this.x, dy = py - this.y;
+    return dx * dx + dy * dy <= r * r;
+  }
+  hit() {
+    if (this.shieldHits > 0) {
+      this.shieldHits--;
+      this.shieldFlash = 0.12;
+    } else {
+      this.health = Math.max(0, this.health - 1);
+      this.flash = 0.08;
+    }
+  }
+  render() {
+    if (this.shieldHits > 0) {
+      const pts = worldHull(this.shieldHull, this.x, this.y, this.shieldAngle);
+      const flash = this.shieldFlash > 0;
+      strokePaths([{ points: pts, closed: true }], {
+        color: flash ? '#ffffff' : SHIELD_COLOR, lineWidth: 2, alpha: 0.6,
+        glowBlur: flash ? 14 : 6, glowColor: flash ? '#ffffff' : SHIELD_COLOR,
+      });
+    }
+    const pts = worldHull(this.hull, this.x, this.y, this.angle);
+    const flash = this.flash > 0;
+    strokePaths([{ points: pts, closed: true }], {
+      color: flash ? '#ffffff' : AMBER, lineWidth: 2,
+      glowBlur: flash ? 14 : 6, glowColor: flash ? '#ffffff' : AMBER,
+    });
+    drawText(String(this.shieldHits > 0 ? this.shieldHits : this.health), this.x, this.y, {
+      font: HEALTH_FONT, color: '#ffffff',
+    });
+  }
+}
+
+let current = '2';
+let phaser   = new PhaserPreview();
+let shielded = new ShieldedPreview();
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === '2' || e.key === '5') {
+    current = e.key;
+    phaser   = new PhaserPreview();
+    shielded = new ShieldedPreview();
+  }
+});
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (current !== '5') return;
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / rect.width  * VW;
+  const py = (e.clientY - rect.top)  / rect.height * VH;
+  if (shielded.hitTest(px, py)) shielded.hit();
+});
+
+function drawFloor() {
+  strokePaths([{ points: [[0, FLOOR_Y], [VW, FLOOR_Y]], closed: false }], {
+    color: '#4DEFFF', lineWidth: 1, alpha: 0.3,
+  });
+}
+
+function drawLabel() {
+  const text = current === '2'
+    ? 'Variety #3 candidate: PHASER  (press 2 / 5 to switch)'
+    : 'Variety #3 candidate: SHIELDED — click to hit  (press 2 / 5 to switch)';
+  drawText(text, VW / 2, 40, { font: LABEL_FONT, color: '#aab4d4' });
+}
 
 function render(dt) {
-  age += dt;
   clear('#05060c');
+  drawFloor();
+  drawLabel();
+
+  if (current === '2') {
+    phaser.update(dt);
+    phaser.render();
+  } else {
+    shielded.update(dt);
+    shielded.render();
+  }
 
   // Player marker — move the pointer over the canvas to reposition it.
   fillStrokePaths([{ points: [[0,-10],[8,8],[0,4],[-8,8]], closed: true }], {

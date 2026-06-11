@@ -16,6 +16,11 @@
  *   2 ('splitter')         — larger/tankier (Config...bouncer.splitter);
  *                             on death, spawnFragments() returns small
  *                             'fragment' clones to add to the wave.
+ *   3 ('shielded')          — normal-size core wrapped in an outer shield
+ *                             ring that spins in lockstep with the core.
+ *                             The shield absorbs hits (and sets the bounce/
+ *                             collision radius) until depleted, after which
+ *                             it behaves like a normal Bouncer.
  *   'fragment'              — small low-health clone spawned by a
  *                             splitter's death; otherwise behaves identically.
  */
@@ -47,7 +52,6 @@ export class BouncerEnemy {
     this._type    = 'bouncer';
     this._variant = variant;
     this._radius  = stats.radius;
-    this.hitRadius = stats.radius;
 
     this.x  = opts.x ?? (this._radius + Math.random() * (vW - this._radius * 2));
     this.y  = opts.y ?? -this._radius;
@@ -60,11 +64,28 @@ export class BouncerEnemy {
     this._dying    = false;
     this.alive     = true;
 
-    // Pre-allocated world-space hull — mutated in place each render, never reallocated.
+    // Variant 3 ('shielded') only: hits absorbed before the core takes
+    // damage, and the shield's own hit-flash timer.
+    this._shieldHits  = variant === 3 ? cfg.shielded.shieldHits : 0;
+    this._shieldFlash = 0;
+
+    // Pre-allocated world-space hulls — mutated in place each render, never reallocated.
     this._hull = { points: Array.from({ length: cfg.sides }, () => [0, 0]), closed: true };
+    if (variant === 3) {
+      this._shieldHull = { points: Array.from({ length: cfg.sides }, () => [0, 0]), closed: true };
+    }
   }
 
   get type() { return this._type; }
+
+  /** Collision radius — the shield ring's radius while it's still up, otherwise the core's. */
+  get hitRadius() { return this._activeRadius(); }
+
+  /** Bounce/collision radius — the shield ring's while up (variant 3), otherwise the core's. */
+  _activeRadius() {
+    if (this._variant === 3 && this._shieldHits > 0) return Config.enemy.bouncer.shielded.shieldRadius;
+    return this._radius;
+  }
 
   /**
    * Called after a splitter (variant 2) is destroyed — returns the small
@@ -101,10 +122,17 @@ export class BouncerEnemy {
 
   /**
    * Register one bullet hit. Returns true if the hit was fatal.
+   * A shielded (variant 3) clone with shield hits remaining absorbs the hit
+   * into the shield instead — the core takes no damage and isn't fatal.
    * @returns {boolean}
    */
   hit() {
     if (this._dying) return false;
+    if (this._shieldHits > 0) {
+      this._shieldHits--;
+      this._shieldFlash = Config.enemy.bouncer.flashDuration;
+      return false;
+    }
     this._hitFlash = Config.enemy.bouncer.flashDuration;
     this._health--;
     if (this._health <= 0) {
@@ -121,6 +149,7 @@ export class BouncerEnemy {
    */
   update(dt, barrierSurfaceY, onBarrierHit) {
     if (this._hitFlash > 0) this._hitFlash -= dt;
+    if (this._shieldFlash > 0) this._shieldFlash -= dt;
     if (this._dying) {
       if (this._hitFlash <= 0) this.alive = false;
       return;
@@ -128,7 +157,7 @@ export class BouncerEnemy {
 
     const cfg = Config.enemy.bouncer;
     const { width: vW } = Config.virtual;
-    const r = this._radius;
+    const r = this._activeRadius();
 
     // Spin proportional to horizontal velocity — reverses naturally on wall bounce.
     this._angle += this.vx * cfg.spinFactor * dt;
@@ -167,6 +196,26 @@ export class BouncerEnemy {
     const flash = this._hitFlash > 0;
     const c = Math.cos(this._angle), s = Math.sin(this._angle);
     const r = this._radius;
+
+    if (this._variant === 3 && this._shieldHits > 0) {
+      const sCfg = cfg.shielded;
+      const shieldFlash = this._shieldFlash > 0;
+      const shieldPts = this._shieldHull.points;
+      for (let i = 0; i < cfg.sides; i++) {
+        const a  = (i / cfg.sides) * Math.PI * 2;
+        const lx = Math.cos(a) * sCfg.shieldRadius;
+        const ly = Math.sin(a) * sCfg.shieldRadius;
+        shieldPts[i][0] = this.x + c * lx - s * ly;
+        shieldPts[i][1] = this.y + s * lx + c * ly;
+      }
+      renderer.strokePaths([this._shieldHull], {
+        color: shieldFlash ? '#ffffff' : sCfg.shieldColor,
+        lineWidth: cfg.lineWidth,
+        alpha: 0.6,
+        glowBlur: shieldFlash ? sCfg.shieldHitGlowBlur : sCfg.shieldGlowBlur,
+        glowColor: shieldFlash ? '#ffffff' : sCfg.shieldColor,
+      });
+    }
 
     const pts = this._hull.points;
     for (let i = 0; i < cfg.sides; i++) {
