@@ -16,6 +16,7 @@ import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
 import { SniperEnemy } from './SniperEnemy.js';
 import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath, BODY_PTS as DRIFTER_BODY_PTS } from './DrifterEnemy.js';
+import { BouncerEnemy } from './BouncerEnemy.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
@@ -64,10 +65,16 @@ const _noFire = () => {};
 export class WaveManager {
   /**
    * @param {number} level  1-based. Values beyond the config array reuse the last entry.
+   * @param {import('./Barrier.js').Barrier} barrier  used by Bouncer clones to detect/damage the barrier on impact
    */
-  constructor(level) {
+  constructor(level, barrier) {
     const levels = Config.waves.levels;
     this._waveCfg = levels[Math.min(level - 1, levels.length - 1)];
+    this._barrierSurfaceY = (x) => barrier.surfaceY(x);
+    this._onBarrierHit    = (x) => {
+      barrier.takeDamage(Config.enemy.bouncer.barrierDamage);
+      barrier.pulse(x);
+    };
 
     this._totalToSpawn = this._waveCfg.enemies.reduce((s, g) => s + g.count, 0);
     this._spawnIdx   = 0;
@@ -99,6 +106,7 @@ export class WaveManager {
     this._sweeperParticles   = new Particles(Config.enemy.drifter.sweeper.color, Config.enemy.drifter.sweeper.sparksPerEmit);
     this._diverParticles     = new Particles(Config.enemy.drifter.diver.color, Config.enemy.drifter.diver.sparksPerEmit);
     this._weaverParticles    = new Particles(Config.enemy.drifter.weaver.color, Config.enemy.drifter.weaver.sparksPerEmit);
+    this._bouncerParticles   = new Particles(Config.enemy.bouncer.color);
 
     // Lazy SFX pool (same audio file across all types; volume set per-play).
     this._sfxPool = null;
@@ -127,6 +135,7 @@ export class WaveManager {
     this._sweeperParticles.update(dt);
     this._diverParticles.update(dt);
     this._weaverParticles.update(dt);
+    this._bouncerParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
     this._drifterProjectiles.update(dt);
 
@@ -145,6 +154,10 @@ export class WaveManager {
     // ── Update enemies ────────────────────────────────────────────────────────
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
+      if (e.type === 'bouncer') {
+        e.update(dt, this._barrierSurfaceY, this._onBarrierHit);
+        continue;
+      }
       let cb;
       if      (e.type === 'rocketeer') cb = this._fireRocket;
       else if (e.type === 'sniper')    cb = _noFire;
@@ -179,8 +192,9 @@ export class WaveManager {
 
     // ── Engine flames — must render behind hulls ──────────────────────────────
     for (let i = 0; i < this._enemies.length; i++) {
-      if (this._enemies[i].type === 'drifter') continue;
-      this._enemies[i].renderFlame(renderer);
+      const e = this._enemies[i];
+      if (e.type === 'drifter' || e.type === 'bouncer') continue;
+      e.renderFlame(renderer);
     }
 
     // ── Hull batch — ≤4 GPU shadow passes regardless of enemy count ───────────
@@ -192,6 +206,7 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
+      if (e.type === 'bouncer') continue; // rendered individually below
       if (e.type === 'drifter') {
         if (!e._visible) continue;
         const isFlash = e._hitFlash > 0;
@@ -325,8 +340,9 @@ export class WaveManager {
 
     // ── Engine cores — rendered on top of hulls ───────────────────────────────
     for (let i = 0; i < this._enemies.length; i++) {
-      if (this._enemies[i].type === 'drifter') continue;
-      this._enemies[i].renderCore(renderer);
+      const e = this._enemies[i];
+      if (e.type === 'drifter' || e.type === 'bouncer') continue;
+      e.renderCore(renderer);
     }
 
     // ── Sniper extras: ! warning markers and laser flash beams ───────────────
@@ -334,11 +350,12 @@ export class WaveManager {
       this._enemies[i].renderExtras?.(renderer);
     }
 
-    // ── Drifters — individually rendered (variable tentacle geometry can't
-    //    be batched into the shared hull pools above) ─────────────────────────
+    // ── Drifters and Bouncers — individually rendered (variable/per-clone
+    //    geometry can't be batched into the shared hull pools above) ─────────
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
       if (e.type === 'drifter' && e._visible) e.render(renderer);
+      else if (e.type === 'bouncer') e.render(renderer);
     }
 
     // ── Explosions ────────────────────────────────────────────────────────────
@@ -348,6 +365,7 @@ export class WaveManager {
     this._drifterParticles.render(renderer);
     this._sweeperParticles.render(renderer);
     this._diverParticles.render(renderer);
+    this._bouncerParticles.render(renderer);
     this._weaverParticles.render(renderer);
   }
 
@@ -365,6 +383,12 @@ export class WaveManager {
         const { particles, audio } = this._drifterVarietyAssets(enemy._variant);
         particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(audio.volume);
+      } else if (enemy.type === 'bouncer') {
+        this._bouncerParticles.emit(enemy.x, enemy.y);
+        this._playExplosionSfx(Config.enemy.bouncer.audio.volume);
+        if (enemy._variant === 2) {
+          for (const fragment of enemy.spawnFragments()) this._enemies.push(fragment);
+        }
       } else {
         this._particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
@@ -399,6 +423,7 @@ export class WaveManager {
       && !this._sweeperParticles.active
       && !this._diverParticles.active
       && !this._weaverParticles.active
+      && !this._bouncerParticles.active
       && !this._rockets.active
       && !this._drifterProjectiles.active;
   }
@@ -413,11 +438,11 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const a = this._enemies[i];
-      if (a._state === 'entering' || a._type === 'drifter') continue;
+      if (a._state === 'entering' || a._type === 'drifter' || a._type === 'bouncer') continue;
 
       for (let j = i + 1; j < this._enemies.length; j++) {
         const b = this._enemies[j];
-        if (b._state === 'entering' || b._type === 'drifter') continue;
+        if (b._state === 'entering' || b._type === 'drifter' || b._type === 'bouncer') continue;
 
         const minSep = Math.max(a._cfg.minSeparation, b._cfg.minSeparation);
         const ddx    = b.x - a.x;
@@ -441,6 +466,16 @@ export class WaveManager {
   _spawnNext() {
     const group = this._groupForIdx(this._spawnIdx);
     const type  = group?.type ?? 'scout';
+
+    if (type === 'bouncer' || type === 'splitter') {
+      // 'splitter' forces variant 2 (large, splits into fragments on death) —
+      // used for testing that variety in isolation.
+      const variant = type === 'splitter' ? 2 : 1;
+      this._enemies.push(new BouncerEnemy({ variant }));
+      this._spawnIdx++;
+      if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;
+      return;
+    }
 
     if (type === 'drifter' || type === 'sweeper' || type === 'diver' || type === 'weaver') {
       const cfg = Config.enemy.drifter;

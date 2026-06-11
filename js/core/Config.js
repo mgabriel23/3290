@@ -566,6 +566,57 @@ export const Config = Object.freeze({
         sparksPerEmit: 10,
       }),
     }),
+
+    /**
+     * Bouncer — a wireframe-only hexagon (no fill) that drops in from the
+     * top and bounces indefinitely off the side walls, the top edge, and
+     * the barrier at the bottom (see BouncerEnemy.js), accelerating
+     * downward under a constant "gravity" between bounces. Each bounce off
+     * the barrier deals `barrierDamage` to Barrier.health — it stays a
+     * persistent threat until the player destroys it. Its remaining health
+     * is drawn as a number at its center (no per-eye/tentacle detail to
+     * read otherwise).
+     *
+     * Variety #2 ("Splitter", `splitter` below) is a larger, tankier hexagon
+     * that on death breaks into `fragmentCount` small low-health Bouncer
+     * clones (variant 'fragment'), kicked outward from the splitter's death
+     * position — see BouncerEnemy.spawnFragments().
+     */
+    bouncer: Object.freeze({
+      health:     3,
+      color:      '#FFB020',   // amber — same family as Rocketeer/Drifter #1
+      lineWidth:  2,
+      glowBlur:   6,
+      hitGlowBlur: 14,
+
+      radius:    20,    // vp — both collision radius and hull size
+      sides:     6,     // hexagon
+      gravity:   300,   // vp/sec^2
+      speedMin:  80,    // vp/sec — initial horizontal speed range
+      speedMax:  160,
+      spinFactor: 0.04, // rad/sec of spin per vp/sec of horizontal speed
+
+      flashDuration: 0.08, // seconds — white hit-flash overlay
+
+      barrierDamage: 5, // Barrier.health lost per bounce off the barrier
+
+      healthFont:  '400 16px "Audiowide", "Courier New", monospace',
+      healthColor: '#ffffff',
+
+      audio: Object.freeze({
+        src: 'assets/audio/explosion.mp3', volume: 0.4, poolSize: 4,
+      }),
+
+      splitter: Object.freeze({
+        radius: 40,   // vp — ~2x the base hull size
+        health: 12,   // ~4x base health
+
+        fragmentCount:    3,
+        fragmentRadius:   12,  // vp — smaller than the base Bouncer (20)
+        fragmentHealth:   1,
+        fragmentSpeedMax: 200, // vp/sec — horizontal fan-out speed (vy is solved per-fragment, see spawnFragments)
+      }),
+    }),
   }),
 
   /**
@@ -619,7 +670,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scouts only, slow trickle
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'weaver', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'splitter', count: 5, spawnInterval: 4 }),
       ]) }),
       // Level 2 — more scouts
       Object.freeze({ enemies: Object.freeze([
@@ -689,6 +740,18 @@ export const Config = Object.freeze({
     healthValueFont: '400 14px "Audiowide", "Courier New", monospace',
     healthColor: '#4DEFFF',
     healthGlowBlur: 3, // kept low — small radius means cheap shadow pass
+
+    // Impact ripple — a damped spring deformation applied to the arc near
+    // an impact point (e.g. BouncerEnemy bouncing off the dome), so the
+    // shield visibly flexes inward then springs back rather than the hit
+    // being purely numeric. See Barrier.pulse()/_deformAt().
+    pulse: Object.freeze({
+      amplitude: 16,  // virtual px — peak inward dent depth at the impact point
+      width:     100, // virtual px — spatial falloff radius around the impact x
+      duration:  0.4, // seconds — ripple fully settles after this long
+      frequency: 24,  // rad/sec — spring oscillation speed
+      damping:   10,  // exponential decay rate of the oscillation
+    }),
   }),
 
   /**

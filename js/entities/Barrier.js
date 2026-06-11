@@ -20,11 +20,41 @@ import { Config } from '../core/Config.js';
 export class Barrier {
   constructor() {
     this.health = 100; // 0–100; written by gameplay systems, read by this render method
+    this._pulseX = 0;
+    this._pulseT = -1; // -1 = no ripple in progress
     this._initGeometry();
+  }
+
+  /**
+   * Y coordinate of the main arc's surface at horizontal position `x` —
+   * used by BouncerEnemy to detect when it has landed on the barrier.
+   */
+  surfaceY(x) {
+    const { baseY, arcHeight } = Config.barrier;
+    return this._arcY(x, baseY, arcHeight);
+  }
+
+  /** Apply damage from a bounce/impact, clamped at 0. */
+  takeDamage(amount) {
+    this.health = Math.max(0, this.health - amount);
+  }
+
+  /** Trigger a spring-ripple deformation centered on horizontal position `x`. */
+  pulse(x) {
+    this._pulseX = x;
+    this._pulseT = 0;
+  }
+
+  /** @param {number} dt */
+  update(dt) {
+    if (this._pulseT < 0) return;
+    this._pulseT += dt;
+    if (this._pulseT >= Config.barrier.pulse.duration) this._pulseT = -1;
   }
 
   render(renderer) {
     const { color, lineWidth, glowBlur } = Config.barrier;
+    this._applyPulse();
     // Main arc — full brightness, full lineWidth
     renderer.strokePaths(this._mainPaths, { color, lineWidth, glowBlur });
     // Details — inner echo, struts, emblem, anchors — all at the same dimmer style
@@ -32,6 +62,30 @@ export class Barrier {
       color, lineWidth: 1, glowBlur: glowBlur * 0.5, alpha: 0.45,
     });
     this._renderHealth(renderer);
+  }
+
+  /**
+   * Re-derive the main arc and inner echo arc points from their static base
+   * shapes, offsetting each point's y by a damped-spring ripple centered on
+   * `_pulseX`. A no-op (cheap copy) once the ripple has settled.
+   */
+  _applyPulse() {
+    const mainPts  = this._mainPaths[0].points;
+    const innerPts = this._detailPaths[0].points;
+    for (let i = 0; i < mainPts.length; i++) {
+      const offset = this._pulseT < 0 ? 0 : this._deformAt(this._baseMainPoints[i][0]);
+      mainPts[i][1]  = this._baseMainPoints[i][1]  + offset;
+      innerPts[i][1] = this._baseInnerPoints[i][1] + offset;
+    }
+  }
+
+  /** Damped-spring vertical offset at horizontal position `x`, given the active pulse. */
+  _deformAt(x) {
+    const { amplitude, width, frequency, damping } = Config.barrier.pulse;
+    const dx      = x - this._pulseX;
+    const spatial = Math.exp(-(dx * dx) / (2 * width * width));
+    const temporal = Math.exp(-damping * this._pulseT) * Math.cos(frequency * this._pulseT);
+    return amplitude * spatial * temporal;
   }
 
   _renderHealth(renderer) {
@@ -56,6 +110,8 @@ export class Barrier {
 
     // Main arc
     this._mainPaths = [{ points: this._buildArc(baseY, arcHeight, arcSegments), closed: false }];
+    // Undeformed copies — _applyPulse derives the live points from these each frame.
+    this._baseMainPoints = this._mainPaths[0].points.map((p) => p.slice());
 
     this._detailPaths = [];
 
@@ -64,6 +120,7 @@ export class Barrier {
       points: this._buildArc(baseY, arcHeight - innerInset, arcSegments),
       closed: false,
     });
+    this._baseInnerPoints = this._detailPaths[0].points.map((p) => p.slice());
 
     // Upward structural struts evenly spaced along the arc
     const step = vW / (strutCount + 1);

@@ -57,10 +57,11 @@ export class GameplayScene {
     // Transition from intro → active once the indicator animation is done
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
       this._levelState  = 'active';
-      this._waveManager = new WaveManager(this._level);
+      this._waveManager = new WaveManager(this._level, this.barrier);
     }
 
     this.starfield.update(dt);
+    this.barrier.update(dt);
     this.player.update(dt);
 
     // Bullets and enemies are suppressed during the level intro.
@@ -116,7 +117,7 @@ export class GameplayScene {
     const { hitRadius } = Config.enemy.scout;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      if (this.bullets.checkHit(e.x, e.y, hitRadius)) {
+      if (this.bullets.checkHit(e.x, e.y, e.hitRadius ?? hitRadius)) {
         this._waveManager.handleBulletHit(e);
       }
     }
