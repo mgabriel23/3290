@@ -530,6 +530,41 @@ export const Config = Object.freeze({
         }),
         sparksPerEmit: 10,
       }),
+
+      /**
+       * Variety #4 — "Weaver": a conga-line that travels straight down the
+       * screen while swaying side-to-side in a sine wave (see
+       * DrifterEnemy.sampleWeaverPath). Reuses the same body/tentacle/attack
+       * shapes and tunables above, just a different path, palette (Sniper's
+       * electric violet), and formation size. Formation (6) sits close to
+       * variety #3's (5) — same trimmed hit-flash/lash glow, spark count,
+       * and explosion volume as variety #3, since the conga-line's full run
+       * keeps several clones on screen simultaneously for an extended
+       * stretch (more cumulative glow-pass exposure than a quick pass-through).
+       */
+      weaver: Object.freeze({
+        color:     '#BF5FFF',   // electric violet — matches Sniper
+        fillColor: '#110022',
+        eyeColor:  '#e0c0ff',
+
+        formationSize: 6,    // clones per formation, conga-line
+        spacing:       50,   // vp along the path between trailing clones
+        speed:         200,  // vp/sec along the path
+        amplitude:     90,   // horizontal sway amplitude, vp
+        frequency:     0.012,// radians per vp traveled — wave tightness
+
+        fireIntervalMult: 1,
+
+        glowBlur:         8,
+        hitGlowBlur:      18,
+        tentacleGlowBlur: 5,
+        lashGlowBlur:     8,
+
+        audio: Object.freeze({
+          src: 'assets/audio/explosion.mp3', volume: 0.25, poolSize: 4,
+        }),
+        sparksPerEmit: 10,
+      }),
     }),
   }),
 
@@ -584,7 +619,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scouts only, slow trickle
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'diver', count: 5, spawnInterval: 4 }),
+        Object.freeze({ type: 'weaver', count: 5, spawnInterval: 4 }),
       ]) }),
       // Level 2 — more scouts
       Object.freeze({ enemies: Object.freeze([

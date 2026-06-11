@@ -159,6 +159,41 @@ export function sampleDiverPath(p, t, offset) {
   return { x: p.x + offset[0], y: cfg.spawnY + dist + offset[1], heading: Math.PI };
 }
 
+/**
+ * Build the shared path for a "Weaver" formation (variety #4): a
+ * conga-line that descends straight down the screen while swaying
+ * side-to-side in a sine wave. Like the sweeper path, this has no fixed
+ * length — `total: Infinity` — DrifterEnemy.update detects each clone's
+ * exit directly via the off-screen check once it sinks below the bottom.
+ * A random `phase` shifts the sine wave per spawn, so the formation
+ * doesn't always enter dead-center moving the same direction.
+ */
+export function createWeaverPath() {
+  return { variant: 4, total: Infinity, phase: Math.random() * Math.PI * 2 };
+}
+
+/**
+ * Position + heading at distance `dist` along a weaver path: y descends
+ * linearly from off-screen above, x oscillates around screen-center in a
+ * sine wave (offset by the path's random `phase`). Heading follows the
+ * path's tangent direction (nose pointed along the direction of travel,
+ * same convention as variant #1).
+ */
+export function sampleWeaverPath(p, dist) {
+  const cfg = Config.enemy.drifter.weaver;
+  const { width: vW } = Config.virtual;
+  const baseX = vW / 2;
+  const theta = dist * cfg.frequency + p.phase;
+
+  const y = -60 + dist;
+  const x = baseX + Math.sin(theta) * cfg.amplitude;
+
+  const dx  = cfg.amplitude * cfg.frequency * Math.cos(theta);
+  const dy  = 1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  return { x, y, heading: Math.atan2(dx / len, -dy / len) };
+}
+
 export class DrifterEnemy {
   /**
    * @param {ReturnType<typeof createDrifterPath>} path  shared by the whole formation
@@ -172,18 +207,23 @@ export class DrifterEnemy {
     this._offset  = this._variant === 3 ? this._cfg.diver.offsets[laneIndex] : null;
     this._sample  = this._variant === 2 ? sampleSweeperPath
                    : this._variant === 3 ? (p, t) => sampleDiverPath(p, t, this._offset)
+                   : this._variant === 4 ? sampleWeaverPath
                    : samplePath;
     this._fireMult = this._variant === 2 ? this._cfg.sweeper.fireIntervalMult
                     : this._variant === 3 ? this._cfg.diver.fireIntervalMult
+                    : this._variant === 4 ? this._cfg.weaver.fireIntervalMult
                     : 1;
     this._palette = this._variant === 2 ? this._cfg.sweeper
                    : this._variant === 3 ? this._cfg.diver
+                   : this._variant === 4 ? this._cfg.weaver
                    : this._cfg;
     this._u    = this._variant === 3 ? 0
-               : -laneIndex * (this._variant === 2 ? this._cfg.sweeper.spacing : this._cfg.spacing);
+               : -laneIndex * (this._variant === 2 ? this._cfg.sweeper.spacing
+                              : this._variant === 4 ? this._cfg.weaver.spacing
+                              : this._cfg.spacing);
 
     this.alive = true;
-    if (this._variant === 2 || this._variant === 3) {
+    if (this._variant === 2 || this._variant === 3 || this._variant === 4) {
       const start = this._sample(path, this._u);
       this.x = start.x;
       this.y = start.y;
@@ -247,7 +287,9 @@ export class DrifterEnemy {
     if (this._variant === 3) {
       this._u += dt; // elapsed time — sampleDiverPath applies kinematics
     } else {
-      const speed = this._variant === 2 ? cfg.sweeper.speed : cfg.speed;
+      const speed = this._variant === 2 ? cfg.sweeper.speed
+                   : this._variant === 4 ? cfg.weaver.speed
+                   : cfg.speed;
       this._u += speed * dt;
     }
     if (this._u > this._path.total) { this.alive = false; return; }
@@ -269,15 +311,18 @@ export class DrifterEnemy {
     const margin   = 40;
     const onScreen = x > -margin && x < vW + margin && y > -margin && y < vH + margin;
     if (!onScreen) {
-      // Variant #3's wedge starts above the top edge by design (trailing
-      // clones sit higher than the leader) — only a sunk-past-the-bottom
-      // exit is final; still-above-the-top just means "not visible yet".
-      if (this._variant === 3) {
+      // Variants #3 and #4 start above the top edge by design (#3's
+      // trailing wedge clones sit higher than the leader; #4 enters from
+      // off-screen above like a sweeper row dropped a level) — only a
+      // sunk-past-the-bottom exit is final; still-above-the-top just means
+      // "not visible yet".
+      if (this._variant === 3 || this._variant === 4) {
         if (y > vH + margin) { this.alive = false; return; }
         this._visible = false;
         return;
       }
-      const isFinalExit = this._variant === 2 || this._u >= this._path.L1 + this._path.Lloop;
+      const isFinalExit = this._variant === 2
+                       || this._u >= this._path.L1 + this._path.Lloop;
       if (isFinalExit) { this.alive = false; return; }
       if (this._fireState !== 'idle') {
         this._fireState = 'idle';

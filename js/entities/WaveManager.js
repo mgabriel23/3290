@@ -15,7 +15,7 @@
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
 import { SniperEnemy } from './SniperEnemy.js';
-import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, BODY_PTS as DRIFTER_BODY_PTS } from './DrifterEnemy.js';
+import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath, BODY_PTS as DRIFTER_BODY_PTS } from './DrifterEnemy.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
@@ -53,6 +53,11 @@ const _sweeperFlashHulls  = _mkDrifterPool();
 const _diverNormalHulls = _mkDrifterPool();
 const _diverFlashHulls  = _mkDrifterPool();
 
+// Variety #4 ("Weaver") — same body shape, its own palette (Sniper's
+// violet), own pools (formation of 6, well within DRIFTER_MAX_BATCH).
+const _weaverNormalHulls = _mkDrifterPool();
+const _weaverFlashHulls  = _mkDrifterPool();
+
 // Sniper fire: laser is managed internally by SniperEnemy — callback is a no-op.
 const _noFire = () => {};
 
@@ -82,6 +87,7 @@ export class WaveManager {
         let particles = this._drifterParticles;
         if (color === Config.enemy.drifter.sweeper.color) particles = this._sweeperParticles;
         else if (color === Config.enemy.drifter.diver.color) particles = this._diverParticles;
+        else if (color === Config.enemy.drifter.weaver.color) particles = this._weaverParticles;
         particles.emit(x, y);
       },
     });
@@ -92,6 +98,7 @@ export class WaveManager {
     this._drifterParticles   = new Particles(Config.enemy.drifter.color);
     this._sweeperParticles   = new Particles(Config.enemy.drifter.sweeper.color, Config.enemy.drifter.sweeper.sparksPerEmit);
     this._diverParticles     = new Particles(Config.enemy.drifter.diver.color, Config.enemy.drifter.diver.sparksPerEmit);
+    this._weaverParticles    = new Particles(Config.enemy.drifter.weaver.color, Config.enemy.drifter.weaver.sparksPerEmit);
 
     // Lazy SFX pool (same audio file across all types; volume set per-play).
     this._sfxPool = null;
@@ -119,6 +126,7 @@ export class WaveManager {
     this._drifterParticles.update(dt);
     this._sweeperParticles.update(dt);
     this._diverParticles.update(dt);
+    this._weaverParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
     this._drifterProjectiles.update(dt);
 
@@ -180,7 +188,7 @@ export class WaveManager {
     const rCfg  = Config.enemy.rocketeer;
     const snCfg = Config.enemy.sniper;
     let scCount = 0, rnCount = 0, snCount = 0, fCount = 0;
-    let dnCount = 0, dfCount = 0, swnCount = 0, swfCount = 0, dvnCount = 0, dvfCount = 0;
+    let dnCount = 0, dfCount = 0, swnCount = 0, swfCount = 0, dvnCount = 0, dvfCount = 0, wvnCount = 0, wvfCount = 0;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
@@ -194,6 +202,9 @@ export class WaveManager {
         } else if (e._variant === 3) {
           pool = isFlash ? _diverFlashHulls : _diverNormalHulls;
           idx  = isFlash ? dvfCount++ : dvnCount++;
+        } else if (e._variant === 4) {
+          pool = isFlash ? _weaverFlashHulls : _weaverNormalHulls;
+          idx  = isFlash ? wvfCount++ : wvnCount++;
         } else {
           pool = isFlash ? _drifterFlashHulls : _drifterNormalHulls;
           idx  = isFlash ? dfCount++ : dnCount++;
@@ -261,6 +272,8 @@ export class WaveManager {
     swfCount = Math.min(swfCount, _sweeperFlashHulls.length);
     dvnCount = Math.min(dvnCount, _diverNormalHulls.length);
     dvfCount = Math.min(dvfCount, _diverFlashHulls.length);
+    wvnCount = Math.min(wvnCount, _weaverNormalHulls.length);
+    wvfCount = Math.min(wvfCount, _weaverFlashHulls.length);
 
     const dCfg = Config.enemy.drifter;
     if (dnCount > 0) renderer.fillStrokePaths(_drifterNormalHulls, {
@@ -298,6 +311,18 @@ export class WaveManager {
       glowColor: '#ffffff', singleStroke: true,
     }, dvfCount);
 
+    const wvCfg = Config.enemy.drifter.weaver;
+    if (wvnCount > 0) renderer.fillStrokePaths(_weaverNormalHulls, {
+      fillColor: wvCfg.fillColor, strokeColor: wvCfg.color,
+      lineWidth:  dCfg.lineWidth, glowBlur:    wvCfg.glowBlur,
+      glowColor:  wvCfg.color,    singleStroke: true,
+    }, wvnCount);
+    if (wvfCount > 0) renderer.fillStrokePaths(_weaverFlashHulls, {
+      fillColor: '#ffffff', strokeColor: '#ffffff',
+      lineWidth:  dCfg.lineWidth, glowBlur:   wvCfg.hitGlowBlur,
+      glowColor: '#ffffff', singleStroke: true,
+    }, wvfCount);
+
     // ── Engine cores — rendered on top of hulls ───────────────────────────────
     for (let i = 0; i < this._enemies.length; i++) {
       if (this._enemies[i].type === 'drifter') continue;
@@ -323,6 +348,7 @@ export class WaveManager {
     this._drifterParticles.render(renderer);
     this._sweeperParticles.render(renderer);
     this._diverParticles.render(renderer);
+    this._weaverParticles.render(renderer);
   }
 
   /** Called by GameplayScene when a player bullet hits an enemy. */
@@ -354,6 +380,7 @@ export class WaveManager {
   _drifterVarietyAssets(variant) {
     if (variant === 2) return { particles: this._sweeperParticles, audio: Config.enemy.drifter.sweeper.audio };
     if (variant === 3) return { particles: this._diverParticles,   audio: Config.enemy.drifter.diver.audio };
+    if (variant === 4) return { particles: this._weaverParticles,  audio: Config.enemy.drifter.weaver.audio };
     return { particles: this._drifterParticles, audio: Config.enemy.drifter.audio };
   }
 
@@ -371,6 +398,7 @@ export class WaveManager {
       && !this._drifterParticles.active
       && !this._sweeperParticles.active
       && !this._diverParticles.active
+      && !this._weaverParticles.active
       && !this._rockets.active
       && !this._drifterProjectiles.active;
   }
@@ -414,21 +442,25 @@ export class WaveManager {
     const group = this._groupForIdx(this._spawnIdx);
     const type  = group?.type ?? 'scout';
 
-    if (type === 'drifter' || type === 'sweeper' || type === 'diver') {
+    if (type === 'drifter' || type === 'sweeper' || type === 'diver' || type === 'weaver') {
       const cfg = Config.enemy.drifter;
       // 'drifter' picks randomly per formation between variety #1 (loop
-      // path), #2 (sweeper rows), and #3 (diver wedge); 'sweeper'/'diver'
-      // force that variety directly (used for testing a variety in isolation).
+      // path), #2 (sweeper rows), #3 (diver wedge), and #4 (weaver sine
+      // descent); 'sweeper'/'diver'/'weaver' force that variety directly
+      // (used for testing a variety in isolation).
       let variant;
       if (type === 'sweeper') variant = 2;
       else if (type === 'diver') variant = 3;
-      else variant = 1 + Math.floor(Math.random() * 3);
+      else if (type === 'weaver') variant = 4;
+      else variant = 1 + Math.floor(Math.random() * 4);
 
       const path = variant === 2 ? createSweeperPath()
                   : variant === 3 ? createDiverPath()
+                  : variant === 4 ? createWeaverPath()
                   : createDrifterPath();
       const formationSize = variant === 2 ? cfg.sweeper.formationSize
                            : variant === 3 ? cfg.diver.formationSize
+                           : variant === 4 ? cfg.weaver.formationSize
                            : cfg.formationSize;
       for (let lane = 0; lane < formationSize; lane++) {
         this._enemies.push(new DrifterEnemy(path, lane));
