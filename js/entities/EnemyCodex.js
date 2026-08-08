@@ -97,65 +97,77 @@ function renderPreview(renderer, kind, instance) {
 }
 
 // --- Roster content -----------------------------------------------------
-// `hp`/`hpPerLevel` are read live from Config rather than hand-copied so
-// this can't silently drift out of sync with the actual balance numbers.
-// `color` is only used for this card's name-text accent — the preview
-// instance's own render code sources its actual colors from Config itself.
+// `hp`/`hpPerLevel`/`points`/`gold` are read live from Config rather than
+// hand-copied so this can't silently drift out of sync with the actual
+// balance numbers. `color` is only used for this card's name-text accent —
+// the preview instance's own render code sources its actual colors from
+// Config itself.
 
 const ENTRIES = [
   { buildOrder: 1, type: 'scout', name: 'Scout', family: 'Scout / Rocketeer family', kind: 'ship',
     color: Config.enemy.scout.color,
     hp: Config.enemy.scout.health, hpPerLevel: Config.enemy.scout.healthPerLevel,
+    points: Config.enemy.scout.points, gold: Config.enemy.scout.gold,
     description: 'Enters, parks, then fires aimed bullet bursts at the player on a steady reload.' },
 
   { buildOrder: 2, type: 'rocketeer', name: 'Rocketeer', family: 'Scout / Rocketeer family', kind: 'ship',
     color: Config.enemy.rocketeer.color,
     hp: Config.enemy.rocketeer.health, hpPerLevel: Config.enemy.rocketeer.healthPerLevel,
+    points: Config.enemy.rocketeer.points, gold: Config.enemy.rocketeer.gold,
     description: 'Same hull as Scout. Slower reload, but its rocket homes in and detonates on proximity — harder to dodge.' },
 
   { buildOrder: 3, type: 'sniper', name: 'Sniper', family: 'Sniper', kind: 'ship',
     color: Config.enemy.sniper.color,
     hp: Config.enemy.sniper.health, hpPerLevel: Config.enemy.sniper.healthPerLevel,
+    points: Config.enemy.sniper.points, gold: Config.enemy.sniper.gold,
     description: 'Charges, then fires an instant laser at where the player WAS a moment ago. Watch for the white "!" warning.' },
 
   { buildOrder: 4, type: 'drifter', name: 'Drifter', family: 'Drifter family', kind: 'drifter',
     color: Config.enemy.drifter.color,
     hp: Config.enemy.drifter.health, hpPerLevel: Config.enemy.drifter.healthPerLevel,
+    points: Config.enemy.drifter.points, gold: Config.enemy.drifter.gold,
     description: 'A tentacle-creature formation flying a diagonal entry into a loop-the-loop. Lashes tracking projectiles at the player.' },
 
   { buildOrder: 5, type: 'sweeper', name: 'Sweeper', family: 'Drifter family', kind: 'drifter',
     color: Config.enemy.drifter.sweeper.color,
     hp: Config.enemy.drifter.health, hpPerLevel: Config.enemy.drifter.healthPerLevel,
+    points: Config.enemy.drifter.sweeper.points, gold: Config.enemy.drifter.sweeper.gold,
     description: 'Same creature, in a formation that sweeps horizontal rows, stepping down and reversing at each screen edge.' },
 
   { buildOrder: 6, type: 'diver', name: 'Diver', family: 'Drifter family', kind: 'drifter',
     color: Config.enemy.drifter.diver.color,
     hp: Config.enemy.drifter.health, hpPerLevel: Config.enemy.drifter.healthPerLevel,
+    points: Config.enemy.drifter.diver.points, gold: Config.enemy.drifter.diver.gold,
     description: 'A V-shaped wedge that drops straight down, accelerating as it falls, always facing the player.' },
 
   { buildOrder: 7, type: 'weaver', name: 'Weaver', family: 'Drifter family', kind: 'drifter',
     color: Config.enemy.drifter.weaver.color,
     hp: Config.enemy.drifter.health, hpPerLevel: Config.enemy.drifter.healthPerLevel,
+    points: Config.enemy.drifter.weaver.points, gold: Config.enemy.drifter.weaver.gold,
     description: 'Descends straight down the screen while swaying side-to-side in a sine wave.' },
 
   { buildOrder: 8, type: 'bouncer', name: 'Bouncer', family: 'Bouncer family', kind: 'bouncer',
     color: Config.enemy.bouncer.color,
     hp: Config.enemy.bouncer.health, hpPerLevel: Config.enemy.bouncer.healthPerLevel,
+    points: Config.enemy.bouncer.points, gold: Config.enemy.bouncer.gold,
     description: 'A wireframe hexagon that bounces forever off walls, the top edge, and the barrier — only destruction removes it.' },
 
   { buildOrder: 9, type: 'splitter', name: 'Splitter', family: 'Bouncer family', kind: 'bouncer',
     color: Config.enemy.bouncer.color,
     hp: Config.enemy.bouncer.splitter.health, hpPerLevel: Config.enemy.bouncer.healthPerLevel,
+    points: Config.enemy.bouncer.splitter.points, gold: Config.enemy.bouncer.splitter.gold,
     description: 'A larger, tankier Bouncer. On death it breaks into 3 small fragments that kick outward.' },
 
   { buildOrder: 10, type: 'shielded', name: 'Shielded', family: 'Bouncer family', kind: 'bouncer',
     color: Config.enemy.bouncer.color,
     hp: Config.enemy.bouncer.health, hpPerLevel: Config.enemy.bouncer.healthPerLevel,
+    points: Config.enemy.bouncer.shielded.points, gold: Config.enemy.bouncer.shielded.gold,
     description: `A normal Bouncer core wrapped in a shield ring that absorbs ${Config.enemy.bouncer.shielded.shieldHits} hits before the core takes any damage.` },
 
   { buildOrder: 11, type: 'fragment', name: 'Splitter Fragment', family: 'Bouncer family (spawned only)', kind: 'bouncer',
     color: Config.enemy.bouncer.color,
     hp: Config.enemy.bouncer.splitter.fragmentHealth, hpPerLevel: 0,
+    points: Config.enemy.bouncer.splitter.fragmentPoints, gold: Config.enemy.bouncer.splitter.fragmentGold,
     description: 'A small, low-health shard spawned only when a Splitter dies — not something you can place in a level directly.' },
 ];
 
@@ -266,6 +278,9 @@ export class EnemyCodex {
     const hpText = item.hpPerLevel > 0 ? `HP ${item.hp} (+${item.hpPerLevel}/level)` : `HP ${item.hp}`;
     renderer.drawText(hpText, vW / 2, cfg.statY, {
       font: cfg.statFont, color: cfg.statColor, alpha,
+    });
+    renderer.drawText(`${item.points} PTS  ·  ${item.gold} GOLD`, vW / 2, cfg.rewardY, {
+      font: cfg.rewardFont, color: cfg.rewardColor, alpha: alpha * 0.85,
     });
 
     this._renderArrow(renderer, -1, alpha);

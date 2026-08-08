@@ -328,6 +328,8 @@ export const Config = Object.freeze({
       reloadTime:       2.2,
       hitRadius:        16,
       minSeparation:    60,
+      points:           100,  // reward on kill — baseline
+      gold:             5,
       audio: Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.40, poolSize: 4,
       }),
@@ -364,6 +366,8 @@ export const Config = Object.freeze({
       recoverTurnRate:  4,           // rad/sec — slow turn back toward the player during recovery
       hitRadius:        24,
       minSeparation:    64,
+      points:           300,  // reward on kill — tankiest ship-family enemy, telegraphed one-shot threat
+      gold:             15,
 
       // Nose charge-orb visual tuning (see SniperEnemy.renderCore)
       chargeOrbStartRadius: 3,   // radius at t=0 while charging
@@ -419,6 +423,8 @@ export const Config = Object.freeze({
       reloadTime:       3.8,         // slow reload — rockets are powerful
       hitRadius:        16,
       minSeparation:    64,
+      points:           150,  // reward on kill — homing rocket is harder to dodge than a straight shot
+      gold:             8,
       audio: Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.50, poolSize: 4,
       }),
@@ -477,6 +483,8 @@ export const Config = Object.freeze({
       projectileRadius: 4,
 
       hitRadius:     18,
+      points:        120,  // reward on kill — base variant
+      gold:          6,
       audio: Object.freeze({
         // Lower than Rocketeer/Sniper (0.45) — formations of up to 8 clones
         // can die in close succession, and the shared SFX pool would
@@ -528,6 +536,9 @@ export const Config = Object.freeze({
         // 15 simultaneous deaths would otherwise flood the spark pool and
         // widen the shared glow pass's bounding box.
         sparksPerEmit: 8,
+
+        points: 100,  // reward on kill — large formation (15), calmer per-clone threat than variety #1
+        gold:   5,
       }),
 
       /**
@@ -573,6 +584,9 @@ export const Config = Object.freeze({
           src: 'assets/audio/explosion.mp3', volume: 0.25, poolSize: 4,
         }),
         sparksPerEmit: 10,
+
+        points: 130,  // reward on kill — fast kinematic fall
+        gold:   6,
       }),
 
       /**
@@ -609,6 +623,9 @@ export const Config = Object.freeze({
           src: 'assets/audio/explosion.mp3', volume: 0.25, poolSize: 4,
         }),
         sparksPerEmit: 10,
+
+        points: 130,  // reward on kill — sustained on-screen sway threat
+        gold:   6,
       }),
     }),
 
@@ -669,6 +686,8 @@ export const Config = Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.3, poolSize: 4,
       }),
       sparksPerEmit: 10,
+      points: 150,  // reward on kill — persistent, doesn't naturally leave, must be fully destroyed
+      gold:   8,
 
       splitter: Object.freeze({
         radius: 40,   // vp — ~2x the base hull size
@@ -678,6 +697,11 @@ export const Config = Object.freeze({
         fragmentRadius:   12,  // vp — smaller than the base Bouncer (20)
         fragmentHealth:   1,
         fragmentSpeedMax: 200, // vp/sec — horizontal fan-out speed (vy is solved per-fragment, see spawnFragments)
+
+        points: 400,  // reward on kill — tanky (12 HP); each spawned fragment scores separately too
+        gold:   20,
+        fragmentPoints: 30,  // reward on kill — low-value, spawned incidentally
+        fragmentGold:   2,
       }),
 
       shielded: Object.freeze({
@@ -686,6 +710,9 @@ export const Config = Object.freeze({
         shieldColor:      '#6FE0FF', // ice-blue — visually distinct from the amber core
         shieldGlowBlur:     5,
         shieldHitGlowBlur: 12,
+
+        points: 300,  // reward on kill — shield adds effective HP before the core can be hurt
+        gold:   15,
       }),
     }),
   }),
@@ -871,7 +898,9 @@ export const Config = Object.freeze({
   /**
    * Gameplay HUD: score (top-left) and gold (top-right) displayed as
    * compact neon panels. Same sci-fi design language as the title screen —
-   * L-bracket corner accent, dim label, bright neon value with glow.
+   * L-bracket corner accent, dim label, bright neon value with glow. The
+   * score panel also carries a small "BEST" line — the all-time high score,
+   * persisted via core/Storage.js.
    */
   hud: Object.freeze({
     margin: 20,          // virtual px from screen edges to the panel anchor corner
@@ -880,6 +909,7 @@ export const Config = Object.freeze({
     valueFont: '400 20px "Audiowide", "Courier New", monospace',
     valueColor: '#4DEFFF',
     valueGlowBlur: 6,    // reduced from 8 — 44% cheaper shadow pass (blur cost ∝ radius²)
+    bestFont: '400 11px "Audiowide", "Courier New", monospace',
     chromeColor: '#4DEFFF',
     chromeLineWidth: 1,
     chromeGlowBlur: 4,   // reduced from 5
@@ -949,6 +979,9 @@ export const Config = Object.freeze({
       statFont:  '400 14px "Audiowide", "Courier New", monospace',
       statColor: '#4DEFFF',
       statY: 548,
+      rewardFont:  '400 12px "Audiowide", "Courier New", monospace',
+      rewardColor: '#aab4d4',
+      rewardY: 578,
 
       arrowColor: '#4DEFFF',
       arrowGlowBlur: 6,

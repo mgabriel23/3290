@@ -67,11 +67,13 @@ export class WaveManager {
   /**
    * @param {number} level  1-based. Values beyond the config array reuse the last entry.
    * @param {import('./Barrier.js').Barrier} barrier  used by Bouncer clones to detect/damage the barrier on impact
+   * @param {import('./HUD.js').HUD} hud  score/gold are awarded directly onto it on kill — see handleBulletHit/_rewardFor
    */
-  constructor(level, barrier) {
+  constructor(level, barrier, hud) {
     const levels = Config.waves.levels;
     this._level   = level;
     this._waveCfg = levels[Math.min(level - 1, levels.length - 1)];
+    this._hud = hud;
     this._barrierSurfaceY = (x) => barrier.surfaceY(x);
     this._onBarrierHit    = (x) => {
       barrier.takeDamage(Config.enemy.bouncer.barrierDamage);
@@ -388,6 +390,10 @@ export class WaveManager {
   handleBulletHit(enemy) {
     const killed = enemy.hit(this._playerDamage);
     if (killed) {
+      const reward = this._rewardFor(enemy);
+      this._hud.score += reward.points;
+      this._hud.gold  += reward.gold;
+
       if (enemy.type === 'rocketeer') {
         this._rocketeerParticles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.rocketeer.audio.volume);
@@ -409,6 +415,28 @@ export class WaveManager {
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
       }
     }
+  }
+
+  /**
+   * Score/gold reward for a just-killed enemy. Drifter clones already cache
+   * their resolved per-variant Config object as `_palette` (e.g.
+   * `Config.enemy.drifter.sweeper`), so their reward is just a field read —
+   * Bouncer has no such cached palette (only radius/health vary by variant,
+   * not color), so it gets an explicit branch here instead.
+   */
+  _rewardFor(enemy) {
+    if (enemy.type === 'drifter') {
+      return { points: enemy._palette.points, gold: enemy._palette.gold };
+    }
+    if (enemy.type === 'bouncer') {
+      const cfg = Config.enemy.bouncer;
+      if (enemy._variant === 2) return { points: cfg.splitter.points, gold: cfg.splitter.gold };
+      if (enemy._variant === 3) return { points: cfg.shielded.points, gold: cfg.shielded.gold };
+      if (enemy._variant === 'fragment') return { points: cfg.splitter.fragmentPoints, gold: cfg.splitter.fragmentGold };
+      return { points: cfg.points, gold: cfg.gold };
+    }
+    const cfg = Config.enemy[enemy.type]; // scout, rocketeer, sniper
+    return { points: cfg.points, gold: cfg.gold };
   }
 
   /**

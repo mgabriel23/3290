@@ -5,27 +5,50 @@
  *
  * Each panel is a single L-bracket corner accent, a dim label, and a
  * brighter neon value — the same sci-fi design language as the title
- * screen's chrome and button. Score and gold are plain public fields
- * that the scene (and later gameplay systems) write to directly; the HUD
- * is opinion-free about where the numbers come from, it just draws them.
+ * screen's chrome and button. Score and gold are still plain public
+ * fields that gameplay systems write to directly (`hud.score += n`) — the
+ * HUD stays opinion-free about where the numbers come from — but they're
+ * now getter/setter-backed so that write also carries the field's
+ * persistence behavior (see Storage.js): score tracks an all-time best
+ * (only saved once it's actually beaten), gold is a running wallet total
+ * saved on every change.
  *
  * All bracket geometry is pre-allocated once in the constructor so
  * `render` produces zero per-frame allocations regardless of update rate.
  */
 import { Config } from '../core/Config.js';
 import { cornerBracketPath } from '../core/shapes.js';
+import { loadNumber, saveNumber } from '../core/Storage.js';
 
 export class HUD {
   constructor() {
-    this.score = 10000;
-    this.gold  = 10000;
+    this._score = 0;
+    this.bestScore = loadNumber('bestScore', 0);
+    this._gold = loadNumber('gold', 0);
     this._initGeometry();
+  }
+
+  /** Current run's score — starts at 0 each session. */
+  get score() { return this._score; }
+  set score(value) {
+    this._score = value;
+    if (this._score > this.bestScore) {
+      this.bestScore = this._score;
+      saveNumber('bestScore', this.bestScore);
+    }
+  }
+
+  /** Wallet total — persists forward across sessions, no "best" concept. */
+  get gold() { return this._gold; }
+  set gold(value) {
+    this._gold = value;
+    saveNumber('gold', this._gold);
   }
 
   /** Draw both panels over whatever was rendered before this call. */
   render(renderer) {
     const {
-      margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur,
+      margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur, bestFont,
       chromeColor, chromeLineWidth, chromeGlowBlur,
     } = Config.hud;
 
@@ -40,6 +63,9 @@ export class HUD {
     });
     renderer.drawText(String(this.score), this._scoreTX, margin + 44, {
       font: valueFont, color: valueColor, align: 'left', glowBlur: valueGlowBlur,
+    });
+    renderer.drawText(`BEST ${this.bestScore}`, this._scoreTX, margin + 62, {
+      font: bestFont, color: labelColor, align: 'left', alpha: 0.6,
     });
 
     // Gold panel (right)

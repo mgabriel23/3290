@@ -69,7 +69,7 @@ export class GameplayScene {
     // Transition from intro → active once the indicator animation is done
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
       this._levelState  = 'active';
-      this._waveManager = new WaveManager(this._level, this.barrier);
+      this._waveManager = new WaveManager(this._level, this.barrier, this.hud);
     }
 
     this.barrier.update(dt);
