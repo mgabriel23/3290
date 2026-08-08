@@ -18,6 +18,29 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Rendering performance limits — see Renderer.resize().
+   *
+   * `maxDevicePixelRatio` caps how much `window.devicePixelRatio` is
+   * allowed to inflate the canvas BACKING STORE beyond its CSS size. Left
+   * uncapped, every per-frame draw call's cost (fillRect clears, drawImage
+   * blits, and above all shadowBlur — already documented throughout this
+   * codebase as the single most expensive Canvas 2D operation) scales with
+   * the backing store's pixel COUNT, which scales with dpr². A phone with a
+   * 3–4x-density display was therefore doing 2–4x the raw fill work of one
+   * at 2x for an IDENTICAL on-screen size — the counterintuitive "nicer
+   * phone runs it worse" result this value fixes. Capping at 2 is the
+   * standard sweet spot for canvas/WebGL games: visual sharpness gains
+   * above 2x are essentially imperceptible on a phone-sized screen (more so
+   * for this game's soft neon-glow look, where blur already dominates the
+   * silhouette), while the fill-rate savings are large and immediate. Only
+   * engages on displays above 2x — a standard 1x or 2x/Retina desktop
+   * monitor is completely unaffected.
+   */
+  performance: Object.freeze({
+    maxDevicePixelRatio: 2,
+  }),
+
+  /**
    * Background starfield: small squares drifting downward to suggest
    * forward motion through space, organised into discrete parallax
    * layers (back to front) — each layer is baked once to an off-screen

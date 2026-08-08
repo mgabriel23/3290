@@ -25,14 +25,15 @@ export class Renderer {
 
   /**
    * Size the canvas backing store to the displayed size multiplied by the
-   * device pixel ratio, then derive a single scale factor that maps the
-   * fixed virtual resolution onto the backing store. Keeps everything sharp
-   * and lets all subsequent draw calls use virtual coordinates.
+   * device pixel ratio (capped — see Config.performance.maxDevicePixelRatio),
+   * then derive a single scale factor that maps the fixed virtual resolution
+   * onto the backing store. Keeps everything sharp and lets all subsequent
+   * draw calls use virtual coordinates.
    * @param {number} cssWidth  displayed width in CSS px
    * @param {number} cssHeight displayed height in CSS px
    */
   resize(cssWidth, cssHeight) {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, Config.performance.maxDevicePixelRatio);
     this.canvas.width = Math.round(cssWidth * dpr);
     this.canvas.height = Math.round(cssHeight * dpr);
     this.canvas.style.width = `${cssWidth}px`;
