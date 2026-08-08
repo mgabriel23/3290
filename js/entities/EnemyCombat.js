@@ -87,12 +87,16 @@ export function stepEntryGlide(enemy, cfg, dt, nextState) {
  * @param {import('../core/Renderer.js').Renderer} renderer
  * @param {{ x: number, y: number, _angle: number, _cfg: object, _hitFlash: number }} enemy
  * @param {Array<[number, number]>} hullPts
+ * @param {number} [alpha]  optional entrance-fade multiplier — see Renderer's
+ *   `drawImage`/`Starfield.render` convention; real gameplay never passes
+ *   this (defaults to 1), only cinematic previews (EnemyCodex, PrologueScene)
+ *   that need to fade a single instance in do.
  */
-export function renderHull(renderer, enemy, hullPts) {
+export function renderHull(renderer, enemy, hullPts, alpha = 1) {
   const cfg   = enemy._cfg;
   const flash = enemy._hitFlash > 0;
   renderer.fillStrokePaths([{ points: hullPts, closed: true }], {
-    x: enemy.x, y: enemy.y, rotation: enemy._angle,
+    x: enemy.x, y: enemy.y, rotation: enemy._angle, alpha,
     fillColor:   flash ? '#ffffff' : cfg.fillColor,
     strokeColor: flash ? '#ffffff' : cfg.color,
     lineWidth:   cfg.lineWidth,
@@ -106,11 +110,12 @@ export function renderHull(renderer, enemy, hullPts) {
  * drawn BEFORE the hull so it appears behind it.
  * @param {import('../core/Renderer.js').Renderer} renderer
  * @param {{ x: number, y: number, _angle: number, _cfg: object, _enginePhase: number }} enemy
+ * @param {number} [alpha]  see renderHull's alpha doc
  */
-export function renderEngineFlame(renderer, enemy, noseX, noseY, baseLength) {
+export function renderEngineFlame(renderer, enemy, noseX, noseY, baseLength, alpha = 1) {
   const cfg = enemy._cfg;
   renderer.drawFlame(noseX, noseY, baseLength + Math.sin(enemy._enginePhase) * 2, {
-    x: enemy.x, y: enemy.y, rotation: enemy._angle,
+    x: enemy.x, y: enemy.y, rotation: enemy._angle, alpha,
     halfWidth: cfg.flameHalfWidth,
     color:     cfg.flameColor,
   });
@@ -121,11 +126,12 @@ export function renderEngineFlame(renderer, enemy, noseX, noseY, baseLength) {
  * AFTER the hull so it sits on top of it. Flashes white while hit-flashing.
  * @param {import('../core/Renderer.js').Renderer} renderer
  * @param {{ x: number, y: number, _angle: number, _cfg: object, _hitFlash: number }} enemy
+ * @param {number} [alpha]  see renderHull's alpha doc
  */
-export function renderEngineCore(renderer, enemy, localX, localY, rx, ry) {
+export function renderEngineCore(renderer, enemy, localX, localY, rx, ry, alpha = 1) {
   const cfg = enemy._cfg;
   renderer.fillEllipse(localX, localY, rx, ry, {
-    x: enemy.x, y: enemy.y, rotation: enemy._angle,
+    x: enemy.x, y: enemy.y, rotation: enemy._angle, alpha,
     fillColor: enemy._hitFlash > 0 ? cfg.color : cfg.engineCoreColor,
   });
 }

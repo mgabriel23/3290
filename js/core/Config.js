@@ -158,15 +158,23 @@ export const Config = Object.freeze({
      * a signal-interference alpha flicker on the whole line throughout
      * (see core/animation.js's flickerAlpha, called from _renderYearCard),
      * so it reads as a weak transmission barely coming through rather than
-     * a clean title card.
+     * a clean title card. Once the year finishes typing, a quiet second
+     * line fades in beneath it (reusing the same flicker alpha — no new
+     * fade state, see _renderYearCard) — a moment of calm the very next
+     * beat (the portals tearing open) immediately shatters, and a "three
+     * hundred years" motif the briefing beat echoes back later.
      */
     yearCard: Object.freeze({
       text: 'EARTH — YEAR 3290',
       font: '400 28px "Audiowide", "Courier New", monospace',
       textColor: '#aab4d4',
       charsPerSecond: 12, // letter by letter — slower than the briefing for dramatic weight
-      holdDuration: 2.4,   // seconds the finished year card lingers before the next beat starts
+      holdDuration: 2.8,   // seconds the finished year card lingers before the next beat starts — a little extra room for the subtitle to be read
       fadeOutDuration: 0.8,
+      subtitleText: 'THE SKY HAD BEEN QUIET FOR THREE HUNDRED YEARS.',
+      subtitleFont: '400 13px "Audiowide", "Courier New", monospace',
+      subtitleColor: '#6f7a99', // dimmer than the headline — a hushed aside, not a second title
+      subtitleOffsetY: 40, // virtual px below the main line
     }),
 
     /**
@@ -198,41 +206,88 @@ export const Config = Object.freeze({
       /** A small faceted "event horizon" at the very center, counter-spinning against the arms for a layered, alien feel. */
       core: Object.freeze({ sides: 6, radius: 10, rotationSpeed: -2.4 }),
 
-      // Spread across the upper half — virtual-ratio coordinates — deliberately
-      // leaving the lower half clear: the briefing beat keeps these on screen
-      // and anchors its text near the bottom edge, so the two never collide.
+      // Spread across the upper half — virtual-ratio coordinates — the
+      // briefing text anchors near the bottom edge and stays legible over
+      // any drifting sample enemy because it's drawn AFTER them, not
+      // because the two occupy separate screen regions — see `creatures`
+      // below and PrologueScene._renderBriefing's draw order.
       positions: Object.freeze([
         Object.freeze({ xRatio: 0.24, yRatio: 0.13 }),
         Object.freeze({ xRatio: 0.80, yRatio: 0.26 }),
         Object.freeze({ xRatio: 0.48, yRatio: 0.46 }),
       ]),
+
+      /**
+       * A stream of sample enemies emerges from each portal once its own
+       * tear-open animation finishes — real DrifterEnemy instances, one of
+       * its four variants (never a re-derived approximation, same
+       * principle as EnemyCodex), giving physical proof to the briefing's
+       * "things are already coming through them" instead of leaving the
+       * portals empty. Each spawn independently rolls a random variant
+       * from `species` — a portal isn't "the Weaver portal" forever, every
+       * tear can produce any of the four. Each one fades in on spawn, then
+       * drifts slowly toward (and eventually off) the bottom of the
+       * screen — see PrologueScene._spawnCreature/_updateCreatures. Their
+       * real update() (which would fly them off along their own formation
+       * path) is deliberately never called — only `_age` advances, which
+       * is all their idle tentacle-wave/eye-pulse animation needs — and
+       * their angle is fixed facing straight down (toward the direction
+       * they're drifting, not away from it).
+       */
+      creatures: Object.freeze({
+        species: Object.freeze(['drifter', 'sweeper', 'diver', 'weaver']), // the pool each spawn independently rolls a random pick from
+        spawnInterval: 7.0,     // seconds between spawns from the same portal — kept slow/sparse, not a swarm
+        maxSpawnsPerPortal: 3,  // total creatures one portal produces over the cinematic
+        fadeInDuration: 0.6,    // seconds for a freshly spawned creature to reach full opacity
+        driftSpeed: 35,         // virtual px/second, straight down — "slowly moving out of the screen"
+        offscreenMarginY: 60,   // virtual px past the bottom edge before a drifting creature is culled
+      }),
     }),
 
     /**
-     * Beat 3: the commander's voice cuts in over comms — a mandatory
-     * typewriter-revealed briefing (deliberately no skip control: unlike
-     * the sample paragraph this superseded, this part of the story always
-     * plays) — staged centered, near the bottom edge, while the portals
-     * keep churning above (PrologueScene keeps both alive and on screen
-     * through this beat — see _renderBriefing).
+     * Beat 3: the commander's voice cuts in over comms — a typewriter-
+     * revealed briefing, staged centered near the bottom edge, while the
+     * portals and their sample enemies keep churning above (PrologueScene
+     * keeps everything alive and on screen through this beat — see
+     * _renderBriefing). The text is legible over them because of DRAW
+     * ORDER, not screen position: `_renderBriefing`/`_renderFadeOut` call
+     * `_renderCreatures()` before `_renderBriefingText()`, so the text is
+     * always painted on top, even if a drifting creature passes behind it.
+     * No per-beat skip lives here — the scene-level SKIP control (see
+     * `skip` below) covers every beat before the title card uniformly,
+     * rather than each beat inventing its own.
+     *
+     * Written to move from tactical urgency into one moment of real
+     * vulnerability at the end, rather than staying a flat status report:
+     * multiple portals, multiple locations, an explicit "eliminate every
+     * last one" objective (setting up the actual gameplay loop directly),
+     * then one line of real fear underneath the command voice. "Three
+     * hundred quiet years, gone in a night" echoes the year card's
+     * subtitle, and the standalone "..." token before the last line
+     * exploits the word-by-word reveal to land as a genuine pause (a beat
+     * of silence) before the emotional button, with no new timing
+     * mechanism needed.
      */
     briefing: Object.freeze({
       text:
-        "Pilot, are you reading me? We don't know what's happening — three " +
-        "tears just ripped open in the sky and nobody can explain it. Reports " +
-        "are flooding in from every direction: unidentified objects coming " +
-        "through, hitting multiple regions at once. Comms are down across half " +
-        "the eastern sectors. We don't know what they are, where they came from, " +
-        "or how many more are coming. All we know is — they're not stopping. " +
-        "Get up there. We need eyes on this. Now.",
+        "Pilot, do you copy? Portals are ripping open across the globe " +
+        "— not just here, everywhere, all at once — and hostiles are " +
+        "already pouring through every single one. Three hundred quiet " +
+        "years, gone in a night. We don't know what they are. We just " +
+        "know they're not friendly, and they're not stopping. Comms are " +
+        "down in half our sectors, and every report says the same thing: " +
+        "overrun. Your objective is simple: find them, and eliminate " +
+        "every last one. Whatever's coming through does not reach the " +
+        "ground. Earth doesn't get a second chance. ... And come home. " +
+        "That part isn't an order — that's just me asking.",
       font: '400 20px "Audiowide", "Courier New", monospace',
       textColor: '#aab4d4',
       lineHeight: 32,     // virtual px between line baselines
       sideMargin: 56,     // virtual px — bounds the wrapped paragraph's width
       bottomMargin: 64,   // virtual px from the bottom edge to the newest line's baseline (see PrologueScene._briefingAnchorY) — sits low, beneath the portals
       maxVisibleLines: 4, // the "subtitle window" never shows more than this many lines at once — older ones fall away as new ones reveal (see PrologueScene._renderBriefingText)
-      wordsPerSecond: 4,  // the briefing reveals a whole word at a time, not letter by letter — see PrologueScene._updateBriefing for why that reads (and sounds) more like typing
-      holdDuration: 1.6,  // seconds the finished briefing stays up before fading out
+      wordsPerSecond: 4.3, // the briefing reveals a whole word at a time, not letter by letter — see PrologueScene._updateBriefing for why that reads (and sounds) more like typing
+      holdDuration: 2.4,  // seconds the finished briefing stays up before fading out — held longer than the old line so the closing "come home" has room to land
 
       /**
        * Ticks on its OWN clock — deliberately faster than `wordsPerSecond`
@@ -253,6 +308,28 @@ export const Config = Object.freeze({
 
     /** Beat 4: the assembled scene dissolves to black — see Renderer.clear's translucent-overlay technique. */
     fadeOutDuration: 1.2,
+
+    /**
+     * A small always-visible "SKIP" control, shown during every beat
+     * before the title card (yearCard/portals/briefing/fadeOut). Tapping
+     * it jumps straight to the title screen via a quick dissolve (its own
+     * `skipFade` beat — see PrologueScene._renderSkipFade), not an instant
+     * cut, so it doesn't feel like a glitch. The full cinematic (~28s) is
+     * still the default first-time experience; this exists so a player who
+     * has already seen it (or a dev/tester replaying the flow) isn't stuck
+     * sitting through it again before their first tap.
+     */
+    skip: Object.freeze({
+      label: 'SKIP ▶▶',
+      font: '400 13px "Audiowide", "Courier New", monospace',
+      color: '#aab4d4',
+      alpha: 0.65,
+      marginX: 24,   // virtual px from the right edge to the text anchor
+      marginY: 28,   // virtual px from the top edge to the text anchor
+      hitWidth: 100, // generous tap target — wider than the text itself
+      hitHeight: 40,
+      fadeOutDuration: 0.5, // seconds for the quick dissolve into the title card once tapped
+    }),
 
     /**
      * Beat 5: the title card. "3290" is the game's name, deliberately

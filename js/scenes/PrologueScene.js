@@ -5,18 +5,33 @@
  * authored as a fixed sequence of "beats", each owning its own slice of
  * update/render and deciding for itself when to hand off to the next:
  *
- *   yearCard  → a stark "EARTH — YEAR 3290" title card fades in, holds, fades out
+ *   yearCard  → a stark "EARTH — YEAR 3290" title card types in, then a
+ *               quiet second line fades in beneath it before both hold and fade out
  *   portals   → the sky reveals itself (Starfield, fading in alongside) and
  *               three wireframe "tears" burst into it, one by one — they
- *               need an actual sky to tear open in for the visual to read
- *   briefing  → the commander's voice cuts in over comms — a mandatory
- *               typewriter-revealed briefing over that same sky (deliberately
- *               no skip control: unlike the sample paragraph this superseded,
- *               this part of the story always plays)
+ *               need an actual sky to tear open in for the visual to read.
+ *               Once a portal finishes tearing open, it starts emitting a
+ *               small stream of real sample enemies — one of the four
+ *               Drifter-family variants, picked at random per spawn (see
+ *               _spawnCreature/_updateCreatures) — fading in, facing
+ *               straight down, and drifting slowly toward (and off) the
+ *               bottom of the screen, giving physical proof to the
+ *               briefing's "things are already coming through them"
+ *   briefing  → the commander's voice cuts in over comms — a typewriter-
+ *               revealed briefing over that same sky
  *   fadeOut   → the assembled scene — sky, text, and all — dissolves to black
  *   title     → "3290" — the game's name, deliberately doubling as the
  *               year the story is set in — appears with a PLAY button,
  *               which is the actual gate into gameplay
+ *
+ * A small "SKIP ▶▶" control (see Config.prologue.skip) is drawn on top of
+ * every beat before `title` — tapping it doesn't cut straight to the title
+ * card (that would read as a glitch); it hands off to one more beat,
+ * `skipFade`, which freezes whatever beat was on screen and dissolves it
+ * to black exactly like `fadeOut` does, just shorter, before landing on
+ * `title`. The mandatory-feeling briefing still always plays in full for
+ * anyone who doesn't tap it — SKIP is an escape hatch, not a redesign of
+ * the story beat itself.
  *
  * The starfield is the same Starfield entity GameplayScene composes —
  * shared rather than duplicated since both scenes need the identical
@@ -34,10 +49,19 @@
 import { Config } from '../core/Config.js';
 import { Portal } from '../entities/Portal.js';
 import { Starfield } from '../entities/Starfield.js';
+import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath } from '../entities/DrifterEnemy.js';
 import { flickerAlpha } from '../core/animation.js';
 import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { cornerBracketPath, diamondPath } from '../core/shapes.js';
 import { AudioPool } from '../core/AudioPool.js';
+
+/** One path-factory per spawnable portal-creature variant — see _spawnCreature. */
+const _CREATURE_PATH_FACTORIES = {
+  drifter: createDrifterPath,
+  sweeper: createSweeperPath,
+  diver:   createDiverPath,
+  weaver:  createWeaverPath,
+};
 
 export class PrologueScene {
   /**
@@ -56,6 +80,18 @@ export class PrologueScene {
 
     this._starfield = new Starfield();
     this._portals = this._createPortals();
+    // One spawner per portal — each produces a small stream of creatures
+    // (not just one) over the cinematic, each independently rolling a
+    // random species from Config.prologue.portals.creatures.species at the
+    // moment it spawns (see _updateCreatures) rather than a portal being
+    // "the Weaver portal" forever. `active` holds the ones currently on
+    // screen (fading in / drifting down / not yet culled).
+    this._creatures = this._portals.map((portal) => ({
+      portal,
+      spawnTimer: 0,   // counts down to the next spawn; 0 = spawn as soon as the portal is ready
+      spawnCount: 0,   // how many this portal has produced so far, capped at maxSpawnsPerPortal
+      active: [],      // [{ instance, age }] — age drives the fade-in
+    }));
 
     // Wrapped up front (text and font never change), then split into
     // per-line word lists with each line's starting word-index recorded —
@@ -84,6 +120,7 @@ export class PrologueScene {
     // start ticking (and finish) before "portals" actually begins to draw them.
     if (this._beat !== 'yearCard') {
       for (const portal of this._portals) portal.update(dt);
+      this._updateCreatures(dt);
     }
 
     switch (this._beat) {
@@ -92,28 +129,41 @@ export class PrologueScene {
       case 'briefing': return this._updateBriefing(dt);
       case 'fadeOut': return this._updateFadeOut();
       case 'title': return; // waits for a tap on PLAY — see handleTap
+      case 'skipFade': return this._updateSkipFade();
       case 'exitFade': return this._updateExitFade();
     }
   }
 
-  /** PLAY is the only interactive element here, and only once the title beat arrives. */
+  /**
+   * PLAY is the only interactive element once the title beat arrives.
+   * Before that, SKIP is live on every beat — see `_canSkip`/`_isInsideSkipButton`.
+   */
   handleTap(x, y) {
-    if (this._beat !== 'title') return;
-    if (this._isInsidePlayButton(x, y)) {
-      // Save the current beat age so the exit-fade can hold the title frozen
-      // at the exact frame the tap landed, rather than restarting its animation.
-      this._frozenTitleAge = this._beatAge;
-      this._advanceBeat('exitFade');
+    if (this._beat === 'title') {
+      if (this._isInsidePlayButton(x, y)) {
+        // Save the current beat age so the exit-fade can hold the title frozen
+        // at the exact frame the tap landed, rather than restarting its animation.
+        this._frozenTitleAge = this._beatAge;
+        this._advanceBeat('exitFade');
+      }
+      return;
+    }
+    if (this._canSkip() && this._isInsideSkipButton(x, y)) {
+      // Remember what was on screen so _renderSkipFade can keep drawing it
+      // (frozen) underneath the dissolve, rather than cutting to black instantly.
+      this._skipFromBeat = this._beat;
+      this._advanceBeat('skipFade');
     }
   }
 
   render() {
     switch (this._beat) {
-      case 'yearCard': return this._renderYearCard();
-      case 'portals': return this._renderPortals();
-      case 'briefing': return this._renderBriefing();
-      case 'fadeOut': return this._renderFadeOut();
+      case 'yearCard': this._renderYearCard(); return this._renderSkipButton();
+      case 'portals':  this._renderPortals();  return this._renderSkipButton();
+      case 'briefing': this._renderBriefing(); return this._renderSkipButton();
+      case 'fadeOut':  this._renderFadeOut();  return this._renderSkipButton();
       case 'title': return this._renderTitle();
+      case 'skipFade': return this._renderSkipFade();
       case 'exitFade': return this._renderExitFade();
     }
   }
@@ -145,12 +195,14 @@ export class PrologueScene {
   }
 
   _renderYearCard() {
-    const { text, font, textColor, holdDuration, fadeOutDuration } = Config.prologue.yearCard;
+    const cfg = Config.prologue.yearCard;
+    const { text, font, textColor, holdDuration, fadeOutDuration } = cfg;
     const { width: vW, height: vH } = Config.virtual;
 
     // Fade-out alpha: only kicks in after hold is done, ramps 1 → 0.
     let fadeAlpha = 1;
-    if (this._yearRevealedCount >= text.length) {
+    const typingDone = this._yearRevealedCount >= text.length;
+    if (typingDone) {
       const inFadeOut = Math.max(0, this._yearHoldAge - holdDuration);
       fadeAlpha = Math.max(0, 1 - inFadeOut / fadeOutDuration);
     }
@@ -163,6 +215,15 @@ export class PrologueScene {
 
     this.renderer.clear(Config.colors.void);
     this.renderer.drawText(visible, vW / 2, vH * 0.46, { font, color: textColor, alpha });
+
+    // A quiet second line, only once the headline has finished typing —
+    // reuses the same flicker alpha rather than owning a separate fade, so
+    // it reads as part of the same weak transmission, not a new one.
+    if (typingDone) {
+      this.renderer.drawText(cfg.subtitleText, vW / 2, vH * 0.46 + cfg.subtitleOffsetY, {
+        font: cfg.subtitleFont, color: cfg.subtitleColor, alpha,
+      });
+    }
   }
 
   // --- Beat 2: portals ---------------------------------------------------------
@@ -194,6 +255,91 @@ export class PrologueScene {
     this.renderer.clear(Config.colors.void);
     this._starfield.render(this.renderer, skyAlpha);
     for (const portal of this._portals) portal.render(this.renderer);
+    this._renderCreatures();
+  }
+
+  /**
+   * Build one real DrifterEnemy instance for a portal, pinned at that
+   * portal's position rather than wherever its formation path would
+   * normally start it. `species` picks which of the four variants (each
+   * just needs its own real path-factory to get the right `_palette`/
+   * body-shape-adjacent config — see DrifterEnemy's variant system) —
+   * `_updateCreatures` never actually advances it along that path, so the
+   * path's own starting point is irrelevant, only its `variant` matters.
+   * Angle is fixed at `Math.PI`: local -y (the body's dome/"face") maps to
+   * world +y at that angle, i.e. facing straight down — the direction
+   * these creatures drift, not away from it.
+   */
+  _spawnCreature(species, x, y) {
+    const path = _CREATURE_PATH_FACTORIES[species]();
+    const d = new DrifterEnemy(path, 0, 0);
+    d.x = x; d.y = y; d._angle = Math.PI; d._cosA = -1; d._sinA = 0;
+    return d;
+  }
+
+  /**
+   * Each portal spawns a small stream of creatures (not just one) once it
+   * finishes tearing open: a new one every `spawnInterval`, up to
+   * `maxSpawnsPerPortal` — each independently rolling a random variant from
+   * `creatures.species` at the moment it spawns, so a single portal isn't
+   * "the Weaver portal" forever. Their real update() (which would fly them
+   * off along their own formation path) is deliberately never called —
+   * only `_age` advances, which is all their idle tentacle-wave/eye-pulse
+   * animation needs — and every creature also drifts straight down at a
+   * fixed `driftSpeed`, independent of that path. Once a creature drifts
+   * past the bottom edge (plus a margin) it's dropped from `active` — same
+   * in-place compaction WaveManager itself uses for its enemy list.
+   */
+  _updateCreatures(dt) {
+    const { appearDuration, creatures } = Config.prologue.portals;
+    const { height: vH } = Config.virtual;
+    const { species, spawnInterval, maxSpawnsPerPortal, driftSpeed, offscreenMarginY } = creatures;
+    const cullY = vH + offscreenMarginY;
+
+    for (const spawner of this._creatures) {
+      const portalReady = spawner.portal._age - spawner.portal.delay >= appearDuration;
+      if (portalReady && spawner.spawnCount < maxSpawnsPerPortal) {
+        spawner.spawnTimer -= dt;
+        if (spawner.spawnTimer <= 0) {
+          const pick = species[Math.floor(Math.random() * species.length)];
+          spawner.active.push({
+            instance: this._spawnCreature(pick, spawner.portal.x, spawner.portal.y),
+            age: 0,
+          });
+          spawner.spawnCount++;
+          spawner.spawnTimer = spawnInterval;
+        }
+      }
+
+      let w = 0;
+      for (let i = 0; i < spawner.active.length; i++) {
+        const entry = spawner.active[i];
+        const inst  = entry.instance;
+        entry.age += dt;
+        if (inst.alive) {
+          inst._age += dt; // idle tentacle-wave/eye-pulse animation only — see _spawnCreature
+          inst.y += driftSpeed * dt;
+        }
+        if (inst.alive && inst.y < cullY) {
+          if (w !== i) spawner.active[w] = entry;
+          w++;
+        }
+      }
+      spawner.active.length = w;
+    }
+  }
+
+  _renderCreatures() {
+    const { fadeInDuration } = Config.prologue.portals.creatures;
+    for (const spawner of this._creatures) {
+      for (const entry of spawner.active) {
+        const inst = entry.instance;
+        if (!inst.alive) continue;
+        const alpha = Math.min(entry.age / fadeInDuration, 1);
+        inst.renderBody(this.renderer, alpha);
+        inst.render(this.renderer, alpha);
+      }
+    }
   }
 
   // --- Beat 3: briefing ---------------------------------------------------------
@@ -241,6 +387,7 @@ export class PrologueScene {
     this.renderer.clear(Config.colors.void);
     this._starfield.render(this.renderer);
     for (const portal of this._portals) portal.render(this.renderer);
+    this._renderCreatures();
     this._renderBriefingText(Math.floor(this._revealedWordCount));
   }
 
@@ -252,7 +399,10 @@ export class PrologueScene {
    * simply stops being drawn — so a long briefing never grows taller
    * than the window, it just keeps scrolling its newest line into a
    * fixed slot (unlike the corner-anchored overlay this superseded,
-   * which had to fit its whole paragraph on screen at once).
+   * which had to fit its whole paragraph on screen at once). Drawn AFTER
+   * `_renderCreatures()` in both `_renderBriefing`/`_renderFadeOut` — that
+   * draw order, not screen position, is what keeps the text legible on
+   * top of the portal creatures rather than being covered by them.
    */
   _renderBriefingText(revealedWordCount) {
     const { font, textColor, lineHeight, maxVisibleLines } = Config.prologue.briefing;
@@ -312,9 +462,60 @@ export class PrologueScene {
     this.renderer.clear(Config.colors.void);
     this._starfield.render(this.renderer);
     for (const portal of this._portals) portal.render(this.renderer);
+    this._renderCreatures();
     this._renderBriefingText(this._briefingWordCount);
 
     const overlayAlpha = Math.min(this._beatAge / Config.prologue.fadeOutDuration, 1);
+    this.renderer.clear(Config.colors.void, overlayAlpha);
+  }
+
+  // --- Skip control (live on every beat before the title card) ---------------------
+
+  /** SKIP is only offered before the title card arrives — title has PLAY, and the fade beats are already mid-transition. */
+  _canSkip() {
+    return this._beat === 'yearCard' || this._beat === 'portals'
+        || this._beat === 'briefing' || this._beat === 'fadeOut';
+  }
+
+  _skipButtonBounds() {
+    const { marginX, marginY, hitWidth, hitHeight } = Config.prologue.skip;
+    const { width: vW } = Config.virtual;
+    const right = vW - marginX;
+    const top   = marginY - hitHeight / 2;
+    return { left: right - hitWidth, top, right: right + 12, bottom: top + hitHeight };
+  }
+
+  _isInsideSkipButton(x, y) {
+    const { left, top, right, bottom } = this._skipButtonBounds();
+    return x >= left && x <= right && y >= top && y <= bottom;
+  }
+
+  _renderSkipButton() {
+    const { label, font, color, alpha, marginX, marginY } = Config.prologue.skip;
+    const { width: vW } = Config.virtual;
+    this.renderer.drawText(label, vW - marginX, marginY, { font, color, align: 'right', alpha });
+  }
+
+  /**
+   * A short, generic dissolve into the title card, reached only via SKIP.
+   * Keeps redrawing whichever beat was on screen at the moment of the tap
+   * (`_skipFromBeat`, captured in handleTap) so the cut reads as "fading
+   * out what you were already watching", not a jarring swap to a
+   * different scene — the same technique `fadeOut` itself uses, just
+   * generalized to start from any beat instead of only from `briefing`.
+   */
+  _updateSkipFade() {
+    if (this._beatAge >= Config.prologue.skip.fadeOutDuration) this._advanceBeat('title');
+  }
+
+  _renderSkipFade() {
+    switch (this._skipFromBeat) {
+      case 'yearCard': this._renderYearCard(); break;
+      case 'portals':  this._renderPortals(); break;
+      case 'briefing': this._renderBriefing(); break;
+      case 'fadeOut':  this._renderFadeOut(); break;
+    }
+    const overlayAlpha = Math.min(this._beatAge / Config.prologue.skip.fadeOutDuration, 1);
     this.renderer.clear(Config.colors.void, overlayAlpha);
   }
 

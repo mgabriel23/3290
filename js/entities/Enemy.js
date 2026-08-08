@@ -119,14 +119,19 @@ export class Enemy {
   /** Collision radius — used by GameplayScene's bullet↔enemy hit test. */
   get hitRadius() { return this._cfg.hitRadius; }
 
-  /** Engine exhaust triangle — must be drawn BEFORE the hull so it appears behind it. */
-  renderFlame(renderer) {
-    renderEngineFlame(renderer, this, 0, -S * 0.30, S * 0.45);
+  /**
+   * Engine exhaust triangle — must be drawn BEFORE the hull so it appears
+   * behind it. `alpha` is an optional entrance-fade multiplier (default 1,
+   * so WaveManager's real per-frame calls are unaffected) — see
+   * EnemyCombat.renderHull's doc.
+   */
+  renderFlame(renderer, alpha = 1) {
+    renderEngineFlame(renderer, this, 0, -S * 0.30, S * 0.45, alpha);
   }
 
   /** Engine core orb — must be drawn AFTER the hull so it sits on top of it. */
-  renderCore(renderer) {
-    renderEngineCore(renderer, this, 0, S * 0.05, S * 0.14, S * 0.10);
+  renderCore(renderer, alpha = 1) {
+    renderEngineCore(renderer, this, 0, S * 0.05, S * 0.14, S * 0.10, alpha);
   }
 
   /**
@@ -134,11 +139,12 @@ export class Enemy {
    * never calls this for real gameplay (it batches hulls across every
    * on-screen enemy for performance — see EnemyCombat.renderHull); this is
    * for contexts that render exactly one enemy at a time, e.g. EnemyCodex's
-   * preview cards.
+   * preview cards or PrologueScene's portal creatures (which pass `alpha`
+   * to fade themselves in on spawn).
    */
-  render(renderer) {
-    this.renderFlame(renderer);
-    renderHull(renderer, this, SCOUT_HULL_PTS);
-    this.renderCore(renderer);
+  render(renderer, alpha = 1) {
+    this.renderFlame(renderer, alpha);
+    renderHull(renderer, this, SCOUT_HULL_PTS, alpha);
+    this.renderCore(renderer, alpha);
   }
 }

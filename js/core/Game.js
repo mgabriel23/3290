@@ -26,10 +26,7 @@ export class Game {
   constructor(canvas, stage) {
     this.stage = stage;
     this.renderer = new Renderer(canvas);
-    // DEV: skip intro + prologue cinematic, boot straight to the title screen
-    // To restore the full flow: replace this line with:
-    //   this.scene = new IntroScene(this.renderer, { onContinue: () => this._startPrologue() });
-    this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startTutorial(), devSkipToTitle: true });
+    this.scene = new IntroScene(this.renderer, { onContinue: () => this._startPrologue() });
     this._lastTimestamp = 0;
 
     this._tick = this._tick.bind(this);

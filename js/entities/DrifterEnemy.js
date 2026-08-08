@@ -392,12 +392,14 @@ export class DrifterEnemy {
    * This is for contexts that render exactly one clone at a time, e.g.
    * EnemyCodex's preview cards — mirrors WaveManager's per-clone styling
    * exactly (lineWidth always comes from the base `_cfg`, not the
-   * per-variant `_palette`, matching the batched path).
+   * per-variant `_palette`, matching the batched path). `alpha` is an
+   * optional entrance-fade multiplier (default 1) — see
+   * EnemyCombat.renderHull's doc for the convention.
    */
-  renderBody(renderer) {
+  renderBody(renderer, alpha = 1) {
     const flash = this._hitFlash > 0;
     renderer.fillStrokePaths([{ points: BODY_PTS, closed: true }], {
-      x: this.x, y: this.y, rotation: this._angle,
+      x: this.x, y: this.y, rotation: this._angle, alpha,
       fillColor:   flash ? '#ffffff' : this._palette.fillColor,
       strokeColor: flash ? '#ffffff' : this._palette.color,
       lineWidth:   this._cfg.lineWidth,
@@ -412,9 +414,10 @@ export class DrifterEnemy {
    * batches every visible clone's body (using the exported BODY_PTS) into
    * its shared hull pools, the same way it batches Scout/Rocketeer/Sniper.
    * (For a standalone single-clone render, call `renderBody` first — see
-   * EnemyCodex.)
+   * EnemyCodex.) `alpha` is an optional entrance-fade multiplier (default
+   * 1, so WaveManager's real per-frame calls are unaffected).
    */
-  render(renderer) {
+  render(renderer, alpha = 1) {
     const cfg   = this._cfg;
     const flash = this._hitFlash > 0;
     const c     = this._cosA, s = this._sinA;
@@ -460,7 +463,7 @@ export class DrifterEnemy {
     renderer.strokePaths(this._normalTentacleBatch, {
       x: this.x, y: this.y, rotation: this._angle,
       color: bodyColor, lineWidth: 2.2, lineCap: 'round',
-      glowBlur: this._palette.tentacleGlowBlur, glowColor: bodyColor, alpha: 0.85,
+      glowBlur: this._palette.tentacleGlowBlur, glowColor: bodyColor, alpha: 0.85 * alpha,
       singleStroke: true,
     }, normalCount);
 
@@ -468,7 +471,7 @@ export class DrifterEnemy {
       renderer.strokePaths([lashPath], {
         x: this.x, y: this.y, rotation: this._angle,
         color: bodyColor, lineWidth: 3, lineCap: 'round',
-        glowBlur: this._palette.lashGlowBlur, glowColor: bodyColor, alpha: 0.85,
+        glowBlur: this._palette.lashGlowBlur, glowColor: bodyColor, alpha: 0.85 * alpha,
       }, 1);
     }
 
@@ -483,7 +486,7 @@ export class DrifterEnemy {
       const pulse = 0.5 + 0.5 * Math.abs(Math.sin(this._age * 3 + j * 1.5));
       renderer.strokeCircle(wx, wy, 1.8, {
         color: this._palette.eyeColor, lineWidth: 2.5,
-        alpha: pulse,
+        alpha: pulse * alpha,
       });
     }
   }

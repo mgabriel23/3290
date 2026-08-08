@@ -185,31 +185,36 @@ export class SniperEnemy {
     return applyHit(this, damage);
   }
 
-  /** Engine exhaust — drawn behind the hull by WaveManager. */
-  renderFlame(renderer) {
-    renderEngineFlame(renderer, this, NOSE_LX, NOSE_LY, S * 0.45);
+  /**
+   * Engine exhaust — drawn behind the hull by WaveManager. `alpha` is an
+   * optional entrance-fade multiplier (default 1, so WaveManager's real
+   * per-frame calls are unaffected) — see EnemyCombat.renderHull's doc.
+   */
+  renderFlame(renderer, alpha = 1) {
+    renderEngineFlame(renderer, this, NOSE_LX, NOSE_LY, S * 0.45, alpha);
   }
 
   /**
    * Standalone single-entity render — flame → hull → core (+ charge orb).
    * WaveManager never calls this for real gameplay (it batches hulls across
    * every on-screen enemy for performance); this is for contexts that
-   * render exactly one enemy at a time, e.g. EnemyCodex's preview cards.
+   * render exactly one enemy at a time, e.g. EnemyCodex's preview cards or
+   * PrologueScene's portal creatures (which pass `alpha` to fade in on spawn).
    * Doesn't include renderExtras (the "!" warning marker / laser flash) —
    * those are attack-telegraph state, not part of the ship's resting look.
    */
-  render(renderer) {
-    this.renderFlame(renderer);
-    renderHull(renderer, this, SCOUT_HULL_PTS);
-    this.renderCore(renderer);
+  render(renderer, alpha = 1) {
+    this.renderFlame(renderer, alpha);
+    renderHull(renderer, this, SCOUT_HULL_PTS, alpha);
+    this.renderCore(renderer, alpha);
   }
 
   /** Engine orb + nose charge orb — drawn on top of hull by WaveManager. */
-  renderCore(renderer) {
+  renderCore(renderer, alpha = 1) {
     const cfg   = this._cfg;
     const flash = this._hitFlash > 0;
 
-    renderEngineCore(renderer, this, 0, S * 0.05, S * 0.14, S * 0.10);
+    renderEngineCore(renderer, this, 0, S * 0.05, S * 0.14, S * 0.10, alpha);
 
     if (flash) return;
 
@@ -227,7 +232,7 @@ export class SniperEnemy {
         lineWidth: cfg.chargeOrbLineWidth,
         glowBlur:  cfg.chargeOrbGlowBlur,
         glowColor: cfg.color,
-        alpha:     cfg.chargeOrbAlphaMin + t * (1 - cfg.chargeOrbAlphaMin),
+        alpha:     (cfg.chargeOrbAlphaMin + t * (1 - cfg.chargeOrbAlphaMin)) * alpha,
       });
 
     } else if (this._state === 'locked') {
@@ -239,7 +244,7 @@ export class SniperEnemy {
         lineWidth: cfg.lockedOrbLineWidth,
         glowBlur:  cfg.lockedOrbGlowBlur,
         glowColor: cfg.color,
-        alpha:     blink,
+        alpha:     blink * alpha,
       });
 
     } else if (this._state === 'flashing') {
@@ -250,7 +255,7 @@ export class SniperEnemy {
         lineWidth: cfg.lockedOrbLineWidth,
         glowBlur:  cfg.lockedOrbGlowBlur,
         glowColor: cfg.color,
-        alpha:     1 - t,
+        alpha:     (1 - t) * alpha,
       });
     }
   }
