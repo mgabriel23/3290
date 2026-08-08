@@ -305,6 +305,54 @@ export const Config = Object.freeze({
     hitFlashDuration: 0.15,
 
     /**
+     * How every type's `points`/`gold` below were derived — not
+     * independently hand-picked per type. There's currently no way for the
+     * player to take damage anywhere in the game (no player health field,
+     * no enemy-projectile-vs-player collision check exists), so "difficulty"
+     * can't be modeled as danger-to-player — it's modeled as verified
+     * effort-to-kill instead:
+     *
+     *   1. hitsToKill = ceil((health + healthPerLevel×(debutLevel-1)) /
+     *      (player.damage + player.damagePerLevel×(debutLevel-1))) — real
+     *      numbers from this file, evaluated at the level each type first
+     *      appears in Config.waves.levels.
+     *   2. EffortScore = hitsToKill × mobilityMultiplier × engagementMultiplier
+     *        mobility:   1.0 stationary-after-entry (Scout/Rocketeer/Sniper)
+     *                    1.15 smooth path movement (Drifter family)
+     *                    1.3  erratic physics bounce (Bouncer family) —
+     *                         player bullets travel straight up only (see
+     *                         Bullets.js), so a moving target is genuinely
+     *                         harder to stay aligned under
+     *        engagement: 1.15 for Drifter-family types, which fly their
+     *                    path and expire on their own if ignored — a small
+     *                    incentive to actually hunt them instead of just
+     *                    outlasting them. 1.0 (no bonus) for every type
+     *                    that never expires and must be killed regardless.
+     *   3. points = round(EffortScore × 33.33, nearest 10)
+     *      gold   = round(EffortScore × 1.667, nearest 1) — always ~1/20th
+     *      of points, the same ratio for every type, not re-tuned per type.
+     *
+     * Mobility/engagement are the only two design-judgment inputs in this
+     * model, deliberately kept small (±15-30%) so hitsToKill — the fully
+     * objective term — stays dominant. Scout and Rocketeer land equal on
+     * purpose: identical hits-to-kill, identical stationary mobility,
+     * identical mandatory-kill status — the homing rocket has no measurable
+     * extra difficulty today without a player-damage system. Revisit this
+     * whole model if/when the player can actually take damage.
+     *
+     * healthPerLevel note: most types share this file's implicit
+     * convention of one `healthPerLevel` per family, EXCEPT
+     * bouncer.splitter/bouncer.shielded, which each define their OWN
+     * `healthPerLevel` (read by WaveManager._spawnNext, not the base
+     * bouncer's) — see the comment on each. Without that, their relative
+     * tankiness over a plain Bouncer decays toward zero over a long
+     * endless-mode run, since a flat health head-start becomes
+     * proportionally smaller as player damage keeps climbing. Sniper
+     * sidesteps this the same way structurally (its own `healthPerLevel: 2`
+     * is already a dedicated per-type field, not shared with anything).
+     */
+
+    /**
      * Scout — basic fighter. Enters, parks at a fixed rest position,
      * fires aimed bullet bursts at the player.
      */
@@ -328,7 +376,10 @@ export const Config = Object.freeze({
       reloadTime:       2.2,
       hitRadius:        16,
       minSeparation:    60,
-      points:           100,  // reward on kill — baseline
+      // EffortScore 3.00 (hitsToKill 3, stationary, mandatory) — see the
+      // methodology comment above `hitFlashDuration`. Calibration anchor:
+      // the scaling constant is chosen so Scout, the very first enemy, lands at 100.
+      points:           100,
       gold:             5,
       audio: Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.40, poolSize: 4,
@@ -366,8 +417,11 @@ export const Config = Object.freeze({
       recoverTurnRate:  4,           // rad/sec — slow turn back toward the player during recovery
       hitRadius:        24,
       minSeparation:    64,
-      points:           300,  // reward on kill — tankiest ship-family enemy, telegraphed one-shot threat
-      gold:             15,
+      // EffortScore 8.00 (hitsToKill 8, stationary, mandatory) — highest
+      // hits-to-kill of any single-stage enemy in the roster. See the
+      // methodology comment above `hitFlashDuration`.
+      points:           270,
+      gold:             13,
 
       // Nose charge-orb visual tuning (see SniperEnemy.renderCore)
       chargeOrbStartRadius: 3,   // radius at t=0 while charging
@@ -423,8 +477,10 @@ export const Config = Object.freeze({
       reloadTime:       3.8,         // slow reload — rockets are powerful
       hitRadius:        16,
       minSeparation:    64,
-      points:           150,  // reward on kill — homing rocket is harder to dodge than a straight shot
-      gold:             8,
+      // Equal to Scout by design — see the EffortScore methodology comment
+      // above `hitFlashDuration` near the top of this `enemy` block.
+      points:           100,
+      gold:             5,
       audio: Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.50, poolSize: 4,
       }),
@@ -483,8 +539,13 @@ export const Config = Object.freeze({
       projectileRadius: 4,
 
       hitRadius:     18,
-      points:        120,  // reward on kill — base variant
-      gold:          6,
+      // EffortScore 5.29 (hitsToKill 4, path-moving ×1.15, optional-to-
+      // engage ×1.15) — identical to Sweeper/Diver/Weaver below, which all
+      // share this same base health/healthPerLevel and only differ in
+      // path/palette, not actual difficulty. See the methodology comment
+      // above `hitFlashDuration`.
+      points:        180,
+      gold:          9,
       audio: Object.freeze({
         // Lower than Rocketeer/Sniper (0.45) — formations of up to 8 clones
         // can die in close succession, and the shared SFX pool would
@@ -537,8 +598,11 @@ export const Config = Object.freeze({
         // widen the shared glow pass's bounding box.
         sparksPerEmit: 8,
 
-        points: 100,  // reward on kill — large formation (15), calmer per-clone threat than variety #1
-        gold:   5,
+        // Same EffortScore/hits-to-kill as base Drifter — 15 clones per
+        // formation vs 8 means total wave reward scales up proportionately
+        // on its own; no separate per-clone discount needed.
+        points: 180,
+        gold:   9,
       }),
 
       /**
@@ -585,8 +649,9 @@ export const Config = Object.freeze({
         }),
         sparksPerEmit: 10,
 
-        points: 130,  // reward on kill — fast kinematic fall
-        gold:   6,
+        // Same EffortScore as base Drifter/Sweeper/Weaver — same hits-to-kill.
+        points: 180,
+        gold:   9,
       }),
 
       /**
@@ -624,8 +689,9 @@ export const Config = Object.freeze({
         }),
         sparksPerEmit: 10,
 
-        points: 130,  // reward on kill — sustained on-screen sway threat
-        gold:   6,
+        // Same EffortScore as base Drifter/Sweeper/Diver — same hits-to-kill.
+        points: 180,
+        gold:   9,
       }),
     }),
 
@@ -686,21 +752,39 @@ export const Config = Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.3, poolSize: 4,
       }),
       sparksPerEmit: 10,
-      points: 150,  // reward on kill — persistent, doesn't naturally leave, must be fully destroyed
-      gold:   8,
+      // EffortScore 5.20 (hitsToKill 4, erratic-bounce mobility ×1.3,
+      // mandatory so no engagement bonus). See the methodology comment
+      // above `hitFlashDuration`.
+      points: 170,
+      gold:   9,
 
       splitter: Object.freeze({
         radius: 40,   // vp — ~2x the base hull size
         health: 12,   // ~4x base health
+        // Own healthPerLevel, 1.5x the base Bouncer's 1 (read by
+        // WaveManager._spawnNext — NOT the base bouncer.healthPerLevel).
+        // Without this, Splitter's flat +9 HP head start over a plain
+        // Bouncer becomes proportionally smaller every level (player
+        // damage keeps growing, the gap doesn't) — its relative tankiness
+        // would decay toward parity with a plain Bouncer over a long
+        // endless-mode run instead of staying a real step up.
+        healthPerLevel: 1.5,
 
         fragmentCount:    3,
         fragmentRadius:   12,  // vp — smaller than the base Bouncer (20)
         fragmentHealth:   1,
         fragmentSpeedMax: 200, // vp/sec — horizontal fan-out speed (vy is solved per-fragment, see spawnFragments)
 
-        points: 400,  // reward on kill — tanky (12 HP); each spawned fragment scores separately too
-        gold:   20,
-        fragmentPoints: 30,  // reward on kill — low-value, spawned incidentally
+        // EffortScore 10.40 (hitsToKill 8 from 12 HP @ healthPerLevel 1.5,
+        // erratic-bounce ×1.3) — the single highest-value type in the
+        // roster. Fragment reward below is its own separate, smaller
+        // EffortScore (1.30) — no extra "split bonus" stacked onto
+        // Splitter's own value, since the 3 spawned fragments already each
+        // earn their own reward when they're individually killed. See the
+        // methodology comment above `hitFlashDuration`.
+        points: 350,
+        gold:   17,
+        fragmentPoints: 40,
         fragmentGold:   2,
       }),
 
@@ -710,9 +794,17 @@ export const Config = Object.freeze({
         shieldColor:      '#6FE0FF', // ice-blue — visually distinct from the amber core
         shieldGlowBlur:     5,
         shieldHitGlowBlur: 12,
+        // Own healthPerLevel for the core, same 1.5x rationale as Splitter
+        // above — the shield's +2 flat hits don't decay on their own, but
+        // the core underneath was scaling at the same rate as a plain
+        // Bouncer's core.
+        healthPerLevel: 1.5,
 
-        points: 300,  // reward on kill — shield adds effective HP before the core can be hurt
-        gold:   15,
+        // EffortScore 10.40 (hitsToKill 8 total — 2 shield-absorbed hits +
+        // 6 core hits @ healthPerLevel 1.5 — × erratic-bounce ×1.3). See
+        // the methodology comment above `hitFlashDuration`.
+        points: 350,
+        gold:   17,
       }),
     }),
   }),
@@ -796,43 +888,131 @@ export const Config = Object.freeze({
    */
   waves: Object.freeze({
     simultaneous: true,
+    // Ten levels. Type COUNT climbs 1→2→3→4→5 across levels 1-5 (one new
+    // debut per level, so each actually gets a moment), then holds at a
+    // hard cap of 5 simultaneous types for levels 5-10 — from level 6 on,
+    // introducing a new type means retiring an older one, not just piling
+    // on. Scout and Rocketeer are the one exception: kept evergreen in
+    // every level from their debut onward as the "bread and butter"
+    // backbone, so there's always a familiar, easy rhythm-setter between
+    // the harder/newer threats rather than every level being 5 things to
+    // relearn at once. The retirement order also deliberately avoids ever
+    // stacking more than 2 Drifter-family reskins (Drifter/Sweeper/
+    // Diver/Weaver — same creature, different palette/path) into one
+    // level's 5 slots, so "5 types" reads as 5 *distinct* threats, not 3
+    // costume changes on one enemy. Health/damage already scale with
+    // `level` on their own (Config.player.damagePerLevel / each enemy's
+    // healthPerLevel — the ratio converges to a stable hits-to-kill value,
+    // it doesn't run away), so composition/density are this arc's real
+    // difficulty knobs, not stat inflation. Level 10 repeats forever once
+    // reached (WaveManager caps at the last entry) — it's a genuine
+    // Bouncer-family finale (Bouncer + Splitter + Shielded together for
+    // the first time), not a maximum-chaos dump, since that's also what
+    // "endless mode" plays like.
     levels: Object.freeze([
-      // Level 1 — scout and rocketeer
+      // Level 1 — {Scout}. Nothing to learn but "aim and shoot."
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'diver', count: 2, spawnInterval: 3 }),
-        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 3 }),
-        Object.freeze({ type: 'scout', count: 3, spawnInterval: 3 }),
-        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 3 })
+        Object.freeze({ type: 'scout', count: 4, spawnInterval: 3 }),
+        Object.freeze({ type: 'scout', count: 5, spawnInterval: 2.5 })
       ]) }),
-      // Level 2 - diver, scout, and rocketeer mix
+      // Level 2 — {Scout, Rocketeer}. Straight aimed shot vs. a homing
+      // rocket that keeps curving toward you — two threats that read differently.
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'diver', count: 2, spawnInterval: 5 }),
-        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.5 }),
-        Object.freeze({ type: 'diver', count: 1, spawnInterval: 5 }),
+        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 3 }),
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 }),
         Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.5 })
       ]) }),
-      // Level 3 — sniper, scout and drifter mix
+      // Level 3 — {Scout, Rocketeer, Diver}. A fast, accelerating vertical
+      // drop breaks up the parked-and-shoot rhythm with real urgency.
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 3 }),
-        Object.freeze({ type: 'drifter', count: 3, spawnInterval: 3.5 }),
+        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 3 }),
+        Object.freeze({ type: 'diver', count: 1, spawnInterval: 5 }),
         Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 }),
-        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 3 })
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.8 })
       ]) }),
-      // Level 4 — scout, rocketeer,drifter and sweeper mix
+      // Level 4 — {Scout, Rocketeer, Diver, Sniper}. First "read the
+      // telegraph" enemy — its "!" warning rewards a skilled dodge over pure reflexes.
+      Object.freeze({ enemies: Object.freeze([
+        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'diver', count: 1, spawnInterval: 5 }),
+        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 3.5 }),
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 })
+      ]) }),
+      // Level 5 — {Scout, Rocketeer, Diver, Sniper, Drifter}. The 5-type
+      // cap reached for the first time, and the first alien formation — a
+      // fixed path instead of player-tracking, with its own ranged
+      // tentacle-lash attack layered independently of movement.
+      Object.freeze({ enemies: Object.freeze([
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'diver', count: 1, spawnInterval: 5 }),
+        Object.freeze({ type: 'sniper', count: 2, spawnInterval: 3.5 }),
+        Object.freeze({ type: 'drifter', count: 1, spawnInterval: 5.5 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.8 })
+      ]) }),
+      // Level 6 — {Scout, Rocketeer, Sniper, Drifter, Sweeper}. Diver
+      // retires to make room for Sweeper (Drifter variant: a big 15-clone
+      // sweeping row). `simultaneous: false` starts here and stays for the
+      // rest of the arc — formations/threats are large or persistent
+      // enough from here on that overlapping groups would read as clutter, not pressure.
       Object.freeze({ simultaneous: false, enemies: Object.freeze([
-        Object.freeze({ type: 'drifter', count: 2, spawnInterval: 5 }),
-        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.8 }),
-        Object.freeze({ type: 'sweeper', count: 2, spawnInterval: 6 }),
-        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.8 }),
-        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.8 })
+        Object.freeze({ type: 'sweeper', count: 1, spawnInterval: 6 }),
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'sniper', count: 2, spawnInterval: 3 }),
+        Object.freeze({ type: 'drifter', count: 1, spawnInterval: 5 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.8 })
       ]) }),
-      // Level 5 — sniper, scout and diver mix
-       Object.freeze({ simultaneous: false, enemies: Object.freeze([
-        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 2.8 }),
-        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.8 }),
-        Object.freeze({ type: 'diver', count: 3, spawnInterval: 5 }),
-        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 2.8 }),
-        Object.freeze({ type: 'diver', count: 3, spawnInterval: 5 })
+      // Level 7 — {Scout, Rocketeer, Sniper, Sweeper, Weaver}. Drifter
+      // (the base variant) retires for Weaver (sine-wave descent) — keeps
+      // at most 2 Drifter-family types on screen together (Sweeper + Weaver).
+      Object.freeze({ simultaneous: false, enemies: Object.freeze([
+        Object.freeze({ type: 'weaver', count: 1, spawnInterval: 6 }),
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 3 }),
+        Object.freeze({ type: 'sweeper', count: 1, spawnInterval: 6 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'weaver', count: 1, spawnInterval: 6 })
+      ]) }),
+      // Level 8 — {Scout, Rocketeer, Sniper, Weaver, Bouncer}. Sweeper
+      // retires for Bouncer — a different kind of pressure: it never exits
+      // on its own, bounces off the barrier (damaging it directly), and
+      // must be fully destroyed. Deliberately lower headcount than level 7 —
+      // persistence, not volume, is the threat here.
+      Object.freeze({ simultaneous: false, enemies: Object.freeze([
+        Object.freeze({ type: 'bouncer', count: 3, spawnInterval: 3.5 }),
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'sniper', count: 3, spawnInterval: 3 }),
+        Object.freeze({ type: 'weaver', count: 2, spawnInterval: 6 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'bouncer', count: 2, spawnInterval: 3.5 })
+      ]) }),
+      // Level 9 — {Scout, Rocketeer, Weaver, Bouncer, Splitter}. Sniper
+      // retires for Splitter (tanky, breaks into 3 fragments on death) —
+      // introduced only after the player already knows a plain Bouncer from level 8.
+      Object.freeze({ simultaneous: false, enemies: Object.freeze([
+        Object.freeze({ type: 'splitter', count: 2, spawnInterval: 4.5 }),
+        Object.freeze({ type: 'scout', count: 2, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'weaver', count: 2, spawnInterval: 6 }),
+        Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'bouncer', count: 2, spawnInterval: 3.5 }),
+        Object.freeze({ type: 'splitter', count: 1, spawnInterval: 4.5 })
+      ]) }),
+      // Level 10 — {Scout, Rocketeer, Bouncer, Splitter, Shielded}. Weaver
+      // retires for Shielded (outer ring absorbs hits before the core
+      // takes damage) — the full Bouncer family together for the first
+      // time, the finale this arc has been building toward. Repeats
+      // forever once reached, so Scout/Rocketeer stay in the mix as
+      // breathing room rather than every group being a heavyweight.
+      Object.freeze({ simultaneous: false, enemies: Object.freeze([
+        Object.freeze({ type: 'shielded', count: 2, spawnInterval: 4 }),
+        Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.5 }),
+        Object.freeze({ type: 'bouncer', count: 3, spawnInterval: 3.5 }),
+        Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.8 }),
+        Object.freeze({ type: 'splitter', count: 2, spawnInterval: 4.5 }),
+        Object.freeze({ type: 'shielded', count: 2, spawnInterval: 4 })
       ]) }),
     ]),
   }),

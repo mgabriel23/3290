@@ -154,13 +154,17 @@ const ENTRIES = [
 
   { buildOrder: 9, type: 'splitter', name: 'Splitter', family: 'Bouncer family', kind: 'bouncer',
     color: Config.enemy.bouncer.color,
-    hp: Config.enemy.bouncer.splitter.health, hpPerLevel: Config.enemy.bouncer.healthPerLevel,
+    // Splitter/Shielded read their OWN healthPerLevel here, not the base
+    // Bouncer's — they scale 1.5x faster (see the Config comment on each)
+    // so their tankiness lead over a plain Bouncer holds up over a long
+    // endless-mode run instead of decaying toward parity.
+    hp: Config.enemy.bouncer.splitter.health, hpPerLevel: Config.enemy.bouncer.splitter.healthPerLevel,
     points: Config.enemy.bouncer.splitter.points, gold: Config.enemy.bouncer.splitter.gold,
     description: 'A larger, tankier Bouncer. On death it breaks into 3 small fragments that kick outward.' },
 
   { buildOrder: 10, type: 'shielded', name: 'Shielded', family: 'Bouncer family', kind: 'bouncer',
     color: Config.enemy.bouncer.color,
-    hp: Config.enemy.bouncer.health, hpPerLevel: Config.enemy.bouncer.healthPerLevel,
+    hp: Config.enemy.bouncer.health, hpPerLevel: Config.enemy.bouncer.shielded.healthPerLevel,
     points: Config.enemy.bouncer.shielded.points, gold: Config.enemy.bouncer.shielded.gold,
     description: `A normal Bouncer core wrapped in a shield ring that absorbs ${Config.enemy.bouncer.shielded.shieldHits} hits before the core takes any damage.` },
 

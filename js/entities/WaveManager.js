@@ -514,9 +514,15 @@ export class WaveManager {
       // 'splitter'/'shielded' force variant 2/3 — used for testing that
       // variety in isolation.
       let variant = 1;
-      if (type === 'splitter') variant = 2;
-      else if (type === 'shielded') variant = 3;
-      this._enemies.push(new BouncerEnemy({ variant, healthBonus: this._healthBonus(Config.enemy.bouncer) }));
+      let healthCfg = Config.enemy.bouncer;
+      if (type === 'splitter') { variant = 2; healthCfg = Config.enemy.bouncer.splitter; }
+      else if (type === 'shielded') { variant = 3; healthCfg = Config.enemy.bouncer.shielded; }
+      // Splitter/Shielded read their OWN healthPerLevel (see the comment on
+      // each), not the base Bouncer's — without this, `Config.enemy.bouncer`
+      // was always passed regardless of variant, silently discarding their
+      // elevated per-level scaling and letting their long-run tankiness
+      // decay toward a plain Bouncer's over many levels.
+      this._enemies.push(new BouncerEnemy({ variant, healthBonus: this._healthBonus(healthCfg) }));
       this._advanceSpawnIndex();
       return;
     }
