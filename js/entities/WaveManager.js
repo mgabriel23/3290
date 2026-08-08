@@ -134,6 +134,7 @@ export class WaveManager {
    */
   update(dt, playerX, playerY) {
     // All particle/projectile systems drain past _waveClear so effects finish
+    // (and keep moving/culling normally instead of freezing mid-flight)
     // before isDone returns true and the level transitions.
     this._particles.update(dt);
     this._rocketeerParticles.update(dt);
@@ -145,6 +146,7 @@ export class WaveManager {
     this._bouncerParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
     this._drifterProjectiles.update(dt);
+    this._enemyBullets.update(dt);
 
     if (this._waveClear) return;
 
@@ -196,8 +198,6 @@ export class WaveManager {
       }
     }
     this._enemies.length = w;
-
-    this._enemyBullets.update(dt);
 
     if (this._allSpawned && this._enemies.length === 0) this._waveClear = true;
   }
@@ -468,7 +468,8 @@ export class WaveManager {
       && !this._weaverParticles.active
       && !this._bouncerParticles.active
       && !this._rockets.active
-      && !this._drifterProjectiles.active;
+      && !this._drifterProjectiles.active
+      && !this._enemyBullets.active;
   }
 
   // ---------------------------------------------------------------------------

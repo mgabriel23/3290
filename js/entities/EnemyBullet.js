@@ -68,6 +68,9 @@ export class EnemyBullets {
     this._count = w;
   }
 
+  /** True while any bullet is still in flight — used by WaveManager.isDone. */
+  get active() { return this._count > 0; }
+
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
     if (this._count === 0) return;
