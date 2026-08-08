@@ -44,6 +44,19 @@ export class Renderer {
   }
 
   /**
+   * Re-establish the canvas transform as the base virtual→backing-store
+   * scale plus a translation, in virtual px — the seam a scene uses for
+   * camera/screen shake (see core/ScreenShake.js). Cheap (one setTransform
+   * call), so it's fine to call every frame regardless of whether a shake
+   * is actually active — pass (0, 0) to draw undisplaced, e.g. to reset
+   * before a UI layer that should never shake with the world.
+   * @param {number} [dx] @param {number} [dy]
+   */
+  setCameraOffset(dx = 0, dy = 0) {
+    this.ctx.setTransform(this.scale, 0, 0, this.scale, dx * this.scale, dy * this.scale);
+  }
+
+  /**
    * Convert viewport-relative client coordinates (CSS px — what pointer
    * events report) into virtual coordinates — the inverse of the mapping
    * `resize` establishes. Lets gesture-detecting input systems report

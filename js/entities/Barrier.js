@@ -12,6 +12,12 @@
  * strokePaths call so the whole barrier costs just two shadow-blur passes
  * per frame regardless of strut count.
  *
+ * Below `Config.barrier.lowHealth.threshold`, the whole barrier (arc +
+ * health readout) switches from its normal cyan to a pulsing warning red —
+ * see _isLowHealth/_lowHealthPulseAlpha, same breathing-alpha formula the
+ * UI's pulsing buttons already use, just faster/deeper so it reads as
+ * urgent rather than idle chrome.
+ *
  * All geometry is computed once from Config in the constructor — `render`
  * produces zero per-frame allocations.
  */
@@ -23,6 +29,7 @@ export class Barrier {
     this.health = 100; // 0–100; written by gameplay systems, read by this render method
     this._pulseX = 0;
     this._pulseT = -1; // -1 = no ripple in progress
+    this._age = 0; // seconds — drives the low-health warning pulse only
     this._initGeometry();
   }
 
@@ -48,6 +55,7 @@ export class Barrier {
 
   /** @param {number} dt */
   update(dt) {
+    this._age += dt;
     if (this._pulseT < 0) return;
     this._pulseT += dt;
     if (this._pulseT >= Config.barrier.pulse.duration) this._pulseT = -1;
@@ -55,16 +63,32 @@ export class Barrier {
 
   /** @param {number} [power]  player bullet damage — shown inside the dome's left side when given */
   render(renderer, power) {
-    const { color, lineWidth, glowBlur } = Config.barrier;
+    const { lineWidth, glowBlur } = Config.barrier;
     this._applyPulse();
+
+    const low = this._isLowHealth();
+    const color = low ? Config.barrier.lowHealth.color : Config.barrier.color;
+    const pulseAlpha = low ? this._lowHealthPulseAlpha() : 1;
+
     // Main arc — full brightness, full lineWidth
-    renderer.strokePaths(this._mainPaths, { color, lineWidth, glowBlur });
+    renderer.strokePaths(this._mainPaths, { color, lineWidth, glowBlur, alpha: pulseAlpha });
     // Details — inner echo, struts, emblem, anchors — all at the same dimmer style
     renderer.strokePaths(this._detailPaths, {
-      color, lineWidth: 1, glowBlur: glowBlur * 0.5, alpha: 0.45,
+      color, lineWidth: 1, glowBlur: glowBlur * 0.5, alpha: 0.45 * pulseAlpha,
     });
     this._renderHealth(renderer);
     if (power !== undefined) this._renderPower(renderer, power);
+  }
+
+  /** True once health has dropped to (or below) the warning threshold — stays true all the way to 0, not just briefly on crossing it. */
+  _isLowHealth() {
+    return this.health <= Config.barrier.lowHealth.threshold;
+  }
+
+  /** Same breathing-alpha shape as the UI's pulsing buttons (see EnemyCodex/PlaybackControls), just faster/deeper. */
+  _lowHealthPulseAlpha() {
+    const { pulseSpeed, pulseDepth } = Config.barrier.lowHealth;
+    return 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._age * pulseSpeed));
   }
 
   /**
@@ -96,11 +120,12 @@ export class Barrier {
       Config.barrier;
     const { width: vW } = Config.virtual;
     const peakY = baseY - arcHeight; // y of the arc's topmost point
+    const color = this._isLowHealth() ? Config.barrier.lowHealth.color : healthColor;
     renderer.drawText('SHIELD', vW / 2, peakY + 26, {
-      font: healthLabelFont, color: healthColor, alpha: 0.5,
+      font: healthLabelFont, color, alpha: 0.5,
     });
     renderer.drawText(String(this.health), vW / 2, peakY + 52, {
-      font: healthValueFont, color: healthColor, glowBlur: healthGlowBlur,
+      font: healthValueFont, color, glowBlur: healthGlowBlur,
     });
   }
 

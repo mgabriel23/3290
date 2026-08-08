@@ -68,8 +68,9 @@ export class WaveManager {
    * @param {number} level  1-based. Values beyond the config array reuse the last entry.
    * @param {import('./Barrier.js').Barrier} barrier  used by Bouncer clones to detect/damage the barrier on impact
    * @param {import('./HUD.js').HUD} hud  score/gold are awarded directly onto it on kill — see handleBulletHit/_rewardFor
+   * @param {import('../core/ScreenShake.js').ScreenShake} screenShake  triggered on barrier impacts — see the onBarrierHit closure below; kill-triggered shake/hit-stop instead lives in GameplayScene, driven by handleBulletHit's return value
    */
-  constructor(level, barrier, hud) {
+  constructor(level, barrier, hud, screenShake) {
     const levels = Config.waves.levels;
     this._level   = level;
     this._waveCfg = levels[Math.min(level - 1, levels.length - 1)];
@@ -78,6 +79,7 @@ export class WaveManager {
     this._onBarrierHit    = (x) => {
       barrier.takeDamage(Config.enemy.bouncer.barrierDamage);
       barrier.pulse(x);
+      screenShake.trigger(Config.screenShake.barrierTrauma);
     };
 
     // Player bullet damage scales with level — see Config.player.damage/damagePerLevel.
@@ -386,7 +388,10 @@ export class WaveManager {
     this._weaverParticles.render(renderer);
   }
 
-  /** Called by GameplayScene when a player bullet hits an enemy. */
+  /**
+   * Called by GameplayScene when a player bullet hits an enemy.
+   * @returns {boolean} true if this hit was fatal — GameplayScene uses this to trigger kill-feedback (screen shake, hit-stop)
+   */
   handleBulletHit(enemy) {
     const killed = enemy.hit(this._playerDamage);
     if (killed) {
@@ -415,6 +420,7 @@ export class WaveManager {
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
       }
     }
+    return killed;
   }
 
   /**

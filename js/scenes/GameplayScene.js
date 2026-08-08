@@ -25,9 +25,18 @@
  * this scene is what enforces that only one can be open at a time; the mute
  * button (also owned by `PlaybackControls`) never opens an overlay, so it
  * stays tappable regardless of what else is open.
+ *
+ * Impact feedback: this scene owns a `ScreenShake` (see core/ScreenShake.js)
+ * and a `_hitStopTimer` — a kill triggers both (see `_checkCollisions`),
+ * and a barrier impact triggers shake on its own (see WaveManager's
+ * onBarrierHit, which this scene hands its ScreenShake instance into at
+ * construction). `render()` applies the shake offset only to the "world"
+ * layer, resetting to (0, 0) before the UI layer so HUD/codex/playback
+ * buttons never visually drift from their own tap hit-boxes.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
+import { ScreenShake } from '../core/ScreenShake.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
 import { EnemyCodex } from '../entities/EnemyCodex.js';
@@ -48,6 +57,8 @@ export class GameplayScene {
     this.hud = new HUD();
     this._codex = new EnemyCodex();
     this._playback = new PlaybackControls();
+    this._screenShake = new ScreenShake();
+    this._hitStopTimer = 0; // seconds of gameplay-time freeze remaining — see update()'s effectiveDt
     this._age = 0; // seconds since this scene started — drives the starfield fade-in
     this._pointerDown = false;
 
@@ -63,29 +74,42 @@ export class GameplayScene {
     this._waveManager = null;
   }
 
-  /** Advance the backdrop and the player by `dt` seconds. */
+  /**
+   * Advance the backdrop and the player by `dt` seconds.
+   *
+   * Hit-stop: on a kill, `_checkCollisions` sets `_hitStopTimer` — while
+   * it's counting down, `effectiveDt` is 0 for every gameplay sub-system
+   * (barrier/player/bullets/wave), producing a brief freeze-frame without
+   * either of them needing to know hit-stop exists. The timer itself, and
+   * screen shake's own decay, always use the real `dt` so the freeze
+   * actually expires and a shake still tails off even mid-freeze.
+   */
   update(dt) {
     this._codex.update(dt);
     this._playback.update(dt);
     this.starfield.update(dt); // keeps drifting even while paused/codex is open — purely cosmetic, not gameplay
     if (this._codex.isOpen || this._playback.isPaused) return; // frozen — nothing gameplay-related advances
 
-    this._age    += dt;
-    this._levelAge += dt;
+    this._screenShake.update(dt);
+    this._hitStopTimer = Math.max(0, this._hitStopTimer - dt);
+    const effectiveDt = this._hitStopTimer > 0 ? 0 : dt;
+
+    this._age    += effectiveDt;
+    this._levelAge += effectiveDt;
 
     // Transition from intro → active once the indicator animation is done
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
       this._levelState  = 'active';
-      this._waveManager = new WaveManager(this._level, this.barrier, this.hud);
+      this._waveManager = new WaveManager(this._level, this.barrier, this.hud, this._screenShake);
     }
 
-    this.barrier.update(dt);
-    this.player.update(dt);
+    this.barrier.update(effectiveDt);
+    this.player.update(effectiveDt);
 
     // Bullets and enemies are suppressed during the level intro.
     if (this._levelState === 'active') {
-      this.bullets.update(dt, this.player);
-      this._waveManager.update(dt, this.player.x, this.player.y);
+      this.bullets.update(effectiveDt, this.player);
+      this._waveManager.update(effectiveDt, this.player.x, this.player.y);
       this._checkCollisions();
 
       // Wave cleared AND all death effects finished → begin the next level intro
@@ -98,8 +122,16 @@ export class GameplayScene {
     }
   }
 
-  /** Render one frame. */
+  /**
+   * Render one frame. The "world" layer (starfield/barrier/player/bullets/
+   * enemies) is drawn under `_screenShake`'s current offset; the UI layer
+   * (HUD, level intro, codex, playback controls) is drawn after resetting
+   * the camera back to (0, 0), so buttons never visually drift away from
+   * their own (unshaken) tap hit-boxes.
+   */
   render() {
+    const shake = this._screenShake.getOffset();
+    this.renderer.setCameraOffset(shake.x, shake.y);
     this.renderer.clear(Config.colors.void);
     this._renderStarfield();
     const playerDamage = Config.player.damage + (this._level - 1) * Config.player.damagePerLevel;
@@ -107,6 +139,8 @@ export class GameplayScene {
     this.player.render(this.renderer);
     this.bullets.render(this.renderer);
     this._waveManager?.render(this.renderer);
+
+    this.renderer.setCameraOffset(0, 0);
     this.hud.render(this.renderer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
@@ -165,14 +199,22 @@ export class GameplayScene {
   /**
    * Test every active enemy against the player bullet pool. Each hit consumes
    * one bullet and calls `enemy.hit()` — enemies handle their own health and
-   * death-flash logic. Called once per frame during 'active' state.
+   * death-flash logic. Called once per frame during 'active' state. A kill
+   * triggers screen shake and a brief hit-stop (see update()'s effectiveDt);
+   * `Math.max` (not `+=`) on the timer means several kills in the same frame
+   * extend the freeze to the configured duration rather than stacking it
+   * into a longer one.
    */
   _checkCollisions() {
     const enemies = this._waveManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       if (this.bullets.checkHit(e.x, e.y, e.hitRadius)) {
-        this._waveManager.handleBulletHit(e);
+        const killed = this._waveManager.handleBulletHit(e);
+        if (killed) {
+          this._screenShake.trigger(Config.screenShake.killTrauma);
+          this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);
+        }
       }
     }
   }

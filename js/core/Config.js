@@ -81,6 +81,36 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Camera shake — a small "trauma" accumulator (see core/ScreenShake.js):
+   * each trigger adds trauma (clamped at 1), which decays linearly over
+   * time while the actual offset is trauma SQUARED × maxOffset, so it
+   * snaps hard on impact and tails off quickly rather than swaying evenly.
+   * GameplayScene owns one instance and applies its offset only to the
+   * "world" layer (starfield/barrier/player/bullets/enemies) — never to
+   * the HUD/codex/playback UI layer, so buttons never visually drift from
+   * their tap hit-boxes.
+   */
+  screenShake: Object.freeze({
+    decayPerSecond: 2.5, // trauma drains this fast — a single kill's shake fully settles in well under 100ms
+    maxOffset: 8,        // virtual px — camera offset at full (1.0) trauma
+    killTrauma: 0.18,    // added per enemy kill — a burst of rapid kills stacks up further (capped at 1)
+    barrierTrauma: 0.28, // added per barrier impact — stronger than a kill; it's your defense taking a hit
+  }),
+
+  /**
+   * Hit-stop: a very brief freeze of gameplay time on a kill — the classic
+   * "punch" cheat that sells impact without any new animation work. Only
+   * the gameplay sub-systems (barrier/player/bullets/wave) are frozen —
+   * see GameplayScene.update's `effectiveDt` — cosmetic-only systems
+   * (starfield, screen-shake decay, the freeze timer itself) keep using
+   * real dt so the freeze actually expires and the backdrop never visibly
+   * stutters.
+   */
+  hitStop: Object.freeze({
+    killDuration: 0.05, // seconds — short enough to read as a punch, not lag, even on back-to-back kills
+  }),
+
+  /**
    * Player bullets: auto-fired as a continuous stream once the player's
    * ship has landed, rendered as short glowing capsule strokes in the same
    * neon-cyan as the hull so they read as energy bolts rather than solid
@@ -1165,6 +1195,18 @@ export const Config = Object.freeze({
       duration:  0.4, // seconds — ripple fully settles after this long
       frequency: 24,  // rad/sec — spring oscillation speed
       damping:   10,  // exponential decay rate of the oscillation
+    }),
+
+    // Warning pulse once health drops at/below `threshold` — the arc and
+    // its health readout swap to a pulsing red instead of the normal cyan,
+    // same breathing-alpha formula the UI's pulsing buttons already use
+    // (1 - depth*(0.5+0.5*sin(age*speed))), just faster/deeper so it reads
+    // as urgent rather than idle. See Barrier._isLowHealth/_lowHealthAlpha.
+    lowHealth: Object.freeze({
+      threshold:  25,        // health (0-100) at/below which the warning kicks in
+      color:      '#ff3b3b', // warning red
+      pulseSpeed: 4.0,       // rad/sec — noticeably faster than the ~2.0 UI buttons pulse at
+      pulseDepth: 0.5,       // how far the alpha dips at the trough of each pulse
     }),
   }),
 
