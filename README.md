@@ -8,6 +8,8 @@ A complete core gameplay loop. The flow: an opening cinematic (`PrologueScene`, 
 
 Enemy roster: **Scout**/**Rocketeer** (aimed bullets / homing rockets), **Sniper** (charges then fires an instant laser at a historical player position, with a "!" telegraph), a four-variant **Drifter** family (looping/sweeping/diving/weaving tentacle-creature formations that lash tracking projectiles), and a **Bouncer** family (gravity-bounced hexagons, some splitting into fragments or carrying an absorbing shield on death/hit). Enemy death triggers a pooled shockwave-ring + spark burst; the barrier takes damage and pulses on impact.
 
+A small "?" button (top-center, always visible during gameplay) opens an in-game reference — the Enemy Codex — that pauses the game and pages through a card per enemy type, each with a re-drawn thumbnail of its actual hull, a short description, and its stats (`EnemyCodex.js`; see also `docs/enemies.md`, the fuller written reference this is condensed from).
+
 The game's original entry point, `IntroScene` (a "swipe up to continue" prompt), still exists and works, but `Game` currently boots straight into `PrologueScene` via a dev-convenience flag — see the comment above that line in `Game.js` for how to restore the full flow.
 
 ## Tech stack
@@ -47,6 +49,7 @@ space-shooter/
 │   │   ├── DrifterProjectiles.js       # Drifter's tracking-orb projectile pool
 │   │   ├── BouncerEnemy.js             # Gravity-bounced hexagon + splitter/shielded variants
 │   │   ├── EnemyCombat.js              # Shared hit/death-flash/entry-glide/engine-render functions
+│   │   ├── EnemyCodex.js               # In-gameplay "?" button — pauses and pages through a card per enemy type
 │   │   ├── EnemyBullet.js / Rockets.js # Enemy projectile pools (straight capsule / homing)
 │   │   ├── Particles.js                # Pooled death-explosion shockwave rings + sparks
 │   │   ├── Barrier.js                  # The structure the player defends

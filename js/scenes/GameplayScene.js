@@ -1,26 +1,32 @@
 /**
  * GameplayScene.js
- * The gameplay screen foundation.
- *
- * Current milestone: an animated backdrop — a drifting starfield (see
- * Starfield, composed here exactly like Player) that loops seamlessly
- * downward, with the player's ship launching into it. This remains the
- * slot where future gameplay systems (input, physics, enemies, HUD)
- * will eventually be composed, but nothing beyond what's described here
- * is stubbed in yet, by design.
+ * The main gameplay screen. Composes the player ship, its bullets, the
+ * barrier being defended, the HUD, the drifting starfield backdrop, and
+ * (once a level's intro announcement finishes) a `WaveManager` that owns
+ * that level's enemies/projectiles/particles — see each entity's own file
+ * for its responsibilities. This scene's job is orchestration: level
+ * sequencing (`_levelState`: 'intro' → 'active' → next level's 'intro'),
+ * routing gestures to the player ship or the enemy codex, and running the
+ * player-bullet-vs-enemy collision check once per frame.
  *
  * Entrance: the starfield doesn't snap into view — it eases in from
  * fully transparent over `Config.starfield.fadeInDuration`, so the
- * handoff from the intro's static label feels like a soft reveal
+ * handoff from the tutorial's dim overlay feels like a soft reveal
  * rather than an abrupt scene swap (the void backdrop is identical in
- * both scenes, so only the stars themselves need to fade). This scene
+ * every scene, so only the stars themselves need to fade). This scene
  * is what drives that fade — Starfield itself stays opinion-free about
  * when or how it should appear; it just knows how to draw and scroll.
+ *
+ * The enemy codex (`EnemyCodex`) freezes everything gameplay-related
+ * (`update` returns early) while it's open, but the starfield keeps
+ * drifting and the scene still renders one last normal frame underneath
+ * the codex's dimming overlay, so the game reads as "paused", not "gone".
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
+import { EnemyCodex } from '../entities/EnemyCodex.js';
 import { HUD } from '../entities/HUD.js';
 import { Player } from '../entities/Player.js';
 import { Starfield } from '../entities/Starfield.js';
@@ -35,6 +41,7 @@ export class GameplayScene {
     this.player = new Player();
     this.bullets = new Bullets();
     this.hud = new HUD();
+    this._codex = new EnemyCodex();
     this._age = 0; // seconds since this scene started — drives the starfield fade-in
     this._pointerDown = false;
 
@@ -52,6 +59,10 @@ export class GameplayScene {
 
   /** Advance the backdrop and the player by `dt` seconds. */
   update(dt) {
+    this._codex.update(dt);
+    this.starfield.update(dt); // keeps drifting even while the codex is open — purely cosmetic, not gameplay
+    if (this._codex.isOpen) return; // frozen — nothing gameplay-related advances while the codex is up
+
     this._age    += dt;
     this._levelAge += dt;
 
@@ -61,7 +72,6 @@ export class GameplayScene {
       this._waveManager = new WaveManager(this._level, this.barrier);
     }
 
-    this.starfield.update(dt);
     this.barrier.update(dt);
     this.player.update(dt);
 
@@ -93,20 +103,31 @@ export class GameplayScene {
     this.hud.render(this.renderer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
+    // Codex renders last of all — its button (and, while open, its full-screen
+    // card) must sit on top of everything else, including the level intro.
+    this._codex.render(this.renderer);
   }
 
   handlePointerDown(x, y) {
+    // Both TapInput and DragInput fire on the same physical tap (pointerdown
+    // fires before the tap is recognized) — without this guard, the tap that
+    // opens the codex would first snap the ship to the button's position.
+    if (this._codex.isOpen || this._codex.isInsideButton(x, y)) return;
     this._pointerDown = true;
     this.player.moveTo(x, y);
   }
 
   handlePointerMove(x, y) {
-    if (!this._pointerDown) return;
+    if (!this._pointerDown || this._codex.isOpen) return;
     this.player.moveTo(x, y);
   }
 
   handlePointerUp() {
     this._pointerDown = false;
+  }
+
+  handleTap(x, y) {
+    this._codex.handleTap(x, y);
   }
 
   /**

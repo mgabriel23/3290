@@ -18,7 +18,7 @@
  * class.
  */
 import { Config } from '../core/Config.js';
-import { applyHit, tickDeathState, setState, stepEntryGlide, renderEngineFlame, renderEngineCore } from './EnemyCombat.js';
+import { applyHit, tickDeathState, setState, stepEntryGlide, renderEngineFlame, renderEngineCore, renderHull } from './EnemyCombat.js';
 
 // Exported so WaveManager can pre-transform hull points to world space for batched rendering.
 export const SCOUT_S = 22;
@@ -127,5 +127,18 @@ export class Enemy {
   /** Engine core orb — must be drawn AFTER the hull so it sits on top of it. */
   renderCore(renderer) {
     renderEngineCore(renderer, this, 0, S * 0.05, S * 0.14, S * 0.10);
+  }
+
+  /**
+   * Standalone single-entity render — flame → hull → core. WaveManager
+   * never calls this for real gameplay (it batches hulls across every
+   * on-screen enemy for performance — see EnemyCombat.renderHull); this is
+   * for contexts that render exactly one enemy at a time, e.g. EnemyCodex's
+   * preview cards.
+   */
+  render(renderer) {
+    this.renderFlame(renderer);
+    renderHull(renderer, this, SCOUT_HULL_PTS);
+    this.renderCore(renderer);
   }
 }

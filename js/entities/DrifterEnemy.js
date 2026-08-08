@@ -386,10 +386,33 @@ export class DrifterEnemy {
   }
 
   /**
+   * The body hull, standalone. WaveManager never calls this for real
+   * gameplay — it batches every visible clone's body into its own shared
+   * hull pools instead (the same way it batches Scout/Rocketeer/Sniper).
+   * This is for contexts that render exactly one clone at a time, e.g.
+   * EnemyCodex's preview cards — mirrors WaveManager's per-clone styling
+   * exactly (lineWidth always comes from the base `_cfg`, not the
+   * per-variant `_palette`, matching the batched path).
+   */
+  renderBody(renderer) {
+    const flash = this._hitFlash > 0;
+    renderer.fillStrokePaths([{ points: BODY_PTS, closed: true }], {
+      x: this.x, y: this.y, rotation: this._angle,
+      fillColor:   flash ? '#ffffff' : this._palette.fillColor,
+      strokeColor: flash ? '#ffffff' : this._palette.color,
+      lineWidth:   this._cfg.lineWidth,
+      glowBlur:    flash ? this._palette.hitGlowBlur : this._palette.glowBlur,
+      glowColor:   flash ? '#ffffff' : this._palette.color,
+    });
+  }
+
+  /**
    * Tentacles and eyes — drawn individually per clone (variable tentacle
    * geometry can't be pooled). The body is NOT drawn here: WaveManager
    * batches every visible clone's body (using the exported BODY_PTS) into
    * its shared hull pools, the same way it batches Scout/Rocketeer/Sniper.
+   * (For a standalone single-clone render, call `renderBody` first — see
+   * EnemyCodex.)
    */
   render(renderer) {
     const cfg   = this._cfg;

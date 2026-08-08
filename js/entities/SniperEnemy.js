@@ -22,8 +22,8 @@
  * with Enemy.js via EnemyCombat.js — see that file's header for why.
  */
 import { Config } from '../core/Config.js';
-import { SCOUT_S } from './Enemy.js';
-import { applyHit, tickDeathState, setState, stepEntryGlide, renderEngineFlame, renderEngineCore } from './EnemyCombat.js';
+import { SCOUT_HULL_PTS, SCOUT_S } from './Enemy.js';
+import { applyHit, tickDeathState, setState, stepEntryGlide, renderEngineFlame, renderEngineCore, renderHull } from './EnemyCombat.js';
 
 const S            = SCOUT_S; // shared with Scout — both hulls use the same 22vp base size
 const HIST_STEP    = 0.05;  // seconds between position samples
@@ -188,6 +188,20 @@ export class SniperEnemy {
   /** Engine exhaust — drawn behind the hull by WaveManager. */
   renderFlame(renderer) {
     renderEngineFlame(renderer, this, NOSE_LX, NOSE_LY, S * 0.45);
+  }
+
+  /**
+   * Standalone single-entity render — flame → hull → core (+ charge orb).
+   * WaveManager never calls this for real gameplay (it batches hulls across
+   * every on-screen enemy for performance); this is for contexts that
+   * render exactly one enemy at a time, e.g. EnemyCodex's preview cards.
+   * Doesn't include renderExtras (the "!" warning marker / laser flash) —
+   * those are attack-telegraph state, not part of the ship's resting look.
+   */
+  render(renderer) {
+    this.renderFlame(renderer);
+    renderHull(renderer, this, SCOUT_HULL_PTS);
+    this.renderCore(renderer);
   }
 
   /** Engine orb + nose charge orb — drawn on top of hull by WaveManager. */

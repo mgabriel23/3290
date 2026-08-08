@@ -887,6 +887,83 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Enemy Codex — an in-gameplay reference button (see entities/EnemyCodex.js)
+   * that pauses the game and pages through one card per enemy type, each
+   * showing a re-drawn vector thumbnail of its actual hull, a short
+   * description, and its stats. Same sci-fi chrome language as the rest of
+   * the game's UI (HUD, title screen, tutorial).
+   */
+  codex: Object.freeze({
+    button: Object.freeze({
+      x: 270, y: 34, radius: 16, // virtual px — the empty top-center gap between the HUD's score/gold panels
+      color: '#4DEFFF',
+      lineWidth: 1.5,
+      glowBlur: 6,
+      font: '400 16px "Audiowide", "Courier New", monospace',
+      pulseSpeed: 2.0, // rad/sec — same breathing shape as the title screen's PLAY button
+      pulseDepth: 0.3,
+    }),
+    overlay: Object.freeze({
+      dimAlpha: 0.85, // how dark the frozen gameplay frame behind the card reads
+      fadeInDuration: 0.2, // seconds — card content eases in on open/page-change rather than popping
+
+      // Layout is grouped by proximity, not evenly spread — tight gaps
+      // within a related group (name+tag, the header pair), larger gaps
+      // between groups (header / picture frame / identity / description /
+      // stat), and deliberate breathing room at the bottom for thumb reach.
+      titleFont:  '400 16px "Audiowide", "Courier New", monospace',
+      titleColor: '#4DEFFF',
+      titleY: 56,
+
+      progressFont:  '400 12px "Audiowide", "Courier New", monospace',
+      progressColor: '#aab4d4',
+      progressY: 86,
+
+      // Enemies are drawn at their real in-game size (see EnemyCodex —
+      // it renders actual entity instances, not a re-derived approximation),
+      // so this "display case" frame is sized to comfortably fit the
+      // largest entry (Splitter, 80vp across) with padding; smaller entries
+      // just sit smaller within the same consistent frame.
+      frameY: 250,
+      frameHalfWidth: 100,
+      frameHalfHeight: 90,
+      frameLegSize: 16,
+      frameColor: '#4DEFFF',
+      frameLineWidth: 1,
+      frameGlowBlur: 4,
+
+      nameFont:  '400 24px "Audiowide", "Courier New", monospace',
+      nameGlowBlur: 8,
+      nameY: 372,
+
+      tagFont:  '400 13px "Audiowide", "Courier New", monospace',
+      tagColor: '#aab4d4',
+      tagY: 402,
+
+      descFont: '400 15px "Courier New", monospace',
+      descColor: '#e8ecff',
+      descY: 452,
+      descLineHeight: 24,
+      descMaxWidth: 420,
+
+      statFont:  '400 14px "Audiowide", "Courier New", monospace',
+      statColor: '#4DEFFF',
+      statY: 548,
+
+      arrowColor: '#4DEFFF',
+      arrowGlowBlur: 6,
+      arrowY: 250,           // aligned with the frame
+      arrowMarginX: 40,      // vp from each screen edge
+      arrowHalfSize: 22,     // vp — half-width/height of the tappable arrow hit-box
+
+      footerFont:  '400 11px "Audiowide", "Courier New", monospace',
+      footerColor: '#aab4d4',
+      footerY: 780,
+      footerText: 'TAP ARROWS TO BROWSE · TAP ? TO CLOSE',
+    }),
+  }),
+
+  /**
    * Tutorial overlay. Plays once between the title screen and the first
    * gameplay session — the full gameplay backdrop (starfield, barrier, HUD)
    * is visible behind a dim overlay so every hint arrow points at the real

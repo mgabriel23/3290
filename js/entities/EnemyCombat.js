@@ -4,7 +4,7 @@
  * SniperEnemy, DrifterEnemy, and — partially — BouncerEnemy): taking a
  * bullet hit, holding position while the death-flash plays out, gliding in
  * from the spawn edge to a resting position, and drawing the shared
- * engine-flame/engine-core look.
+ * hull/engine-flame/engine-core look.
  *
  * These are plain functions that take the enemy instance as their first
  * argument rather than a base class: the four enemy classes have different
@@ -75,6 +75,30 @@ export function stepEntryGlide(enemy, cfg, dt, nextState) {
     enemy.y = enemy._restY;
     setState(enemy, nextState);
   }
+}
+
+/**
+ * Fill+stroke an enemy's hull polygon at its current position/angle,
+ * flashing white while hit-flashing. WaveManager doesn't call this for real
+ * gameplay — it pre-transforms `hullPts` into its own pooled arrays instead,
+ * so many enemies' hulls can be batched into one shadow-blur pass. This is
+ * the standalone equivalent, for contexts that only ever render one enemy
+ * at a time (currently: EnemyCodex's preview cards).
+ * @param {import('../core/Renderer.js').Renderer} renderer
+ * @param {{ x: number, y: number, _angle: number, _cfg: object, _hitFlash: number }} enemy
+ * @param {Array<[number, number]>} hullPts
+ */
+export function renderHull(renderer, enemy, hullPts) {
+  const cfg   = enemy._cfg;
+  const flash = enemy._hitFlash > 0;
+  renderer.fillStrokePaths([{ points: hullPts, closed: true }], {
+    x: enemy.x, y: enemy.y, rotation: enemy._angle,
+    fillColor:   flash ? '#ffffff' : cfg.fillColor,
+    strokeColor: flash ? '#ffffff' : cfg.color,
+    lineWidth:   cfg.lineWidth,
+    glowBlur:    flash ? cfg.hitGlowBlur : cfg.glowBlur,
+    glowColor:   flash ? '#ffffff' : cfg.color,
+  });
 }
 
 /**
