@@ -142,11 +142,24 @@ export class Renderer {
     if (alpha < 1) ctx.globalAlpha = alpha;
     if (glowBlur > 0) {
       ctx.shadowColor = glowColor ?? color;
-      ctx.shadowBlur = glowBlur;
+      ctx.shadowBlur = this._glow(glowBlur);
     }
     ctx.fillText(text, x, y);
     ctx.globalAlpha = prevAlpha;
     if (glowBlur > 0) ctx.shadowBlur = 0;
+  }
+
+  /**
+   * Scales an authored `glowBlur` radius by `Config.performance.glowScale`
+   * — the one seam every `ctx.shadowBlur` assignment routes through, so
+   * shadow-blur cost (Canvas 2D's most expensive per-pixel operation,
+   * especially on WebKit/Safari) can be tuned globally without touching
+   * the individual glow values authored throughout the rest of Config.
+   * @param {number} glowBlur
+   * @returns {number}
+   */
+  _glow(glowBlur) {
+    return glowBlur * Config.performance.glowScale;
   }
 
   /**
@@ -190,7 +203,7 @@ export class Renderer {
     if (lineCap !== 'butt') ctx.lineCap = lineCap;
     if (glowBlur > 0) {
       ctx.shadowColor = glowColor ?? color;
-      ctx.shadowBlur = glowBlur;
+      ctx.shadowBlur = this._glow(glowBlur);
     }
 
     if (singleStroke) {
@@ -265,7 +278,7 @@ export class Renderer {
       // Phase 2: build compound path for all outlines, stroke once — 1 GPU shadow pass total
       if (glowBlur > 0) {
         ctx.shadowColor = glowColor ?? strokeColor;
-        ctx.shadowBlur  = glowBlur;
+        ctx.shadowBlur  = this._glow(glowBlur);
       }
       ctx.beginPath();
       for (let i = 0; i < count; i++) {
@@ -278,7 +291,7 @@ export class Renderer {
     } else {
       if (glowBlur > 0) {
         ctx.shadowColor = glowColor ?? strokeColor;
-        ctx.shadowBlur  = glowBlur;
+        ctx.shadowBlur  = this._glow(glowBlur);
       }
       for (let i = 0; i < count; i++) {
         const pts = paths[i].points;
@@ -331,7 +344,7 @@ export class Renderer {
     ctx.lineWidth   = lineWidth;
     if (glowBlur > 0) {
       ctx.shadowColor = glowColor ?? color;
-      ctx.shadowBlur  = glowBlur;
+      ctx.shadowBlur  = this._glow(glowBlur);
     }
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);

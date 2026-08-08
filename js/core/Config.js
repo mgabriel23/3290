@@ -38,6 +38,28 @@ export const Config = Object.freeze({
    */
   performance: Object.freeze({
     maxDevicePixelRatio: 2,
+
+    /**
+     * Global multiplier applied to every `glowBlur` value at the moment
+     * it reaches the canvas (see Renderer._glow) — every entity's own
+     * Config still authors its "real" glow radius (e.g. `glowBlur: 14`),
+     * and this scales it down uniformly at the one seam that actually
+     * calls `ctx.shadowBlur`, rather than that number being touched
+     * everywhere it's authored throughout Config.
+     *
+     * Exists because Canvas 2D's shadow-blur is disproportionately
+     * expensive on WebKit/Safari (iOS) specifically — well past what the
+     * dpr cap above addresses, since it's a per-pixel blur-kernel cost,
+     * not a resolution one, and WebKit's implementation is measurably
+     * slower than Chromium's at the same radius. Since blur cost scales
+     * with radius², 0.6 here is a ~64% cost cut for roughly a 40%
+     * smaller-looking halo — a real win in exchange for a tighter (not
+     * gone) glow. Applies uniformly to every platform rather than
+     * branching on browser/OS (no reliable, future-proof way to detect
+     * "is shadowBlur slow here" at runtime) — desktop and already-smooth
+     * Android devices simply get a bonus rather than needing it.
+     */
+    glowScale: 0.6,
   }),
 
   /**
