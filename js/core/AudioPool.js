@@ -13,6 +13,8 @@
  * doesn't front-load HTMLMediaElement allocations before a sound is ever
  * actually needed.
  */
+import { isMuted } from './AudioSettings.js';
+
 export class AudioPool {
   /**
    * @param {string} src
@@ -35,6 +37,7 @@ export class AudioPool {
    * @param {number} [volume]  overrides this instance's volume for this play only
    */
   play(volume) {
+    if (isMuted()) return; // skip the pool entirely — no allocation, no playback
     if (!this._pool) {
       this._pool = Array.from({ length: this._poolSize }, () => {
         const a = new Audio(this._src);

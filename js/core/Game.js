@@ -8,6 +8,7 @@
  * time and gestures.
  */
 import { Config } from './Config.js';
+import { isMuted, onMutedChange } from './AudioSettings.js';
 import { Renderer } from './Renderer.js';
 import { SwipeInput } from './SwipeInput.js';
 import { TapInput } from './TapInput.js';
@@ -102,6 +103,12 @@ export class Game {
       this._themeAudio = new Audio(themeSrc);
       this._themeAudio.volume = themeVolume;
       this._themeAudio.loop = themeLoop;
+      this._themeAudio.muted = isMuted();
+      // The mute toggle (in GameplayScene, via PlaybackControls) lives far
+      // from this Audio element — it only talks to AudioSettings, never to
+      // Game directly — so this subscription is how a live toggle actually
+      // reaches the already-playing element's `.muted` property.
+      onMutedChange((muted) => { this._themeAudio.muted = muted; });
       this._themeAudio.play().catch(() => {});
     }
     this.scene = new GameplayScene(this.renderer);

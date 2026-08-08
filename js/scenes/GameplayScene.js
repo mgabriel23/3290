@@ -17,10 +17,14 @@
  * is what drives that fade — Starfield itself stays opinion-free about
  * when or how it should appear; it just knows how to draw and scroll.
  *
- * The enemy codex (`EnemyCodex`) freezes everything gameplay-related
- * (`update` returns early) while it's open, but the starfield keeps
- * drifting and the scene still renders one last normal frame underneath
- * the codex's dimming overlay, so the game reads as "paused", not "gone".
+ * The enemy codex (`EnemyCodex`) and the pause button (`PlaybackControls`)
+ * both freeze everything gameplay-related (`update` returns early) while
+ * open, but the starfield keeps drifting and the scene still renders one
+ * last normal frame underneath the dimming overlay, so the game reads as
+ * "paused", not "gone". They're mutually exclusive full-screen overlays —
+ * this scene is what enforces that only one can be open at a time; the mute
+ * button (also owned by `PlaybackControls`) never opens an overlay, so it
+ * stays tappable regardless of what else is open.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
@@ -29,6 +33,7 @@ import { Bullets } from '../entities/Bullets.js';
 import { EnemyCodex } from '../entities/EnemyCodex.js';
 import { HUD } from '../entities/HUD.js';
 import { Player } from '../entities/Player.js';
+import { PlaybackControls } from '../entities/PlaybackControls.js';
 import { Starfield } from '../entities/Starfield.js';
 import { WaveManager } from '../entities/WaveManager.js';
 
@@ -42,6 +47,7 @@ export class GameplayScene {
     this.bullets = new Bullets();
     this.hud = new HUD();
     this._codex = new EnemyCodex();
+    this._playback = new PlaybackControls();
     this._age = 0; // seconds since this scene started — drives the starfield fade-in
     this._pointerDown = false;
 
@@ -60,8 +66,9 @@ export class GameplayScene {
   /** Advance the backdrop and the player by `dt` seconds. */
   update(dt) {
     this._codex.update(dt);
-    this.starfield.update(dt); // keeps drifting even while the codex is open — purely cosmetic, not gameplay
-    if (this._codex.isOpen) return; // frozen — nothing gameplay-related advances while the codex is up
+    this._playback.update(dt);
+    this.starfield.update(dt); // keeps drifting even while paused/codex is open — purely cosmetic, not gameplay
+    if (this._codex.isOpen || this._playback.isPaused) return; // frozen — nothing gameplay-related advances
 
     this._age    += dt;
     this._levelAge += dt;
@@ -103,22 +110,28 @@ export class GameplayScene {
     this.hud.render(this.renderer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
-    // Codex renders last of all — its button (and, while open, its full-screen
-    // card) must sit on top of everything else, including the level intro.
+    // Codex, then playback controls — both must sit on top of everything else,
+    // including the level intro. Playback renders last so its mute/pause
+    // buttons stay visible and tappable even while the codex card is open.
     this._codex.render(this.renderer);
+    this._playback.render(this.renderer);
   }
 
   handlePointerDown(x, y) {
     // Both TapInput and DragInput fire on the same physical tap (pointerdown
-    // fires before the tap is recognized) — without this guard, the tap that
-    // opens the codex would first snap the ship to the button's position.
+    // fires before the tap is recognized) — without these guards, the tap
+    // that opens an overlay or toggles mute would first snap the ship to
+    // that button's position.
     if (this._codex.isOpen || this._codex.isInsideButton(x, y)) return;
+    if (this._playback.isPaused
+      || this._playback.isInsideMuteButton(x, y)
+      || this._playback.isInsidePauseButton(x, y)) return;
     this._pointerDown = true;
     this.player.moveTo(x, y);
   }
 
   handlePointerMove(x, y) {
-    if (!this._pointerDown || this._codex.isOpen) return;
+    if (!this._pointerDown || this._codex.isOpen || this._playback.isPaused) return;
     this.player.moveTo(x, y);
   }
 
@@ -126,8 +139,27 @@ export class GameplayScene {
     this._pointerDown = false;
   }
 
+  /**
+   * Mute always wins first — it never opens an overlay, so it's always
+   * safe to toggle. Pause and the Codex are mutually exclusive full-screen
+   * overlays: opening either is ignored while the other is already open,
+   * so their dimming layers can never stack. Any remaining tap routes to
+   * whichever overlay (if any) is currently open.
+   */
   handleTap(x, y) {
-    this._codex.handleTap(x, y);
+    if (this._playback.isInsideMuteButton(x, y)) {
+      this._playback.toggleMute();
+      return;
+    }
+    if (this._playback.isInsidePauseButton(x, y)) {
+      if (!this._codex.isOpen) this._playback.togglePause();
+      return;
+    }
+    if (this._codex.isInsideButton(x, y)) {
+      if (!this._playback.isPaused) this._codex.handleTap(x, y);
+      return;
+    }
+    if (this._codex.isOpen) this._codex.handleTap(x, y);
   }
 
   /**

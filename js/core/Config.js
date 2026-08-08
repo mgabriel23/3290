@@ -1193,6 +1193,44 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Playback controls — two small always-visible buttons flanking the
+   * Enemy Codex button in the same top-center HUD gap (see entities/
+   * PlaybackControls.js). Mute never opens an overlay, so it stays
+   * tappable no matter what else is open. Pause freezes gameplay and dims
+   * the screen — same technique as the Enemy Codex's overlay, and
+   * mutually exclusive with it so only one full-screen overlay is ever up.
+   */
+  playbackControls: Object.freeze({
+    muteButton: Object.freeze({
+      x: 216, y: 34, radius: 14,
+      color: '#4DEFFF',
+      lineWidth: 1.5,
+      glowBlur: 6,
+      font: '400 13px "Audiowide", "Courier New", monospace',
+      pulseSpeed: 2.0,
+      pulseDepth: 0.3,
+    }),
+    pauseButton: Object.freeze({
+      x: 324, y: 34, radius: 14,
+      color: '#4DEFFF',
+      lineWidth: 1.5,
+      glowBlur: 6,
+      font: '400 13px "Audiowide", "Courier New", monospace',
+      pulseSpeed: 2.0,
+      pulseDepth: 0.3,
+    }),
+    overlay: Object.freeze({
+      dimAlpha: 0.85,
+      titleFont: '400 32px "Audiowide", "Courier New", monospace',
+      titleColor: '#4DEFFF',
+      titleGlowBlur: 12,
+      hintFont: '400 13px "Audiowide", "Courier New", monospace',
+      hintColor: '#aab4d4',
+      hintOffsetY: 50, // virtual px below the title
+    }),
+  }),
+
+  /**
    * Tutorial overlay. Plays once between the title screen and the first
    * gameplay session — the full gameplay backdrop (starfield, barrier, HUD)
    * is visible behind a dim overlay so every hint arrow points at the real

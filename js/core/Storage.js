@@ -37,3 +37,20 @@ export function saveNumber(key, value) {
     // running with an unpersisted value for the rest of this session.
   }
 }
+
+/**
+ * @param {string} key
+ * @param {boolean} [fallback]
+ * @returns {boolean}
+ */
+export function loadBool(key, fallback = false) {
+  return loadNumber(key, fallback ? 1 : 0) === 1;
+}
+
+/**
+ * @param {string} key
+ * @param {boolean} value
+ */
+export function saveBool(key, value) {
+  saveNumber(key, value ? 1 : 0);
+}
