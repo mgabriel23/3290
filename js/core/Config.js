@@ -18,7 +18,7 @@ export const Config = Object.freeze({
   }),
 
   /**
-   * Rendering performance limits — see Renderer.resize().
+   * Rendering performance limits — see Renderer.resize()/Renderer._glow().
    *
    * `maxDevicePixelRatio` caps how much `window.devicePixelRatio` is
    * allowed to inflate the canvas BACKING STORE beyond its CSS size. Left
@@ -28,38 +28,41 @@ export const Config = Object.freeze({
    * the backing store's pixel COUNT, which scales with dpr². A phone with a
    * 3–4x-density display was therefore doing 2–4x the raw fill work of one
    * at 2x for an IDENTICAL on-screen size — the counterintuitive "nicer
-   * phone runs it worse" result this value fixes. Capping at 2 is the
-   * standard sweet spot for canvas/WebGL games: visual sharpness gains
-   * above 2x are essentially imperceptible on a phone-sized screen (more so
-   * for this game's soft neon-glow look, where blur already dominates the
-   * silhouette), while the fill-rate savings are large and immediate. Only
-   * engages on displays above 2x — a standard 1x or 2x/Retina desktop
-   * monitor is completely unaffected.
+   * phone runs it worse" result this value originally fixed.
+   *
+   * 1.5 (down from an initial 2): 2x/Retina is the single most common tier
+   * across BOTH iOS and Android (e.g. iPhone 11's 828×1792 @2x panel), so a
+   * cap AT 2 gave that entire tier zero benefit — it was never above the
+   * threshold. 1.5 actually engages for it: (2/1.5)² ≈ 1.8x fewer backing-
+   * store pixels, on top of whichever additional cut `glowScale` below
+   * buys on the same device. Still comfortably sharper than 1x (no cap at
+   * all); a standard 1x desktop monitor remains completely unaffected.
+   *
+   * `glowScale` — global multiplier applied to every `glowBlur` value at
+   * the moment it reaches the canvas (see Renderer._glow) — every entity's
+   * own Config still authors its "real" glow radius (e.g. `glowBlur: 14`),
+   * and this scales it down uniformly at the one seam that actually calls
+   * `ctx.shadowBlur`, rather than that number being touched everywhere
+   * it's authored throughout Config.
+   *
+   * Exists because Canvas 2D's shadow-blur is disproportionately expensive
+   * on WebKit specifically — every browser on iOS (Safari, Chrome, Firefox,
+   * anything) is required by Apple to run on WebKit under the hood, so
+   * "still laggy in both Safari and Chrome" on the same iPhone is exactly
+   * what a WebKit-rooted cost looks like, not a per-browser one. This is a
+   * per-pixel blur-KERNEL cost, distinct from (and multiplicative with) the
+   * resolution cost `maxDevicePixelRatio` addresses. Since blur cost scales
+   * with radius², 0.45 (down from an initial 0.6, which wasn't enough on
+   * an iPhone 11) is a ~80% cost cut from the originally-authored radii for
+   * a tighter — not gone — glow. Both values apply uniformly to every
+   * platform rather than branching on browser/OS (no reliable,
+   * future-proof way to detect "is this device slow" at runtime); desktop
+   * and already-smooth Android devices simply get a bonus rather than
+   * needing it.
    */
   performance: Object.freeze({
-    maxDevicePixelRatio: 2,
-
-    /**
-     * Global multiplier applied to every `glowBlur` value at the moment
-     * it reaches the canvas (see Renderer._glow) — every entity's own
-     * Config still authors its "real" glow radius (e.g. `glowBlur: 14`),
-     * and this scales it down uniformly at the one seam that actually
-     * calls `ctx.shadowBlur`, rather than that number being touched
-     * everywhere it's authored throughout Config.
-     *
-     * Exists because Canvas 2D's shadow-blur is disproportionately
-     * expensive on WebKit/Safari (iOS) specifically — well past what the
-     * dpr cap above addresses, since it's a per-pixel blur-kernel cost,
-     * not a resolution one, and WebKit's implementation is measurably
-     * slower than Chromium's at the same radius. Since blur cost scales
-     * with radius², 0.6 here is a ~64% cost cut for roughly a 40%
-     * smaller-looking halo — a real win in exchange for a tighter (not
-     * gone) glow. Applies uniformly to every platform rather than
-     * branching on browser/OS (no reliable, future-proof way to detect
-     * "is shadowBlur slow here" at runtime) — desktop and already-smooth
-     * Android devices simply get a bonus rather than needing it.
-     */
-    glowScale: 0.6,
+    maxDevicePixelRatio: 1.5,
+    glowScale: 0.45,
   }),
 
   /**
