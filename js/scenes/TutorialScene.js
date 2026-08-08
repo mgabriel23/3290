@@ -84,6 +84,14 @@ export class TutorialScene {
     this._hintAge = 0;   // seconds on the current hint — drives arrow bob + tap blink
     this._revealedWordCount = 0;
     this._tapReady = false; // true once the current hint's typewriter is fully revealed
+    // Set right before firing onContinue (see _advance) and checked first in
+    // every method below — a safety net for the handoff to GameplayScene:
+    // if onContinue's chain throws for any reason, Game.scene never gets
+    // reassigned, and without this guard the NEXT tick would call render()
+    // with _hintIndex already past the end of HINTS, throwing inside the
+    // requestAnimationFrame callback and permanently killing the game loop.
+    // With it, this scene just goes inert instead — no crash, no re-throw.
+    this._done = false;
     this._blipPool = new AudioPool(Config.tutorial.blip.src, 8, Config.tutorial.blip.volume);
     this._blipTimer = 0;
 
@@ -92,6 +100,7 @@ export class TutorialScene {
   }
 
   update(dt) {
+    if (this._done) return; // onContinue has already fired — see the constructor's _done doc
     this._age += dt;
     this._starfield.update(dt);
     // Don't advance hint state during the intro delay — hints haven't appeared yet.
@@ -103,6 +112,7 @@ export class TutorialScene {
   }
 
   render() {
+    if (this._done) return; // leaves the last frame on screen rather than touching now-out-of-range hint state
     const { renderer } = this;
     const { fadeInDuration, hintStartDelay, overlayAlpha } = Config.tutorial;
 
@@ -133,8 +143,8 @@ export class TutorialScene {
   }
 
   /** First tap/swipe fast-forwards typewriter; second tap/swipe advances. */
-  handleTap(_x, _y) { this._advance(); }
-  handleSwipeUp()   { this._advance(); }
+  handleTap(_x, _y) { if (!this._done) this._advance(); }
+  handleSwipeUp()   { if (!this._done) this._advance(); }
 
   // ---------------------------------------------------------------------------
 
@@ -148,6 +158,10 @@ export class TutorialScene {
     }
     this._hintIndex++;
     if (this._hintIndex >= HINTS.length) {
+      // Set before calling out — if onContinue's chain throws, this scene
+      // must not be left in a state where a later tick could touch
+      // _hintIndex again (it's already past the end of HINTS at this point).
+      this._done = true;
       this.onContinue();
       return;
     }

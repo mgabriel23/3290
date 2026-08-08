@@ -80,41 +80,71 @@ export class Game {
     this._lastTimestamp = 0;
   }
 
-  /** Swap the intro prompt out for the opening cinematic once the player swipes past it. */
+  /**
+   * Swap the intro prompt out for the opening cinematic once the player
+   * swipes past it. Wrapped in try/catch, like every `_start*` transition —
+   * if constructing the next scene throws, the outgoing scene's own
+   * `onContinue` caller (a tap/swipe handler, not `_tick`) is where the
+   * exception would otherwise surface uncaught; catching it here means
+   * `this.scene` is simply left as whatever it already was (the outgoing
+   * scene keeps rendering its last frame) instead of the whole page
+   * silently breaking, and the real error is at least visible in the
+   * console for diagnosis.
+   */
   _startPrologue() {
-    this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startTutorial() });
+    try {
+      this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startTutorial() });
+    } catch (err) {
+      console.error('Failed to start the prologue:', err);
+    }
   }
 
   /** Swap the cinematic out for the tutorial once the player taps PLAY on the title card. */
   _startTutorial() {
-    this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
+    try {
+      this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
+    } catch (err) {
+      console.error('Failed to start the tutorial:', err);
+    }
   }
 
   /** Swap the tutorial out for the gameplay scene once all hints are dismissed. */
   _startGameplay() {
-    // Start background music here — we're inside the user-gesture call chain
-    // (last tutorial hint tap → onContinue → here), so audio.play() is permitted.
-    // The guard prevents a second play if _startGameplay is somehow called again.
-    if (!this._themeAudio) {
-      const { themeSrc, themeVolume, themeLoop } = Config.audio;
-      this._themeAudio = new Audio(themeSrc);
-      this._themeAudio.volume = themeVolume;
-      this._themeAudio.loop = themeLoop;
-      this._themeAudio.muted = isMuted();
-      // The mute toggle (in GameplayScene, via PlaybackControls) lives far
-      // from this Audio element — it only talks to AudioSettings, never to
-      // Game directly — so this subscription is how a live toggle actually
-      // reaches the already-playing element's `.muted` property.
-      onMutedChange((muted) => { this._themeAudio.muted = muted; });
-      this._themeAudio.play().catch(() => {});
+    try {
+      // Start background music here — we're inside the user-gesture call chain
+      // (last tutorial hint tap → onContinue → here), so audio.play() is permitted.
+      // The guard prevents a second play if _startGameplay is somehow called again.
+      if (!this._themeAudio) {
+        const { themeSrc, themeVolume, themeLoop } = Config.audio;
+        this._themeAudio = new Audio(themeSrc);
+        this._themeAudio.volume = themeVolume;
+        this._themeAudio.loop = themeLoop;
+        this._themeAudio.muted = isMuted();
+        // The mute toggle (in GameplayScene, via PlaybackControls) lives far
+        // from this Audio element — it only talks to AudioSettings, never to
+        // Game directly — so this subscription is how a live toggle actually
+        // reaches the already-playing element's `.muted` property.
+        onMutedChange((muted) => { this._themeAudio.muted = muted; });
+        this._themeAudio.play().catch(() => {});
+      }
+      this.scene = new GameplayScene(this.renderer);
+    } catch (err) {
+      console.error('Failed to start gameplay:', err);
     }
-    this.scene = new GameplayScene(this.renderer);
   }
 
   /**
    * The main loop: advance the scene by the elapsed time (in seconds),
    * render it, and schedule the next frame — keeping animation in step
    * with the display's refresh rate.
+   *
+   * update()/render() are wrapped in try/catch so a single bad frame (a bug
+   * in one scene, a transient browser API hiccup) can never permanently
+   * kill the loop the way an uncaught throw inside a requestAnimationFrame
+   * callback normally would (it silently prevents the next rAF from ever
+   * being scheduled — the whole game just freezes on that frame with no
+   * visible error). Logging + continuing means the game recovers on the
+   * next frame wherever possible instead of dying outright.
    * @param {number} timestamp  high-resolution time in ms, supplied by rAF
    */
   _tick(timestamp) {
@@ -125,8 +155,12 @@ export class Game {
     const dt  = Math.min(raw, 0.1);
     this._lastTimestamp = timestamp;
 
-    this.scene.update(dt);
-    this.scene.render();
+    try {
+      this.scene.update(dt);
+      this.scene.render();
+    } catch (err) {
+      console.error('Game loop error (frame skipped, loop continues):', err);
+    }
 
     requestAnimationFrame(this._tick);
   }
