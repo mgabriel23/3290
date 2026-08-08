@@ -34,6 +34,10 @@
 import { Config } from '../core/Config.js';
 import { Portal } from '../entities/Portal.js';
 import { Starfield } from '../entities/Starfield.js';
+import { flickerAlpha } from '../core/animation.js';
+import { wrapText, computeWordOffsets } from '../core/textLayout.js';
+import { cornerBracketPath, diamondPath } from '../core/shapes.js';
+import { AudioPool } from '../core/AudioPool.js';
 
 export class PrologueScene {
   /**
@@ -56,16 +60,15 @@ export class PrologueScene {
     // Wrapped up front (text and font never change), then split into
     // per-line word lists with each line's starting word-index recorded —
     // the reveal counter walks *words*, not characters, so the typewriter
-    // unveils a whole word at a time (see _updateBriefing/_drawBriefingText).
+    // unveils a whole word at a time (see _updateBriefing/_renderBriefingText).
     this._briefingLines = this._wrapBriefing(renderer);
     this._briefingLineWords = this._briefingLines.map((line) => line.split(' '));
-    this._briefingLineWordOffsets = this._computeWordOffsets(this._briefingLineWords);
+    this._briefingLineWordOffsets = computeWordOffsets(this._briefingLineWords);
     this._briefingWordCount = this._briefingLineWords.reduce((sum, words) => sum + words.length, 0);
     this._revealedWordCount = 0;
     this._briefingHoldAge = 0;
     this._blipTimer = 0; // ticks on its own faster clock — see _advanceBlips for why it's decoupled from the word reveal
-    this._blipPool = null;  // lazily filled on first play — see _playBlip
-    this._blipPoolIdx = 0;
+    this._blipPool = new AudioPool(Config.prologue.briefing.blip.src, 8, Config.prologue.briefing.blip.volume);
 
     this._initTitleGeometry(); // pre-allocate all title-beat paths and bounds — see _initTitleGeometry
   }
@@ -152,25 +155,14 @@ export class PrologueScene {
       fadeAlpha = Math.max(0, 1 - inFadeOut / fadeOutDuration);
     }
 
-    // Signal-interference flicker layered on top — the whole line
-    // randomly dips toward transparent as if the transmission is weak.
-    const alpha = fadeAlpha * this._yearCardFlickerAlpha(this._beatAge);
+    // Signal-interference flicker layered on top — the whole line randomly
+    // dips toward transparent as if the transmission is weak. Frequencies
+    // chosen to create dips at a cinematic 1–3 Hz, not a 60fps strobe.
+    const alpha = fadeAlpha * flickerAlpha(this._beatAge, [7.3, 11.7, 19.1], [2.0, 0.8], 0.8, 0.85);
     const visible = text.slice(0, Math.floor(this._yearRevealedCount));
 
     this.renderer.clear(Config.colors.void);
     this.renderer.drawText(visible, vW / 2, vH * 0.46, { font, color: textColor, alpha });
-  }
-
-  /**
-   * Three incommensurate sine waves summed together — their interference
-   * pattern produces signal-drop moments that feel quasi-random without
-   * being literally random (consistent flicker shape from any given t,
-   * no state needed). Frequencies chosen to create dips at a cinematic
-   * 1–3 Hz rather than a 60 fps frame-by-frame strobe.
-   */
-  _yearCardFlickerAlpha(t) {
-    const noise = (Math.sin(t * 7.3) + Math.sin(t * 11.7 + 2.0) + Math.cos(t * 19.1 + 0.8)) / 3;
-    return Math.max(0.08, Math.min(1, 0.8 + noise * 0.85));
   }
 
   // --- Beat 2: portals ---------------------------------------------------------
@@ -211,34 +203,7 @@ export class PrologueScene {
     const { text, font, sideMargin } = Config.prologue.briefing;
     const { width: vW } = Config.virtual;
     const maxWidth = vW - sideMargin * 2;
-
-    const words = text.split(' ');
-    const lines = [];
-    let line = '';
-
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word;
-      if (line && renderer.measureText(candidate, font).width > maxWidth) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = candidate;
-      }
-    }
-    if (line) lines.push(line);
-
-    return lines;
-  }
-
-  /** Each line's starting index in the whole-paragraph word sequence — maps the reveal count back to lines (the word equivalent of the old per-character line-offsets). */
-  _computeWordOffsets(lineWords) {
-    const offsets = [];
-    let offset = 0;
-    for (const words of lineWords) {
-      offsets.push(offset);
-      offset += words.length;
-    }
-    return offsets;
+    return wrapText(text, maxWidth, (candidate) => renderer.measureText(candidate, font));
   }
 
   _updateBriefing(dt) {
@@ -276,7 +241,7 @@ export class PrologueScene {
     this.renderer.clear(Config.colors.void);
     this._starfield.render(this.renderer);
     for (const portal of this._portals) portal.render(this.renderer);
-    this._drawBriefingText(Math.floor(this._revealedWordCount));
+    this._renderBriefingText(Math.floor(this._revealedWordCount));
   }
 
   /**
@@ -289,7 +254,7 @@ export class PrologueScene {
    * fixed slot (unlike the corner-anchored overlay this superseded,
    * which had to fit its whole paragraph on screen at once).
    */
-  _drawBriefingText(revealedWordCount) {
+  _renderBriefingText(revealedWordCount) {
     const { font, textColor, lineHeight, maxVisibleLines } = Config.prologue.briefing;
     const { width: vW } = Config.virtual;
     const anchorY = this._briefingAnchorY();
@@ -325,30 +290,15 @@ export class PrologueScene {
   }
 
   /**
-   * Cycles through a small pre-created pool of Audio elements rather
-   * than cloning a new one for every blip — blips fire at up to
-   * ~12/sec (year card) or ~7/sec (briefing), so cloneNode would create
-   * hundreds of short-lived DOM objects during the prologue, adding GC
-   * pressure on low-end devices. The pool size (8) covers the maximum
-   * number of clips that can overlap at once — blip clip length × rate
-   * — with headroom, so rewinding a slot never audibly cuts off a
-   * still-playing instance.
+   * Blips fire at up to ~12/sec (year card) or ~7/sec (briefing) — AudioPool
+   * cycles a fixed pool of 8 Audio elements rather than cloning a new one
+   * per blip, which would create hundreds of short-lived DOM objects during
+   * the prologue. 8 covers the maximum number of clips that can overlap at
+   * once (blip clip length × rate) with headroom, so rewinding a slot never
+   * audibly cuts off a still-playing instance.
    */
   _playBlip() {
-    const { src, volume } = Config.prologue.briefing.blip;
-
-    if (!this._blipPool) {
-      this._blipPool = Array.from({ length: 8 }, () => {
-        const a = new Audio(src);
-        a.volume = volume;
-        return a;
-      });
-    }
-
-    const blip = this._blipPool[this._blipPoolIdx % this._blipPool.length];
-    this._blipPoolIdx++;
-    blip.currentTime = 0;
-    blip.play().catch(() => {});
+    this._blipPool.play();
   }
 
   // --- Beat 4: fade to black -----------------------------------------------------
@@ -362,7 +312,7 @@ export class PrologueScene {
     this.renderer.clear(Config.colors.void);
     this._starfield.render(this.renderer);
     for (const portal of this._portals) portal.render(this.renderer);
-    this._drawBriefingText(this._briefingWordCount);
+    this._renderBriefingText(this._briefingWordCount);
 
     const overlayAlpha = Math.min(this._beatAge / Config.prologue.fadeOutDuration, 1);
     this.renderer.clear(Config.colors.void, overlayAlpha);
@@ -402,16 +352,16 @@ export class PrologueScene {
       // HRule 1 (above title): two line segments + diamond
       { points: [[lx, r1y], [cx - gap, r1y]], closed: false },
       { points: [[cx + gap, r1y], [rx, r1y]], closed: false },
-      { points: [[cx, r1y - dSize], [cx + dSize, r1y], [cx, r1y + dSize], [cx - dSize, r1y]] },
+      diamondPath(cx, r1y, dSize),
       // HRule 2 (below subtitle): same pattern
       { points: [[lx, r2y], [cx - gap, r2y]], closed: false },
       { points: [[cx + gap, r2y], [rx, r2y]], closed: false },
-      { points: [[cx, r2y - dSize], [cx + dSize, r2y], [cx, r2y + dSize], [cx - dSize, r2y]] },
+      diamondPath(cx, r2y, dSize),
       // Corner bracket ticks enclosing the title glyph
-      { points: [[bx1 + leg, by1], [bx1, by1], [bx1, by1 + leg]], closed: false },
-      { points: [[bx2 - leg, by1], [bx2, by1], [bx2, by1 + leg]], closed: false },
-      { points: [[bx1 + leg, by2], [bx1, by2], [bx1, by2 - leg]], closed: false },
-      { points: [[bx2 - leg, by2], [bx2, by2], [bx2, by2 - leg]], closed: false },
+      cornerBracketPath(bx1, by1, 1, 1, leg),
+      cornerBracketPath(bx2, by1, -1, 1, leg),
+      cornerBracketPath(bx1, by2, 1, -1, leg),
+      cornerBracketPath(bx2, by2, -1, -1, leg),
     ];
 
     const btn = Config.prologue.title.playButton;
@@ -421,10 +371,10 @@ export class PrologueScene {
     const bl = btn.cornerSize;
 
     this._buttonPaths = [
-      { points: [[btnL + bl, btnT], [btnL, btnT], [btnL, btnT + bl]], closed: false },
-      { points: [[btnR - bl, btnT], [btnR, btnT], [btnR, btnT + bl]], closed: false },
-      { points: [[btnL + bl, btnB], [btnL, btnB], [btnL, btnB - bl]], closed: false },
-      { points: [[btnR - bl, btnB], [btnR, btnB], [btnR, btnB - bl]], closed: false },
+      cornerBracketPath(btnL, btnT, 1, 1, bl),
+      cornerBracketPath(btnR, btnT, -1, 1, bl),
+      cornerBracketPath(btnL, btnB, 1, -1, bl),
+      cornerBracketPath(btnR, btnB, -1, -1, bl),
     ];
     this._buttonCX = cx;
     this._buttonCY = btnCY;
@@ -514,6 +464,4 @@ export class PrologueScene {
 
     this.renderer.clear(Config.colors.void, overlayAlpha);
   }
-
-  // --- Shared helpers -----------------------------------------------------------------
 }

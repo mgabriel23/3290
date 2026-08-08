@@ -16,6 +16,7 @@
  * produces zero per-frame allocations.
  */
 import { Config } from '../core/Config.js';
+import { diamondPath } from '../core/shapes.js';
 
 export class Barrier {
   constructor() {
@@ -150,9 +151,7 @@ export class Barrier {
     // Diamond emblem at the peak
     const peakY = baseY - arcHeight;
     const d = 6;
-    this._detailPaths.push({
-      points: [[cx, peakY - d], [cx + d, peakY], [cx, peakY + d], [cx - d, peakY]],
-    });
+    this._detailPaths.push(diamondPath(cx, peakY, d));
 
     // Anchor posts at left and right endpoints, going down to screen bottom
     this._detailPaths.push({ points: [[0,   baseY], [0,   vH]], closed: false });

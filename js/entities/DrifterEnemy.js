@@ -17,6 +17,7 @@
  * handles travel and the AOE burst on arrival.
  */
 import { Config } from '../core/Config.js';
+import { applyHit, tickDeathState } from './EnemyCombat.js';
 
 // Bell-shaped head — rounded dome on top, flatter base where tentacles
 // attach. Local space, roughly 22 across, 22 tall.
@@ -54,7 +55,7 @@ export function createDrifterPath() {
     ? { x: -cfg.entryMargin, y: -cfg.entryMargin }
     : { x: vW + cfg.entryMargin, y: -cfg.entryMargin };
 
-  const L1 = 250 + Math.random() * 150; // straight run before the loop
+  const L1 = cfg.pathEntryRunMin + Math.random() * (cfg.pathEntryRunMax - cfg.pathEntryRunMin); // straight run before the loop
   const P1 = { x: entry.x + dir.x * L1, y: entry.y + dir.y * L1 };
 
   // Loop center: 90° left of travel direction, tangent-continuous at P1.
@@ -63,7 +64,7 @@ export function createDrifterPath() {
   const theta0 = Math.atan2(-dir.x, dir.y);
   const Lloop  = 2 * Math.PI * cfg.loopRadius;
 
-  const L3 = 900; // straight run after the loop, well past the far corner
+  const L3 = cfg.pathExitRunLength; // straight run after the loop, well past the far corner
 
   return { variant: 1, dir, entry, L1, P1, C, theta0, Lloop, L3, total: L1 + Lloop + L3 };
 }
@@ -119,16 +120,16 @@ export function sampleSweeperPath(p, dist) {
   const cycleLen = range + cfg.step;
 
   const cyc = Math.floor(dist / cycleLen);
-  const uic = dist - cyc * cycleLen;
+  const posInCycle = dist - cyc * cycleLen;
 
   const dir      = p.dir * (cyc % 2 === 0 ? 1 : -1);
   const startX   = dir > 0 ? cfg.margin : vW - cfg.margin;
   const rowYBase = p.startY + cyc * cfg.step;
 
-  if (uic < range) {
-    return { x: startX + dir * uic, y: rowYBase, heading: dir > 0 ? Math.PI / 2 : -Math.PI / 2 };
+  if (posInCycle < range) {
+    return { x: startX + dir * posInCycle, y: rowYBase, heading: dir > 0 ? Math.PI / 2 : -Math.PI / 2 };
   }
-  return { x: startX + dir * range, y: rowYBase + (uic - range), heading: Math.PI };
+  return { x: startX + dir * range, y: rowYBase + (posInCycle - range), heading: Math.PI };
 }
 
 /**
@@ -185,7 +186,7 @@ export function sampleWeaverPath(p, dist) {
   const baseX = vW / 2;
   const theta = dist * cfg.frequency + p.phase;
 
-  const y = -60 + dist;
+  const y = cfg.spawnYOffset + dist;
   const x = baseX + Math.sin(theta) * cfg.amplitude;
 
   const dx  = cfg.amplitude * cfg.frequency * Math.cos(theta);
@@ -218,6 +219,13 @@ export class DrifterEnemy {
                    : this._variant === 3 ? this._cfg.diver
                    : this._variant === 4 ? this._cfg.weaver
                    : this._cfg;
+    // The path-sampling parameter passed to `this._sample`. Its unit
+    // depends on the variant: for #1/#2/#4 it's distance traveled along the
+    // path (vp, advanced by `speed * dt` in update()); for #3 it's elapsed
+    // time (seconds, advanced by `dt` directly — sampleDiverPath applies
+    // its own kinematics to convert time to distance). Same field, two
+    // different physical units, because every variant's sampler shares one
+    // call shape — see the `_sample` assignment above.
     this._u    = this._variant === 3 ? 0
                : -laneIndex * (this._variant === 2 ? this._cfg.sweeper.spacing
                               : this._variant === 4 ? this._cfg.weaver.spacing
@@ -269,6 +277,9 @@ export class DrifterEnemy {
   get type()  { return this._type;  }
   get angle() { return this._angle; }
 
+  /** Collision radius — used by GameplayScene's bullet↔enemy hit test. */
+  get hitRadius() { return this._cfg.hitRadius; }
+
   /**
    * @param {number} dt
    * @param {number} playerX
@@ -278,12 +289,7 @@ export class DrifterEnemy {
   update(dt, playerX, playerY, onFire) {
     const cfg = this._cfg;
     this._age += dt;
-    if (this._hitFlash > 0) this._hitFlash -= dt;
-
-    if (this._dying) {
-      if (this._hitFlash <= 0) this.alive = false;
-      return;
-    }
+    if (tickDeathState(this, dt)) return;
 
     if (this._variant === 3) {
       this._u += dt; // elapsed time — sampleDiverPath applies kinematics
@@ -309,7 +315,7 @@ export class DrifterEnemy {
     // past its loop; variant #2's path stays within the horizontal bounds,
     // so any off-screen state (sunk past the bottom) is final.
     const { width: vW, height: vH } = Config.virtual;
-    const margin   = 40;
+    const margin   = cfg.offscreenMargin;
     const onScreen = x > -margin && x < vW + margin && y > -margin && y < vH + margin;
     if (!onScreen) {
       // Variants #3 and #4 start above the top edge by design (#3's
@@ -376,14 +382,7 @@ export class DrifterEnemy {
    * @returns {boolean}
    */
   hit(damage = 1) {
-    if (this._dying) return false;
-    this._hitFlash = 0.15;
-    this._health -= damage;
-    if (this._health <= 0) {
-      this._dying = true;
-      return true;
-    }
-    return false;
+    return applyHit(this, damage);
   }
 
   /**
@@ -412,7 +411,7 @@ export class DrifterEnemy {
       if (isLashTentacle) {
         const t = this._fireAge / cfg.lashDuration;
         len = cfg.tentacleLen + (cfg.lashLen - cfg.tentacleLen) * t; // whip outward
-        amp = cfg.tentacleAmp * (1 - t * 0.7);                       // straightens as it extends
+        amp = cfg.tentacleAmp * (1 - t * cfg.lashStraightenFactor);  // straightens as it extends
       }
 
       // Normal tentacles trail straight behind (local +y); a lashing
@@ -426,7 +425,7 @@ export class DrifterEnemy {
       pts[0][0] = bx; pts[0][1] = by;
       for (let k = 1; k <= cfg.tentacleSegs; k++) {
         const t    = k / cfg.tentacleSegs;
-        const wave = Math.sin(this._age * cfg.tentacleSpeed + j * 1.3 + t * 3) * (amp * t);
+        const wave = Math.sin(this._age * cfg.tentacleSpeed + j * cfg.tentaclePhaseSpacing + t * cfg.tentacleWaveFreq) * (amp * t);
         pts[k][0] = bx + dirX * len * t + perpX * wave;
         pts[k][1] = by + dirY * len * t + perpY * wave;
       }

@@ -7,6 +7,7 @@
  * EnemyBullets/Rockets — zero per-frame heap allocation.
  */
 import { Config } from '../core/Config.js';
+import { directionalVelocity } from '../core/vectorMath.js';
 
 const MAX = 16;
 
@@ -50,14 +51,12 @@ export class DrifterProjectiles {
   fire(ox, oy, tx, ty, color) {
     if (this._count >= MAX) return;
     const { projectileSpeed } = Config.enemy.drifter;
-    const dx  = tx - ox;
-    const dy  = ty - oy;
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    const i   = this._count++;
+    const [vx, vy] = directionalVelocity(ox, oy, tx, ty, projectileSpeed);
+    const i = this._count++;
     this._x[i]  = ox;
     this._y[i]  = oy;
-    this._vx[i] = (dx / len) * projectileSpeed;
-    this._vy[i] = (dy / len) * projectileSpeed;
+    this._vx[i] = vx;
+    this._vy[i] = vy;
     this._tx[i] = tx;
     this._ty[i] = ty;
     this._color[i] = color;

@@ -22,6 +22,8 @@ import { Config } from '../core/Config.js';
 import { Barrier } from '../entities/Barrier.js';
 import { HUD } from '../entities/HUD.js';
 import { Starfield } from '../entities/Starfield.js';
+import { wrapText, computeWordOffsets } from '../core/textLayout.js';
+import { AudioPool } from '../core/AudioPool.js';
 
 /**
  * Static hint definitions.
@@ -82,8 +84,7 @@ export class TutorialScene {
     this._hintAge = 0;   // seconds on the current hint — drives arrow bob + tap blink
     this._revealedWordCount = 0;
     this._tapReady = false; // true once the current hint's typewriter is fully revealed
-    this._blipPool = null;
-    this._blipPoolIdx = 0;
+    this._blipPool = new AudioPool(Config.tutorial.blip.src, 8, Config.tutorial.blip.volume);
     this._blipTimer = 0;
 
     this._initHints();         // wraps text + pre-allocates arrow geometry
@@ -180,18 +181,7 @@ export class TutorialScene {
   }
 
   _playBlip() {
-    const { src, volume } = Config.tutorial.blip;
-    if (!this._blipPool) {
-      this._blipPool = Array.from({ length: 8 }, () => {
-        const a = new Audio(src);
-        a.volume = volume;
-        return a;
-      });
-    }
-    const blip = this._blipPool[this._blipPoolIdx % this._blipPool.length];
-    this._blipPoolIdx++;
-    blip.currentTime = 0;
-    blip.play().catch(() => {});
+    this._blipPool.play();
   }
 
   _renderHint() {
@@ -290,30 +280,16 @@ export class TutorialScene {
     this._hintTapPromptY = [];
 
     for (const hint of HINTS) {
-      // Greedy word-wrap
-      const words = hint.text.split(' ');
-      const rawLines = [];
-      let line = '';
-      for (const word of words) {
-        const candidate = line ? `${line} ${word}` : word;
-        if (line && this.renderer.measureText(candidate, textFont).width > textMaxWidth) {
-          rawLines.push(line);
-          line = word;
-        } else {
-          line = candidate;
-        }
-      }
-      if (line) rawLines.push(line);
+      const rawLines = wrapText(hint.text, textMaxWidth, (candidate) => this.renderer.measureText(candidate, textFont));
 
       // Split lines into word arrays + compute running word offsets
       const lineWordArrays = rawLines.map(l => l.split(' '));
-      const offsets = [];
-      let off = 0;
-      for (const lw of lineWordArrays) { offsets.push(off); off += lw.length; }
+      const offsets = computeWordOffsets(lineWordArrays);
+      const totalWords = lineWordArrays.reduce((sum, words) => sum + words.length, 0);
 
       this._hintLineWords.push(lineWordArrays);
       this._hintLineWordOffsets.push(offsets);
-      this._hintTotalWords.push(off);
+      this._hintTotalWords.push(totalWords);
       // Pre-join each line's full text — used by _renderHint when the line is
       // completely revealed so the hot path skips slice() + join() allocations.
       this._hintFullLines.push(lineWordArrays.map(lw => lw.join(' ')));

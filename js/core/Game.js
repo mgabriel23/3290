@@ -31,24 +31,23 @@ export class Game {
     this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startTutorial(), devSkipToTitle: true });
     this._lastTimestamp = 0;
 
-    this._onResize = this._onResize.bind(this);
     this._tick = this._tick.bind(this);
 
     // Forward gestures to whichever scene is currently active — the
     // lookup is dynamic (`this.scene.handle...?.()`) so this keeps working
     // as `this.scene` is swapped out, and scenes that don't care about a
     // given gesture simply don't implement its handler.
-    this.swipeInput = new SwipeInput(stage, {
+    new SwipeInput(stage, {
       thresholdPx: Config.intro.swipeThresholdPx,
       onSwipeUp: () => this.scene.handleSwipeUp?.(),
     });
-    this.tapInput = new TapInput(stage, {
+    new TapInput(stage, {
       onTap: (clientX, clientY) => {
         const { x, y } = this.renderer.toVirtualCoords(clientX, clientY);
         this.scene.handleTap?.(x, y);
       },
     });
-    this.dragInput = new DragInput(stage, {
+    new DragInput(stage, {
       onPointerDown: (clientX, clientY) => {
         const { x, y } = this.renderer.toVirtualCoords(clientX, clientY);
         this.scene.handlePointerDown?.(x, y);
@@ -61,20 +60,26 @@ export class Game {
     });
   }
 
-  /** Wire up listeners, perform the first layout + paint, and start the loop. */
+  /** Perform the first layout + paint, and start the loop. Global listeners (resize, visibilitychange) are main.js's job — see resize()/resumeFromBackground(). */
   start() {
-    window.addEventListener('resize', this._onResize);
-
-    // When the tab returns from background, discard the accumulated idle time
-    // so the next tick gets dt=0 rather than however long the tab was hidden.
-    // Without this, _lastTimestamp could be minutes behind, producing a massive
-    // dt that causes bullet bursts, enemy teleports, and particle pop-ins.
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) this._lastTimestamp = 0;
-    });
-
     this._onResize();
     requestAnimationFrame(this._tick);
+  }
+
+  /** Call on window resize — re-fits the stage and repaints once. */
+  resize() {
+    this._onResize();
+  }
+
+  /**
+   * Call when the tab returns from background — discards the accumulated
+   * idle time so the next tick gets dt=0 rather than however long the tab
+   * was hidden. Without this, _lastTimestamp could be minutes behind,
+   * producing a massive dt that causes bullet bursts, enemy teleports, and
+   * particle pop-ins.
+   */
+  resumeFromBackground() {
+    this._lastTimestamp = 0;
   }
 
   /** Swap the intro prompt out for the opening cinematic once the player swipes past it. */

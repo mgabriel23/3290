@@ -11,15 +11,16 @@
  * written each frame, so render() produces zero heap allocations.
  */
 import { Config } from '../core/Config.js';
+import { directionalVelocity } from '../core/vectorMath.js';
 
 const MAX = 64;
 
 export class EnemyBullets {
   constructor() {
-    this._ex  = new Float32Array(MAX); // world x
-    this._ey  = new Float32Array(MAX); // world y
-    this._evx = new Float32Array(MAX); // velocity x (px/sec)
-    this._evy = new Float32Array(MAX); // velocity y (px/sec)
+    this._x  = new Float32Array(MAX); // world x
+    this._y  = new Float32Array(MAX); // world y
+    this._vx = new Float32Array(MAX); // velocity x (px/sec)
+    this._vy = new Float32Array(MAX); // velocity y (px/sec)
     this._count = 0;
 
     this._pool = Array.from({ length: MAX }, () => ({
@@ -39,14 +40,12 @@ export class EnemyBullets {
   fire(ox, oy, tx, ty) {
     if (this._count >= MAX) return;
     const { speed } = Config.enemyBullet;
-    const dx  = tx - ox;
-    const dy  = ty - oy;
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    const i   = this._count++;
-    this._ex[i]  = ox;
-    this._ey[i]  = oy;
-    this._evx[i] = (dx / len) * speed;
-    this._evy[i] = (dy / len) * speed;
+    const [vx, vy] = directionalVelocity(ox, oy, tx, ty, speed);
+    const i = this._count++;
+    this._x[i]  = ox;
+    this._y[i]  = oy;
+    this._vx[i] = vx;
+    this._vy[i] = vy;
   }
 
   /** @param {number} dt */
@@ -54,14 +53,14 @@ export class EnemyBullets {
     const { width: vW, height: vH } = Config.virtual;
     let w = 0;
     for (let i = 0; i < this._count; i++) {
-      this._ex[i] += this._evx[i] * dt;
-      this._ey[i] += this._evy[i] * dt;
+      this._x[i] += this._vx[i] * dt;
+      this._y[i] += this._vy[i] * dt;
       // Keep alive while inside a generous screen margin
-      if (this._ex[i] > -30 && this._ex[i] < vW + 30 &&
-          this._ey[i] > -30 && this._ey[i] < vH + 30) {
+      if (this._x[i] > -30 && this._x[i] < vW + 30 &&
+          this._y[i] > -30 && this._y[i] < vH + 30) {
         if (w !== i) {
-          this._ex[w]  = this._ex[i];  this._ey[w]  = this._ey[i];
-          this._evx[w] = this._evx[i]; this._evy[w] = this._evy[i];
+          this._x[w]  = this._x[i];  this._y[w]  = this._y[i];
+          this._vx[w] = this._vx[i]; this._vy[w] = this._vy[i];
         }
         w++;
       }
@@ -75,15 +74,15 @@ export class EnemyBullets {
     const hLen = Config.enemyBullet.halfLen;
     for (let i = 0; i < this._count; i++) {
       // Orient the capsule along the bullet's travel direction
-      const vx = this._evx[i], vy = this._evy[i];
+      const vx = this._vx[i], vy = this._vy[i];
       const spd = Math.sqrt(vx * vx + vy * vy) || 1;
       const nx  = (vx / spd) * hLen;
       const ny  = (vy / spd) * hLen;
       const p   = this._pool[i];
-      p.points[0][0] = this._ex[i] - nx;
-      p.points[0][1] = this._ey[i] - ny;
-      p.points[1][0] = this._ex[i] + nx;
-      p.points[1][1] = this._ey[i] + ny;
+      p.points[0][0] = this._x[i] - nx;
+      p.points[0][1] = this._y[i] - ny;
+      p.points[1][0] = this._x[i] + nx;
+      p.points[1][1] = this._y[i] + ny;
     }
     renderer.strokePaths(this._pool, this._style, this._count);
   }

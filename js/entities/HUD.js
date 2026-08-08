@@ -13,6 +13,7 @@
  * `render` produces zero per-frame allocations regardless of update rate.
  */
 import { Config } from '../core/Config.js';
+import { cornerBracketPath } from '../core/shapes.js';
 
 export class HUD {
   constructor() {
@@ -59,8 +60,8 @@ export class HUD {
 
     // Both L-brackets in one array — shared strokePaths call halves chrome shadow passes.
     this._allBrackets = [
-      { points: [[margin + leg, margin], [margin, margin], [margin, margin + leg]], closed: false },
-      { points: [[rx - leg,     margin], [rx,     margin], [rx,     margin + leg]], closed: false },
+      cornerBracketPath(margin, margin, 1, 1, leg),
+      cornerBracketPath(rx, margin, -1, 1, leg),
     ];
 
     // Text x anchors — inset a few virtual px from each bracket edge

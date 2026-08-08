@@ -21,14 +21,13 @@
  * Sparks are timed to pop and fade while the outer ring is still traveling,
  * so the eye tracks the ring rather than the sparks after the initial burst.
  */
+import { Config } from '../core/Config.js';
 
-const MAX  = 256; // well above any expected burst count
-const HALF = 3;   // half-length of each spark line, virtual px
-
-// Inner ring: tight, fast — the "pop" of the impact
-const INNER = { life: 0.28, startR: 6,  maxR: 38 };
-// Outer ring: wide, slower — the shockwave traveling outward
-const OUTER = { life: 0.52, startR: 10, maxR: 72 };
+const {
+  maxSparks: MAX, sparkHalfLength: HALF,
+  sparkSpeedMin, sparkSpeedMax, sparkLifeMin, sparkLifeMax, sparkDrag,
+  defaultSparksPerEmit, innerRing: INNER, outerRing: OUTER,
+} = Config.particles;
 
 export class Particles {
   /**
@@ -38,7 +37,7 @@ export class Particles {
    *   (e.g. large enemy formations), keeping the shared glow pass's
    *   bounding box smaller on low-end devices
    */
-  constructor(color, sparksPerEmit = 14) {
+  constructor(color, sparksPerEmit = defaultSparksPerEmit) {
     this._sparksPerEmit = sparksPerEmit;
     // ── Spark pool (typed arrays, zero per-frame allocation) ──────────────────
     this._x    = new Float32Array(MAX);
@@ -84,7 +83,7 @@ export class Particles {
     // Sparks — faster than before so they burst through and past the inner ring
     for (let i = 0; i < this._sparksPerEmit && this._count < MAX; i++) {
       const a  = Math.random() * Math.PI * 2;
-      const s  = 140 + Math.random() * 240;
+      const s  = sparkSpeedMin + Math.random() * (sparkSpeedMax - sparkSpeedMin);
       const ca = Math.cos(a), sa = Math.sin(a);
       const j  = this._count++;
       this._x[j]    = x;
@@ -94,7 +93,7 @@ export class Particles {
       this._ndx[j]  = ca;  // unit direction — invariant under scalar drag
       this._ndy[j]  = sa;
       this._age[j]  = 0;
-      this._life[j] = 0.18 + Math.random() * 0.18;
+      this._life[j] = sparkLifeMin + Math.random() * (sparkLifeMax - sparkLifeMin);
     }
   }
 
@@ -107,7 +106,7 @@ export class Particles {
     }
 
     // Update sparks
-    const drag = 1 - dt * 5;
+    const drag = 1 - dt * sparkDrag;
     let w = 0;
     for (let i = 0; i < this._count; i++) {
       this._age[i] += dt;

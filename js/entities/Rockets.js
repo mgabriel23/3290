@@ -18,8 +18,9 @@
  * All trails are batched into one strokePaths call per frame.
  */
 import { Config } from '../core/Config.js';
+import { directionalVelocity } from '../core/vectorMath.js';
 
-const MAX          = 16;   // matches Config.rocket.poolSize ceiling
+const MAX          = Config.rocket.poolSize;
 const TRAIL_HIST   = 8;    // stored history positions per rocket
 const TRAIL_PTS    = TRAIL_HIST + 1; // polyline points = history + current tip
 const TRAIL_STEP   = 0.04; // seconds between recorded positions (~2.4 frames at 60fps)
@@ -63,15 +64,13 @@ export class Rockets {
   fire(ox, oy, tx, ty) {
     if (this._count >= MAX) return;
     const { speed } = Config.rocket;
-    const dx  = tx - ox;
-    const dy  = ty - oy;
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    const i   = this._count++;
+    const [vx, vy] = directionalVelocity(ox, oy, tx, ty, speed);
+    const i = this._count++;
 
     this._x[i]    = ox;
     this._y[i]    = oy;
-    this._vx[i]   = (dx / len) * speed;
-    this._vy[i]   = (dy / len) * speed;
+    this._vx[i]   = vx;
+    this._vy[i]   = vy;
     this._age[i]  = 0;
     this._hHead[i] = 0;
     this._hTick[i] = 0;

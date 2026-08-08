@@ -156,8 +156,9 @@ export const Config = Object.freeze({
     /**
      * Beat 1: a stark "when" title card — letters type in one by one with
      * a signal-interference alpha flicker on the whole line throughout
-     * (see PrologueScene._yearCardFlickerAlpha), so it reads as a weak
-     * transmission barely coming through rather than a clean title card.
+     * (see core/animation.js's flickerAlpha, called from _renderYearCard),
+     * so it reads as a weak transmission barely coming through rather than
+     * a clean title card.
      */
     yearCard: Object.freeze({
       text: 'EARTH — YEAR 3290',
@@ -229,7 +230,7 @@ export const Config = Object.freeze({
       lineHeight: 32,     // virtual px between line baselines
       sideMargin: 56,     // virtual px — bounds the wrapped paragraph's width
       bottomMargin: 64,   // virtual px from the bottom edge to the newest line's baseline (see PrologueScene._briefingAnchorY) — sits low, beneath the portals
-      maxVisibleLines: 4, // the "subtitle window" never shows more than this many lines at once — older ones fall away as new ones reveal (see PrologueScene._drawBriefingText)
+      maxVisibleLines: 4, // the "subtitle window" never shows more than this many lines at once — older ones fall away as new ones reveal (see PrologueScene._renderBriefingText)
       wordsPerSecond: 4,  // the briefing reveals a whole word at a time, not letter by letter — see PrologueScene._updateBriefing for why that reads (and sounds) more like typing
       holdDuration: 1.6,  // seconds the finished briefing stays up before fading out
 
@@ -297,6 +298,12 @@ export const Config = Object.freeze({
    * the player on a fixed reload cycle.
    */
   enemy: Object.freeze({
+    // Shared white hit-flash duration (seconds) for every enemy type whose
+    // hit() goes through EnemyCombat.applyHit (Scout/Rocketeer, Sniper,
+    // Drifter). Bouncer has its own `bouncer.flashDuration` since its flash
+    // also covers its shield-hit case.
+    hitFlashDuration: 0.15,
+
     /**
      * Scout — basic fighter. Enters, parks at a fixed rest position,
      * fires aimed bullet bursts at the player.
@@ -329,8 +336,8 @@ export const Config = Object.freeze({
     /**
      * Sniper — same hull silhouette, electric violet. High health (8 hits).
      * Continuously records the player's position history; when it fires it
-     * targets where the player WAS 1.3 seconds ago, giving a skilled player
-     * a chance to dodge if they read the warning indicator.
+     * targets where the player WAS `historyWindow` seconds ago, giving a
+     * skilled player a chance to dodge if they read the warning indicator.
      * Charge sequence: 2 s warmup (nose orb grows) → 1 s locked (! shown,
      * nose blinking) → instant laser flash → immediately recharge.
      */
@@ -357,6 +364,31 @@ export const Config = Object.freeze({
       recoverTurnRate:  4,           // rad/sec — slow turn back toward the player during recovery
       hitRadius:        24,
       minSeparation:    64,
+
+      // Nose charge-orb visual tuning (see SniperEnemy.renderCore)
+      chargeOrbStartRadius: 3,   // radius at t=0 while charging
+      chargeOrbGrowth:      7,   // added radius by full charge (radius = start + growth*t)
+      chargeOrbLineWidth:   2,
+      chargeOrbGlowBlur:    6,
+      chargeOrbAlphaMin:    0.2, // alpha at t=0 while charging (ramps to 1)
+      lockedOrbRadius:      10,  // full-charge orb size while locked/flashing
+      lockedOrbLineWidth:   2.5,
+      lockedOrbGlowBlur:    8,
+      lockedBlinkSpeed:     6,   // × π rad/sec — rapid blink signaling imminent fire
+      flashOrbGrowth:       14,  // added radius as the charge orb releases into the laser
+
+      // "!" warning marker visual tuning (see SniperEnemy.renderExtras)
+      warningRingRadius:    20,
+      warningRingLineWidth: 2,
+      warningRingAlphaMult: 0.6, // outer ring reads dimmer than the inner dot/label
+      warningDotRadius:     4,
+      warningDotLineWidth:  3,
+      warningDotGlowBlur:   6,
+      warningLabelOffset:   32,  // vp above the marker
+      warningLabelFont:     '400 28px "Audiowide", "Courier New", monospace',
+      warningLabelGlowBlur: 10,
+      warningFadeInSpeed:   6,   // × t — how quickly the marker reaches full pulse strength
+      warningPulseSpeed:    4,   // × π rad/sec — pulse rate once faded in
       audio: Object.freeze({
         src: 'assets/audio/explosion.mp3', volume: 0.55, poolSize: 4,
       }),
@@ -422,12 +454,19 @@ export const Config = Object.freeze({
       speed:         220,  // vp/sec along the path
       loopRadius:    70,   // loop-the-loop radius
       entryMargin:   60,   // vp off-screen at the diagonal entry point
+      offscreenMargin:   40,  // vp beyond each edge before a clone counts as off-screen (culling + exit checks)
+      pathEntryRunMin:   250, // vp — variant #1's straight run before the loop starts
+      pathEntryRunMax:   400,
+      pathExitRunLength: 900, // vp — variant #1's straight run after the loop, well past the far corner
 
       // Tentacle animation
       tentacleLen:   20,
       tentacleSegs:  3,    // fewer segments = fewer points per stroke and fewer per-frame sin() calls
       tentacleAmp:   6,
       tentacleSpeed: 5,
+      tentacleWaveFreq:     3,   // per-segment wave-phase multiplier (see DrifterEnemy.render)
+      tentaclePhaseSpacing: 1.3, // per-tentacle-index phase offset — desyncs the 4 tentacles' waves
+      lashStraightenFactor: 0.7, // how much a lashing tentacle's wave amplitude shrinks as it extends
 
       // Tentacle-lash projectile attack
       fireMinInterval:  2.5,  // seconds idle before the next lash
@@ -436,8 +475,6 @@ export const Config = Object.freeze({
       lashLen:          40,   // tentacle extension at full lash (2x tentacleLen)
       projectileSpeed:  320,  // vp/sec toward the locked target
       projectileRadius: 4,
-      burstMaxR:        30,   // AOE scatter radius at impact
-      burstDuration:    0.35,
 
       hitRadius:     18,
       audio: Object.freeze({
@@ -559,6 +596,7 @@ export const Config = Object.freeze({
         speed:         200,  // vp/sec along the path
         amplitude:     90,   // horizontal sway amplitude, vp
         frequency:     0.012,// radians per vp traveled — wave tightness
+        spawnYOffset:  -60,  // vp — y at path distance 0, above the top edge so clones ease into view
 
         fireIntervalMult: 1,
 
@@ -674,6 +712,7 @@ export const Config = Object.freeze({
     lineWidth:     3,
     glowBlur:      12,          // 20→12: blur cost ∝ radius², ~64% cheaper, still reads as a hot beam
     flashDuration: 0.20,        // seconds the beam remains visible
+    beamLength:    1200,        // vp — drawn well past any edge so the beam always reaches off-screen
   }),
 
   /**
@@ -695,6 +734,26 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Enemy-death explosion effect (see entities/Particles.js): two
+   * concentric shockwave rings plus a radial spark burst. One `Particles`
+   * pool exists per enemy family/variant so each can tune its own
+   * `sparksPerEmit` (denser formations use fewer sparks per kill to keep
+   * the shared shadow-blur pass cheap).
+   */
+  particles: Object.freeze({
+    maxSparks: 256,             // spark pool size — well above any expected burst count
+    sparkHalfLength: 3,         // half-length of each spark line, virtual px
+    sparkSpeedMin: 140,
+    sparkSpeedMax: 380,         // vp/sec — actual speed is randomized in this range
+    sparkLifeMin: 0.18,
+    sparkLifeMax: 0.36,         // seconds — actual life is randomized in this range
+    sparkDrag: 5,                // per-second drag coefficient applied to spark velocity
+    defaultSparksPerEmit: 14,
+    innerRing: Object.freeze({ life: 0.28, startR: 6,  maxR: 38 }), // tight, fast — the impact "pop"
+    outerRing: Object.freeze({ life: 0.52, startR: 10, maxR: 72 }), // wide, slower — the traveling shockwave
+  }),
+
+  /**
    * Wave / level definitions. `type` maps to a key in `Config.enemy`.
    * WaveManager caps the index at the last entry — levels beyond the
    * array repeat the final wave indefinitely.
@@ -713,7 +772,7 @@ export const Config = Object.freeze({
     levels: Object.freeze([
       // Level 1 — scout and rocketeer
       Object.freeze({ enemies: Object.freeze([
-        Object.freeze({ type: 'scout', count: 2, spawnInterval: 3 }),
+        Object.freeze({ type: 'diver', count: 2, spawnInterval: 3 }),
         Object.freeze({ type: 'rocketeer', count: 2, spawnInterval: 3 }),
         Object.freeze({ type: 'scout', count: 3, spawnInterval: 3 }),
         Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 3 })
@@ -740,7 +799,7 @@ export const Config = Object.freeze({
         Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.8 }),
         Object.freeze({ type: 'rocketeer', count: 3, spawnInterval: 2.8 })
       ]) }),
-      // Level 5 — scout, rocketeer,drifter and sweeper mix
+      // Level 5 — sniper, scout and diver mix
        Object.freeze({ simultaneous: false, enemies: Object.freeze([
         Object.freeze({ type: 'sniper', count: 3, spawnInterval: 2.8 }),
         Object.freeze({ type: 'scout', count: 3, spawnInterval: 2.8 }),

@@ -25,7 +25,7 @@ export class DragInput {
     this._onDown = onPointerDown;
     this._onMove = onPointerMove;
     this._onUp   = onPointerUp;
-    this._active = false;
+    this._activePointerId = null; // pointerId currently driving the drag, or null when idle
 
     this._handleDown = this._handleDown.bind(this);
     this._handleMove = this._handleMove.bind(this);
@@ -38,7 +38,8 @@ export class DragInput {
   }
 
   _handleDown(e) {
-    this._active = true;
+    if (this._activePointerId !== null) return; // a drag is already in progress — ignore extra touches
+    this._activePointerId = e.pointerId;
     // Pointer capture keeps move/up events targeted at this element even if
     // the finger drifts outside its bounds mid-drag — without this, a fast
     // drag past the canvas edge silently stops delivering pointermove.
@@ -47,13 +48,13 @@ export class DragInput {
   }
 
   _handleMove(e) {
-    if (!this._active) return;
+    if (e.pointerId !== this._activePointerId) return;
     this._onMove?.(e.clientX, e.clientY);
   }
 
   _handleEnd(e) {
-    if (!this._active) return;
-    this._active = false;
+    if (e.pointerId !== this._activePointerId) return;
+    this._activePointerId = null;
     e.target.releasePointerCapture?.(e.pointerId);
     this._onUp?.();
   }

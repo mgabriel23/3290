@@ -2,6 +2,12 @@
 :root {
   --backdrop: #0a0c14;
   --backdrop-2: #11141f;
+  /* Must match Config.colors.void in js/core/Config.js — this is the color
+     the canvas itself clears to every frame. There's no build step to share
+     the value between CSS and JS, so keep the two in sync by hand if either
+     changes; a mismatch would show up as a visible seam between the canvas
+     and the letterbox bars around it. */
+  --void: #05070f;
   /* Derives the max stage width from the viewport height and the game's
      9:16 aspect ratio, so the container is always the exact right
      proportion on desktop/tablet — no arbitrary pixel guess needed.

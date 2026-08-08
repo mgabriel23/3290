@@ -5,12 +5,16 @@
  * backdrop the gameplay scene uses, so the handoff between the two is
  * visually seamless (no background color change to notice).
  *
- * Swiping up starts the background music immediately (browsers only let
- * `audio.play()` proceed without a rejected promise when it's called
- * within a user gesture's "activation" window, so it can't be deferred),
- * then the label dismisses itself with a "typewriter" fade — each letter
+ * Swiping up dismisses the label with a "typewriter" fade — each letter
  * fading to transparent in sequence, first letter first — before handing
- * off to the gameplay scene via `onContinue`.
+ * off via `onContinue` to whatever scene follows (Prologue → Tutorial →
+ * Gameplay). The background music itself is started later, by
+ * `Game._startGameplay`, once that chain actually reaches gameplay —
+ * still safely inside the original swipe's user-gesture activation
+ * window (each scene hands off via a direct synchronous callback from a
+ * tap/swipe, never deferred past an animation frame). This scene doesn't
+ * start its own copy, since that would leave two independent `Audio`
+ * instances playing the same track with no way to stop the first.
  */
 import { Config } from '../core/Config.js';
 
@@ -51,12 +55,10 @@ export class IntroScene {
     }
   }
 
-  /** Start the music and begin the dismiss animation. Fires once per intro. */
+  /** Begin the dismiss animation. Fires once per intro. */
   handleSwipeUp() {
     if (this._exiting) return;
     this._exiting = true;
-
-    this._playMusic();
   }
 
   /** Render one frame: void backdrop, the label (mid-fade once dismissing), and the arrow hint. */
@@ -145,15 +147,5 @@ export class IntroScene {
       lineWidth,
       glowBlur,
     });
-  }
-
-  // --- Music ---------------------------------------------------------------
-
-  _playMusic() {
-    const { themeSrc, themeVolume, themeLoop } = Config.audio;
-    const music = new Audio(themeSrc);
-    music.loop = themeLoop;
-    music.volume = themeVolume;
-    music.play().catch(() => {}); // ignore rejection — e.g. if the file is missing during dev
   }
 }

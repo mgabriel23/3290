@@ -12,8 +12,9 @@
   overflow: hidden;
   /* Matches the void color drawn inside the canvas, so any letterbox
      bars (when the viewport's aspect ratio isn't exactly 9:16) blend
-     seamlessly into the game rather than reading as a visible frame. */
-  background: #05070f;
+     seamlessly into the game rather than reading as a visible frame.
+     See --void's definition in base/_reset.css for the JS-side link. */
+  background: var(--void);
   /* Without this, mobile browsers treat a finger-drag on the stage as a
      pan/scroll gesture: the first pointermove or two reaches our handlers,
      then the browser takes over and fires pointercancel, breaking

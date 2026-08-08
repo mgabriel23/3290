@@ -2,11 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!--
+    user-scalable=no / maximum-scale=1.0: pinch-zoom is disabled deliberately.
+    This is a full-screen canvas game, not a document — Renderer.resize maps
+    CSS pixels to the virtual coordinate system once per resize; an
+    OS-level pinch-zoom would desync that mapping without firing a resize
+    event, permanently misaligning input coordinates from what's drawn.
+    Same rationale as touch-action: none in css/layouts/_app.css.
+  -->
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
   />
+  <meta name="theme-color" content="#05070f" />
   <title>Space Shooter</title>
+
+  <!-- Minimal inline wireframe-ship mark, matching the game's void backdrop + neon-cyan chrome. -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305070f'/%3E%3Cpath d='M16 6 L24 24 L16 20 L8 24 Z' fill='none' stroke='%234DEFFF' stroke-width='2'/%3E%3C/svg%3E" />
 
   <!-- Audiowide: a retro-futuristic display face for in-canvas sci-fi UI text (e.g. the intro prompt) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -18,8 +30,10 @@
 <body>
   <!-- Full-screen stage: defines the space the canvas scales into -->
   <div class="app" id="game-stage">
-    <!-- Responsive canvas (sized by the Renderer) -->
-    <canvas class="app__canvas" id="game-canvas"></canvas>
+    <!-- Responsive canvas (sized by the Renderer). All UI is canvas-drawn,
+         so the accessible name below is the only screen-reader-visible
+         description of the page's content. -->
+    <canvas class="app__canvas" id="game-canvas" aria-label="Space Shooter — a 2D arcade space shooter game"></canvas>
   </div>
 
   <script type="module" src="js/main.js"></script>

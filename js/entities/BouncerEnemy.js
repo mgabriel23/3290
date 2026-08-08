@@ -25,6 +25,7 @@
  *                             splitter's death; otherwise behaves identically.
  */
 import { Config } from '../core/Config.js';
+import { tickDeathState } from './EnemyCombat.js';
 
 /** Per-variant radius/health — everything else (gravity, spin, etc.) is shared. */
 function _variantStats(variant) {
@@ -150,12 +151,11 @@ export class BouncerEnemy {
    * @param {(x: number) => void} onBarrierHit  called once each time this clone bounces off the barrier, with the impact x
    */
   update(dt, barrierSurfaceY, onBarrierHit) {
-    if (this._hitFlash > 0) this._hitFlash -= dt;
+    // Shield flash and hit flash are independent timers — order between them
+    // doesn't matter, so the hit-flash decrement + dying-check is delegated
+    // to the shared tickDeathState helper (see EnemyCombat.js).
     if (this._shieldFlash > 0) this._shieldFlash -= dt;
-    if (this._dying) {
-      if (this._hitFlash <= 0) this.alive = false;
-      return;
-    }
+    if (tickDeathState(this, dt)) return;
 
     const cfg = Config.enemy.bouncer;
     const { width: vW } = Config.virtual;

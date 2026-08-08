@@ -21,6 +21,7 @@ import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
+import { AudioPool } from '../core/AudioPool.js';
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -112,16 +113,16 @@ export class WaveManager {
     this._weaverParticles    = new Particles(Config.enemy.drifter.weaver.color, Config.enemy.drifter.weaver.sparksPerEmit);
     this._bouncerParticles   = new Particles(Config.enemy.bouncer.color, Config.enemy.bouncer.sparksPerEmit);
 
-    // Lazy SFX pool (same audio file across all types; volume set per-play).
-    this._sfxPool = null;
-    this._sfxIdx  = 0;
+    // Same audio file across all enemy types; volume set per-play (see
+    // _playExplosionSfx) since it varies by which type died.
+    this._sfxPool = new AudioPool(Config.enemy.scout.audio.src, Config.enemy.scout.audio.poolSize);
 
     // Pre-bound fire callbacks — stored once, zero closures per frame.
     this._fireBullet           = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
     this._fireRocket           = (ox, oy, tx, ty) => this._rockets.fire(ox, oy, tx, ty);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
 
-    this.waveClear = false;
+    this._waveClear = false;
   }
 
   /**
@@ -130,7 +131,7 @@ export class WaveManager {
    * @param {number} playerY
    */
   update(dt, playerX, playerY) {
-    // All particle/projectile systems drain past waveClear so effects finish
+    // All particle/projectile systems drain past _waveClear so effects finish
     // before isDone returns true and the level transitions.
     this._particles.update(dt);
     this._rocketeerParticles.update(dt);
@@ -143,7 +144,7 @@ export class WaveManager {
     this._rockets.update(dt, playerX, playerY);
     this._drifterProjectiles.update(dt);
 
-    if (this.waveClear) return;
+    if (this._waveClear) return;
 
     // ── Spawn ─────────────────────────────────────────────────────────────────
     // When `simultaneous` is false, a new group can't start spawning until
@@ -196,29 +197,50 @@ export class WaveManager {
 
     this._enemyBullets.update(dt);
 
-    if (this._allSpawned && this._enemies.length === 0) this.waveClear = true;
+    if (this._allSpawned && this._enemies.length === 0) this._waveClear = true;
   }
 
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
-    // ── Projectiles ───────────────────────────────────────────────────────────
+    this._renderProjectiles(renderer);
+    this._renderEngineFlames(renderer);
+    this._renderHullBatches(renderer);
+    this._renderEngineCores(renderer);
+    this._renderSniperExtras(renderer);
+    this._renderIndividualEnemies(renderer);
+    this._renderExplosions(renderer);
+  }
+
+  /** Projectile pools — enemy bullets, homing rockets, drifter orbs. */
+  _renderProjectiles(renderer) {
     this._enemyBullets.render(renderer);
     this._rockets.render(renderer);
     this._drifterProjectiles.render(renderer);
+  }
 
-    // ── Engine flames — must render behind hulls ──────────────────────────────
+  /** Engine exhaust — must render behind hulls (Drifter/Bouncer have no engine flame). */
+  _renderEngineFlames(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
       if (e.type === 'drifter' || e.type === 'bouncer') continue;
       e.renderFlame(renderer);
     }
+  }
 
-    // ── Hull batch — ≤4 GPU shadow passes regardless of enemy count ───────────
+  /**
+   * World-transform every batchable enemy's hull into its (type × flash)
+   * pool, then draw each non-empty pool in one fillStrokePaths call — keeps
+   * GPU shadow-blur passes flat regardless of enemy count. Drifter/Bouncer
+   * hulls vary per-clone and are rendered individually in
+   * _renderIndividualEnemies instead.
+   */
+  _renderHullBatches(renderer) {
     const sCfg  = Config.enemy.scout;
     const rCfg  = Config.enemy.rocketeer;
     const snCfg = Config.enemy.sniper;
-    let scCount = 0, rnCount = 0, snCount = 0, fCount = 0;
-    let dnCount = 0, dfCount = 0, swnCount = 0, swfCount = 0, dvnCount = 0, dvfCount = 0, wvnCount = 0, wvfCount = 0;
+    let scoutNormalCount = 0, rocketeerNormalCount = 0, sniperNormalCount = 0, flashCount = 0;
+    let drifterNormalCount = 0, drifterFlashCount = 0, sweeperNormalCount = 0, sweeperFlashCount = 0,
+        diverNormalCount = 0, diverFlashCount = 0, weaverNormalCount = 0, weaverFlashCount = 0;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
@@ -229,16 +251,16 @@ export class WaveManager {
         let pool, idx;
         if (e._variant === 2) {
           pool = isFlash ? _sweeperFlashHulls : _sweeperNormalHulls;
-          idx  = isFlash ? swfCount++ : swnCount++;
+          idx  = isFlash ? sweeperFlashCount++ : sweeperNormalCount++;
         } else if (e._variant === 3) {
           pool = isFlash ? _diverFlashHulls : _diverNormalHulls;
-          idx  = isFlash ? dvfCount++ : dvnCount++;
+          idx  = isFlash ? diverFlashCount++ : diverNormalCount++;
         } else if (e._variant === 4) {
           pool = isFlash ? _weaverFlashHulls : _weaverNormalHulls;
-          idx  = isFlash ? wvfCount++ : wvnCount++;
+          idx  = isFlash ? weaverFlashCount++ : weaverNormalCount++;
         } else {
           pool = isFlash ? _drifterFlashHulls : _drifterNormalHulls;
-          idx  = isFlash ? dfCount++ : dnCount++;
+          idx  = isFlash ? drifterFlashCount++ : drifterNormalCount++;
         }
         if (idx >= pool.length) continue; // pool exhausted — skip drawing this clone's hull
         const c    = e._cosA, s = e._sinA;
@@ -254,13 +276,13 @@ export class WaveManager {
       const isFlash = e._hitFlash > 0;
       let pool, idx;
       if (isFlash) {
-        pool = _flashHulls;           idx = fCount++;
+        pool = _flashHulls;           idx = flashCount++;
       } else if (e.type === 'rocketeer') {
-        pool = _rocketeerNormalHulls; idx = rnCount++;
+        pool = _rocketeerNormalHulls; idx = rocketeerNormalCount++;
       } else if (e.type === 'sniper') {
-        pool = _sniperNormalHulls;    idx = snCount++;
+        pool = _sniperNormalHulls;    idx = sniperNormalCount++;
       } else {
-        pool = _scoutNormalHulls;     idx = scCount++;
+        pool = _scoutNormalHulls;     idx = scoutNormalCount++;
       }
       const c    = Math.cos(e.angle);
       const s    = Math.sin(e.angle);
@@ -273,108 +295,85 @@ export class WaveManager {
       }
     }
 
-    if (scCount > 0) renderer.fillStrokePaths(_scoutNormalHulls, {
+    if (scoutNormalCount > 0) renderer.fillStrokePaths(_scoutNormalHulls, {
       fillColor: sCfg.fillColor,  strokeColor: sCfg.color,
       lineWidth:  sCfg.lineWidth, glowBlur:    sCfg.glowBlur,
       glowColor:  sCfg.color,     singleStroke: true,
-    }, scCount);
-    if (rnCount > 0) renderer.fillStrokePaths(_rocketeerNormalHulls, {
+    }, scoutNormalCount);
+    if (rocketeerNormalCount > 0) renderer.fillStrokePaths(_rocketeerNormalHulls, {
       fillColor: rCfg.fillColor,  strokeColor: rCfg.color,
       lineWidth:  rCfg.lineWidth, glowBlur:    rCfg.glowBlur,
       glowColor:  rCfg.color,     singleStroke: true,
-    }, rnCount);
-    if (snCount > 0) renderer.fillStrokePaths(_sniperNormalHulls, {
+    }, rocketeerNormalCount);
+    if (sniperNormalCount > 0) renderer.fillStrokePaths(_sniperNormalHulls, {
       fillColor: snCfg.fillColor,  strokeColor: snCfg.color,
       lineWidth:  snCfg.lineWidth, glowBlur:    snCfg.glowBlur,
       glowColor:  snCfg.color,     singleStroke: true,
-    }, snCount);
-    if (fCount > 0) renderer.fillStrokePaths(_flashHulls, {
+    }, sniperNormalCount);
+    if (flashCount > 0) renderer.fillStrokePaths(_flashHulls, {
       fillColor: '#ffffff', strokeColor: '#ffffff',
       lineWidth:  sCfg.lineWidth, glowBlur:   sCfg.hitGlowBlur,
       glowColor: '#ffffff', singleStroke: true,
-    }, fCount);
+    }, flashCount);
 
-    // Clamp to pool capacity — guards against more clones being on screen
-    // at once than DRIFTER_MAX_BATCH (the loop above already skips drawing
-    // hulls beyond capacity, so this just keeps the draw call in sync).
-    dnCount  = Math.min(dnCount,  _drifterNormalHulls.length);
-    dfCount  = Math.min(dfCount,  _drifterFlashHulls.length);
-    swnCount = Math.min(swnCount, _sweeperNormalHulls.length);
-    swfCount = Math.min(swfCount, _sweeperFlashHulls.length);
-    dvnCount = Math.min(dvnCount, _diverNormalHulls.length);
-    dvfCount = Math.min(dvfCount, _diverFlashHulls.length);
-    wvnCount = Math.min(wvnCount, _weaverNormalHulls.length);
-    wvfCount = Math.min(wvfCount, _weaverFlashHulls.length);
-
+    // Drifter-family hull draws (drifter/sweeper/diver/weaver × normal/flash)
+    // all share the same call shape — loop over a small table instead of 8
+    // hand-duplicated blocks. `lineWidth` intentionally always comes from
+    // the base drifter config (dCfg), not each variant's own — that's the
+    // original behavior, preserved here rather than "fixed".
     const dCfg = Config.enemy.drifter;
-    if (dnCount > 0) renderer.fillStrokePaths(_drifterNormalHulls, {
-      fillColor: dCfg.fillColor,  strokeColor: dCfg.color,
-      lineWidth:  dCfg.lineWidth, glowBlur:    dCfg.glowBlur,
-      glowColor:  dCfg.color,     singleStroke: true,
-    }, dnCount);
-    if (dfCount > 0) renderer.fillStrokePaths(_drifterFlashHulls, {
-      fillColor: '#ffffff', strokeColor: '#ffffff',
-      lineWidth:  dCfg.lineWidth, glowBlur:   dCfg.hitGlowBlur,
-      glowColor: '#ffffff', singleStroke: true,
-    }, dfCount);
+    const drifterHullGroups = [
+      { cfg: dCfg,         normalPool: _drifterNormalHulls, normalCount: drifterNormalCount, flashPool: _drifterFlashHulls, flashCount: drifterFlashCount },
+      { cfg: dCfg.sweeper, normalPool: _sweeperNormalHulls, normalCount: sweeperNormalCount, flashPool: _sweeperFlashHulls, flashCount: sweeperFlashCount },
+      { cfg: dCfg.diver,   normalPool: _diverNormalHulls,   normalCount: diverNormalCount,   flashPool: _diverFlashHulls,   flashCount: diverFlashCount },
+      { cfg: dCfg.weaver,  normalPool: _weaverNormalHulls,  normalCount: weaverNormalCount,  flashPool: _weaverFlashHulls,  flashCount: weaverFlashCount },
+    ];
+    for (const g of drifterHullGroups) {
+      // Clamp to pool capacity — guards against more clones being on screen
+      // at once than DRIFTER_MAX_BATCH (the loop above already skips
+      // drawing hulls beyond capacity, so this just keeps the draw call in sync).
+      const normalCount = Math.min(g.normalCount, g.normalPool.length);
+      const flashDrawCount = Math.min(g.flashCount, g.flashPool.length);
+      if (normalCount > 0) renderer.fillStrokePaths(g.normalPool, {
+        fillColor: g.cfg.fillColor, strokeColor: g.cfg.color,
+        lineWidth:  dCfg.lineWidth, glowBlur:    g.cfg.glowBlur,
+        glowColor:  g.cfg.color,    singleStroke: true,
+      }, normalCount);
+      if (flashDrawCount > 0) renderer.fillStrokePaths(g.flashPool, {
+        fillColor: '#ffffff', strokeColor: '#ffffff',
+        lineWidth:  dCfg.lineWidth, glowBlur:   g.cfg.hitGlowBlur,
+        glowColor: '#ffffff', singleStroke: true,
+      }, flashDrawCount);
+    }
+  }
 
-    const swCfg = Config.enemy.drifter.sweeper;
-    if (swnCount > 0) renderer.fillStrokePaths(_sweeperNormalHulls, {
-      fillColor: swCfg.fillColor, strokeColor: swCfg.color,
-      lineWidth:  dCfg.lineWidth, glowBlur:    swCfg.glowBlur,
-      glowColor:  swCfg.color,    singleStroke: true,
-    }, swnCount);
-    if (swfCount > 0) renderer.fillStrokePaths(_sweeperFlashHulls, {
-      fillColor: '#ffffff', strokeColor: '#ffffff',
-      lineWidth:  dCfg.lineWidth, glowBlur:   swCfg.hitGlowBlur,
-      glowColor: '#ffffff', singleStroke: true,
-    }, swfCount);
-
-    const dvCfg = Config.enemy.drifter.diver;
-    if (dvnCount > 0) renderer.fillStrokePaths(_diverNormalHulls, {
-      fillColor: dvCfg.fillColor, strokeColor: dvCfg.color,
-      lineWidth:  dCfg.lineWidth, glowBlur:    dvCfg.glowBlur,
-      glowColor:  dvCfg.color,    singleStroke: true,
-    }, dvnCount);
-    if (dvfCount > 0) renderer.fillStrokePaths(_diverFlashHulls, {
-      fillColor: '#ffffff', strokeColor: '#ffffff',
-      lineWidth:  dCfg.lineWidth, glowBlur:   dvCfg.hitGlowBlur,
-      glowColor: '#ffffff', singleStroke: true,
-    }, dvfCount);
-
-    const wvCfg = Config.enemy.drifter.weaver;
-    if (wvnCount > 0) renderer.fillStrokePaths(_weaverNormalHulls, {
-      fillColor: wvCfg.fillColor, strokeColor: wvCfg.color,
-      lineWidth:  dCfg.lineWidth, glowBlur:    wvCfg.glowBlur,
-      glowColor:  wvCfg.color,    singleStroke: true,
-    }, wvnCount);
-    if (wvfCount > 0) renderer.fillStrokePaths(_weaverFlashHulls, {
-      fillColor: '#ffffff', strokeColor: '#ffffff',
-      lineWidth:  dCfg.lineWidth, glowBlur:   wvCfg.hitGlowBlur,
-      glowColor: '#ffffff', singleStroke: true,
-    }, wvfCount);
-
-    // ── Engine cores — rendered on top of hulls ───────────────────────────────
+  /** Engine core orbs — rendered on top of hulls (Drifter/Bouncer have none). */
+  _renderEngineCores(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
       if (e.type === 'drifter' || e.type === 'bouncer') continue;
       e.renderCore(renderer);
     }
+  }
 
-    // ── Sniper extras: ! warning markers and laser flash beams ───────────────
+  /** Sniper's "!" warning markers and laser flash beams — a no-op for every other type. */
+  _renderSniperExtras(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       this._enemies[i].renderExtras?.(renderer);
     }
+  }
 
-    // ── Drifters and Bouncers — individually rendered (variable/per-clone
-    //    geometry can't be batched into the shared hull pools above) ─────────
+  /** Drifters and Bouncers — variable/per-clone geometry can't be batched into the shared hull pools above. */
+  _renderIndividualEnemies(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
       if (e.type === 'drifter' && e._visible) e.render(renderer);
       else if (e.type === 'bouncer') e.render(renderer);
     }
+  }
 
-    // ── Explosions ────────────────────────────────────────────────────────────
+  /** Explosion particle pools — one per enemy family/variant palette. */
+  _renderExplosions(renderer) {
     this._particles.render(renderer);
     this._rocketeerParticles.render(renderer);
     this._sniperParticles.render(renderer);
@@ -431,7 +430,7 @@ export class WaveManager {
    * True once all enemies are dead AND every effect has finished animating.
    */
   get isDone() {
-    return this.waveClear
+    return this._waveClear
       && !this._particles.active
       && !this._rocketeerParticles.active
       && !this._sniperParticles.active
@@ -490,8 +489,7 @@ export class WaveManager {
       if (type === 'splitter') variant = 2;
       else if (type === 'shielded') variant = 3;
       this._enemies.push(new BouncerEnemy({ variant, healthBonus: this._healthBonus(Config.enemy.bouncer) }));
-      this._spawnIdx++;
-      if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;
+      this._advanceSpawnIndex();
       return;
     }
 
@@ -518,8 +516,7 @@ export class WaveManager {
       for (let lane = 0; lane < formationSize; lane++) {
         this._enemies.push(new DrifterEnemy(path, lane, healthBonus));
       }
-      this._spawnIdx++;
-      if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;
+      this._advanceSpawnIndex();
       return;
     }
 
@@ -534,7 +531,11 @@ export class WaveManager {
       ? new SniperEnemy(spawnX, restX, restY, healthBonus)
       : new Enemy(spawnX, restX, restY, type, healthBonus);
     this._enemies.push(enemy);
+    this._advanceSpawnIndex();
+  }
 
+  /** Bump the spawn cursor and flip `_allSpawned` once every group has been spawned. */
+  _advanceSpawnIndex() {
     this._spawnIdx++;
     if (this._spawnIdx >= this._totalToSpawn) this._allSpawned = true;
   }
@@ -554,14 +555,6 @@ export class WaveManager {
   }
 
   _playExplosionSfx(volume) {
-    if (!this._sfxPool) {
-      const { src, poolSize } = Config.enemy.scout.audio;
-      this._sfxPool = Array.from({ length: poolSize }, () => new Audio(src));
-    }
-    const a = this._sfxPool[this._sfxIdx];
-    this._sfxIdx  = (this._sfxIdx + 1) % this._sfxPool.length;
-    a.volume      = volume;
-    a.currentTime = 0;
-    a.play().catch(() => {});
+    this._sfxPool.play(volume);
   }
 }

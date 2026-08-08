@@ -22,6 +22,7 @@
  * than owning a Renderer or touching anything outside itself.
  */
 import { Config } from '../core/Config.js';
+import { easeOutCubic } from '../core/animation.js';
 
 // Local ship-space outline coordinates (nose toward -Y — "forward", since
 // the ship faces up the screen). Only the right half is authored; it's
@@ -118,8 +119,8 @@ export class Player {
     const t = Math.min(this._age / entryDuration, 1);
 
     if (t < 1) {
-      // Entry animation — ease-out cubic: brisk launch, gentle settle.
-      const eased = 1 - (1 - t) ** 3;
+      // Entry animation — brisk launch, gentle settle.
+      const eased = easeOutCubic(t);
       this.y = this._startY + (this._restY - this._startY) * eased;
       // this.x stays at vW/2 from the constructor
     } else {

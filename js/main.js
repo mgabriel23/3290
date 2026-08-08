@@ -20,5 +20,11 @@ const stage = document.getElementById('game-stage');
 // correct from the very first frame.
 document.fonts.load(Config.intro.font).finally(() => {
   const game = new Game(canvas, stage);
+
+  window.addEventListener('resize', () => game.resize());
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) game.resumeFromBackground();
+  });
+
   game.start();
 });

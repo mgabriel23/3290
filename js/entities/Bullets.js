@@ -14,6 +14,7 @@
  * one shadow-blur GPU pass no matter how many are on screen.
  */
 import { Config } from '../core/Config.js';
+import { AudioPool } from '../core/AudioPool.js';
 
 const MAX = 64; // well above steady-state peak (~10 at 7/s × 1.5s screen-cross time)
 
@@ -39,10 +40,11 @@ export class Bullets {
     // GPU pass per frame regardless of how many bullets are on screen.
     this._style = { color, lineWidth, glowBlur, lineCap: 'round', singleStroke: true };
 
-    // Audio pool — lazy: created on first _fire() so scene construction
-    // doesn't allocate 12 HTMLMediaElement objects before a shot is fired.
-    this._audioPool = null;
-    this._audioIdx  = 0;
+    // AudioPool lazily creates its Audio elements on first play(), so
+    // constructing it here doesn't allocate any HTMLMediaElement objects
+    // before a shot is actually fired.
+    const audioCfg = Config.bullet.audio;
+    this._audioPool = new AudioPool(audioCfg.src, audioCfg.poolSize, audioCfg.volume);
   }
 
   /**
@@ -127,20 +129,6 @@ export class Bullets {
     this._bx[this._count] = x;
     this._by[this._count] = y;
     this._count++;
-
-    // Lazy-init on first shot so scene construction doesn't front-load
-    // 12 HTMLMediaElement allocations before the player ever fires.
-    if (!this._audioPool) {
-      const { src, volume, poolSize } = Config.bullet.audio;
-      this._audioPool = Array.from({ length: poolSize }, () => {
-        const a = new Audio(src);
-        a.volume = volume;
-        return a;
-      });
-    }
-    const a = this._audioPool[this._audioIdx];
-    this._audioIdx = (this._audioIdx + 1) % this._audioPool.length;
-    a.currentTime = 0;
-    a.play().catch(() => {});
+    this._audioPool.play();
   }
 }

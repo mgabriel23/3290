@@ -26,12 +26,12 @@
 /**
  * preview.html — standalone design sandbox.
  *
- * Self-contained scratch space for previewing new enemy hulls / animations
- * before wiring them into the real entity classes. Mirrors the subset of
- * Renderer.js's primitive API (strokePaths, fillStrokePaths, fillEllipse,
- * strokeCircle, drawFlame, drawText) so sketches here can be ported into
- * real entity render() methods with minimal changes. Not part of the game —
- * delete or ignore once the design under test has been integrated.
+ * Self-contained scratch space for previewing new enemy/boss hulls and
+ * animations before wiring them into the real entity classes. Mirrors the
+ * subset of Renderer.js's primitive API (strokePaths, fillStrokePaths,
+ * drawText) so sketches here can be ported into real entity render()
+ * methods with minimal changes. Not part of the game — delete or ignore
+ * once the design under test has been integrated.
  */
 
 const VW = 540, VH = 960; // same virtual resolution as the game
@@ -53,7 +53,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ── Player marker — drag/move to test the alien's "fire toward player" aim ──
+// ── Player marker — drag/move to test "fire toward player" aim ─────────────
 const PLAYER_COLOR = '#00E5FF';
 let playerX = VW / 2;
 let playerY = VH * 0.82;
@@ -71,7 +71,7 @@ function clear(color) {
   ctx.fillRect(0, 0, VW, VH);
 }
 
-function strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0, lineCap = 'butt', singleStroke = false }, count = paths.length) {
+function strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0 }, count = paths.length) {
   ctx.save();
   ctx.translate(x, y);
   if (rotation !== 0) ctx.rotate(rotation);
@@ -79,40 +79,29 @@ function strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, 
   if (alpha < 1) ctx.globalAlpha = alpha;
   ctx.strokeStyle = color;
   ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
-  if (lineCap !== 'butt') ctx.lineCap = lineCap;
   if (glowBlur > 0) { ctx.shadowColor = glowColor ?? color; ctx.shadowBlur = glowBlur; }
 
-  if (singleStroke) {
+  for (let i = 0; i < count; i++) {
+    const pts = paths[i].points;
     ctx.beginPath();
-    for (let i = 0; i < count; i++) {
-      const pts = paths[i].points;
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
-      if (paths[i].closed !== false) ctx.closePath();
-    }
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+    if (paths[i].closed !== false) ctx.closePath();
     ctx.stroke();
-  } else {
-    for (let i = 0; i < count; i++) {
-      const pts = paths[i].points;
-      ctx.beginPath();
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
-      if (paths[i].closed !== false) ctx.closePath();
-      ctx.stroke();
-    }
   }
   ctx.restore();
 }
 
-function fillStrokePaths(paths, { x = 0, y = 0, rotation = 0, alpha = 1, fillColor, strokeColor, lineWidth, glowColor, glowBlur = 0 }, count = paths.length) {
+function fillStrokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, fillColor, strokeColor, lineWidth, glowColor, glowBlur = 0 }, count = paths.length) {
   ctx.save();
   ctx.translate(x, y);
   if (rotation !== 0) ctx.rotate(rotation);
+  if (scale !== 1) ctx.scale(scale, scale);
   if (alpha < 1) ctx.globalAlpha = alpha;
   ctx.fillStyle = fillColor;
   ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = lineWidth;
-  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? strokeColor; ctx.shadowBlur = glowBlur; }
+  ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
+  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? strokeColor; ctx.shadowBlur = scale !== 1 ? glowBlur / scale : glowBlur; }
   for (let i = 0; i < count; i++) {
     const pts = paths[i].points;
     ctx.beginPath();
@@ -125,48 +114,61 @@ function fillStrokePaths(paths, { x = 0, y = 0, rotation = 0, alpha = 1, fillCol
   ctx.restore();
 }
 
-function fillEllipse(localCx, localCy, rx, ry, { x = 0, y = 0, rotation = 0, fillColor, alpha = 1 }) {
+/**
+ * Like fillStrokePaths, but rounds every corner of a closed point set by
+ * routing the path through quadratic curves between edge midpoints — turns
+ * a faceted polygon into a smooth organic blob without adding more points.
+ */
+function fillStrokeSmoothPath(points, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, fillColor, strokeColor, lineWidth, glowColor, glowBlur = 0 }) {
   ctx.save();
   ctx.translate(x, y);
   if (rotation !== 0) ctx.rotate(rotation);
+  if (scale !== 1) ctx.scale(scale, scale);
   if (alpha < 1) ctx.globalAlpha = alpha;
   ctx.fillStyle = fillColor;
-  ctx.shadowBlur = 0;
-  ctx.beginPath();
-  ctx.ellipse(localCx, localCy, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
+  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? strokeColor; ctx.shadowBlur = scale !== 1 ? glowBlur / scale : glowBlur; }
 
-function strokeCircle(x, y, radius, { color, lineWidth, glowBlur = 0, glowColor, alpha = 1 }) {
-  if (radius <= 0) return;
-  ctx.save();
-  if (alpha < 1) ctx.globalAlpha = alpha;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? color; ctx.shadowBlur = glowBlur; }
+  const n = points.length;
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const m0 = mid(points[n - 1], points[0]);
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.moveTo(m0[0], m0[1]);
+  for (let i = 0; i < n; i++) {
+    const cur  = points[i];
+    const next = points[(i + 1) % n];
+    const m    = mid(cur, next);
+    ctx.quadraticCurveTo(cur[0], cur[1], m[0], m[1]);
+  }
+  ctx.closePath();
+  ctx.fill();
   ctx.stroke();
   ctx.restore();
 }
 
-function drawFlame(localBaseX, localBaseY, length, { x = 0, y = 0, rotation = 0, halfWidth = 4, color, alpha = 1 }) {
+/**
+ * Draws a tapered, curved "blade" — two quadratic curves from a base edge
+ * (b1 → b2) to a single tip point, each routed through its own control
+ * point (c1, c2) so the two edges can curve independently.
+ */
+function fillStrokeBlade(b1, c1, tip, c2, b2, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, fillColor, strokeColor, lineWidth, glowColor, glowBlur = 0 }) {
   ctx.save();
   ctx.translate(x, y);
   if (rotation !== 0) ctx.rotate(rotation);
+  if (scale !== 1) ctx.scale(scale, scale);
   if (alpha < 1) ctx.globalAlpha = alpha;
-  ctx.globalCompositeOperation = 'lighter';
-  const h = color.replace('#', '');
-  const rgba = `rgba(${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)},0.70)`;
-  ctx.fillStyle = rgba;
-  const tipY = localBaseY - length;
+  ctx.fillStyle = fillColor;
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
+  if (glowBlur > 0) { ctx.shadowColor = glowColor ?? strokeColor; ctx.shadowBlur = scale !== 1 ? glowBlur / scale : glowBlur; }
   ctx.beginPath();
-  ctx.moveTo(localBaseX - halfWidth, localBaseY);
-  ctx.lineTo(localBaseX + halfWidth, localBaseY);
-  ctx.lineTo(localBaseX, tipY);
+  ctx.moveTo(b1[0], b1[1]);
+  ctx.quadraticCurveTo(c1[0], c1[1], tip[0], tip[1]);
+  ctx.quadraticCurveTo(c2[0], c2[1], b2[0], b2[1]);
   ctx.closePath();
   ctx.fill();
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -183,182 +185,266 @@ function drawText(text, x, y, { font, color, align = 'center', baseline = 'middl
 }
 
 // ── Scene under test ─────────────────────────────────────────────────────────
-// Bouncer variety #3 candidates — press 2 / 5 to switch:
-//   2: "Phaser"   — cycles between solid and intangible (flickering/dim) states
-//   5: "Shielded" — outer rotating shield ring absorbs hits before the core
-//                   takes damage; click/tap the shape to fire a test "bullet"
-const AMBER   = '#FFB020';
-const SHIELD_COLOR = '#6FE0FF';
-const HEALTH_FONT = '400 16px "Audiowide", "Courier New", monospace';
-const LABEL_FONT  = '400 14px "Audiowide", "Courier New", monospace';
-const GRAVITY = 300, SPIN_FACTOR = 0.04;
-const FLOOR_Y = VH - 80; // stand-in for the Barrier's surface
+// Boss #2 — a crab/beetle "claw" boss inspired by a reference image: a round
+// red carapace head, two huge curved red horn-claws sweeping up and outward,
+// pale icy-cyan fin spikes layered behind them, gray cannon-arms tipped with
+// glowing purple eyes, and curved claw-legs hanging below — reworked into
+// this game's flat neon-outline vector language (dark fills, bright strokes,
+// glow halos), same as every other enemy.
+//
+// Independent parts: every limb (claw, fin, arm, leg) is its own shape with
+// its own pivot near where it attaches to the body, and its own idle "sway"
+// rotation (amplitude/frequency/phase) computed each frame in update(). The
+// head is drawn last so the limbs all read as attached to it, but each piece
+// can be animated on its own — exactly the shape needed for later attacks
+// (e.g. an individual claw winding up before a slash) without touching the
+// others.
 
-function hexPoints(radius) {
-  const pts = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    pts.push([Math.cos(a) * radius, Math.sin(a) * radius]);
-  }
-  return pts;
+const BOSS_SCALE = 1.7;
+
+const BODY_COLOR   = '#FF5C3A'; // red-orange carapace + horn-claws
+const BODY_FILL    = '#3a0d00';
+const ACCENT_COLOR = '#8FE3FF'; // pale icy-cyan fins + cannon arms
+const ACCENT_FILL  = '#0c2530';
+const CORE_COLOR   = '#C75CFF'; // glowing purple eyes / core
+
+/** Tapered curved blade from `base` to `tip` — see preview history for derivation. */
+function makeBlade(base, tip, width, lean) {
+  const dx = tip[0] - base[0], dy = tip[1] - base[1];
+  const len = Math.hypot(dx, dy);
+  const ux = dx / len, uy = dy / len;
+  const px = -uy, py = ux;
+  const b1 = [base[0] + px * width / 2, base[1] + py * width / 2];
+  const b2 = [base[0] - px * width / 2, base[1] - py * width / 2];
+  const mx = (base[0] + tip[0]) / 2, my = (base[1] + tip[1]) / 2;
+  const c1 = [mx + px * lean,        my + py * lean];
+  const c2 = [mx - px * lean * 0.25, my - py * lean * 0.25];
+  return { b1, c1, tip, c2, b2 };
 }
 
-function worldHull(localPts, x, y, angle) {
-  const c = Math.cos(angle), s = Math.sin(angle);
-  return localPts.map(([lx, ly]) => [x + c * lx - s * ly, y + s * lx + c * ly]);
+const sub2 = (p, pivot) => [p[0] - pivot[0], p[1] - pivot[1]];
+
+/** A blade-shaped limb (claw, fin, leg) — pivots and sways around `base`. */
+function bladePart(base, tip, width, lean, { color, fillColor, lineWidth, glowBlur, sway }) {
+  const blade = makeBlade(base, tip, width, lean);
+  return {
+    type: 'blade', pivot: base, sway, color, fillColor, lineWidth, glowBlur,
+    rel: {
+      b1: sub2(blade.b1, base), c1: sub2(blade.c1, base), tip: sub2(blade.tip, base),
+      c2: sub2(blade.c2, base), b2: sub2(blade.b2, base),
+    },
+  };
 }
 
-function bouncePhysics(body, dt, radius) {
-  body.angle += body.vx * SPIN_FACTOR * dt;
-  body.vy += GRAVITY * dt;
-  body.x  += body.vx * dt;
-  body.y  += body.vy * dt;
-  if (body.x <= radius) { body.x = radius; body.vx = Math.abs(body.vx); }
-  else if (body.x >= VW - radius) { body.x = VW - radius; body.vx = -Math.abs(body.vx); }
-  if (body.y <= radius && body.vy < 0) { body.y = radius; body.vy = Math.abs(body.vy); }
-  if (body.y + radius >= FLOOR_Y && body.vy > 0) { body.y = FLOOR_Y - radius; body.vy = -Math.abs(body.vy); }
+/** Mirror a part across x=0 (for the left-side twin of a right-side limb). */
+function mirrorPart(part, swayOverride) {
+  const mx = (p) => [-p[0], p[1]];
+  return {
+    ...part, pivot: mx(part.pivot), sway: swayOverride ?? part.sway,
+    rel: part.rel && {
+      b1: mx(part.rel.b1), c1: mx(part.rel.c1), tip: mx(part.rel.tip),
+      c2: mx(part.rel.c2), b2: mx(part.rel.b2),
+    },
+    orb: part.orb && { ...part.orb, pos: mx(part.orb.pos) },
+    points: part.points && part.points.map(mx),
+  };
 }
 
-// ── #2 "Phaser" ──────────────────────────────────────────────────────────────
-// Cycles between a solid (hittable) phase and an intangible "phased" phase
-// (dim, flickering, no glow). While phased it would pass through both bullets
-// and the barrier untouched.
-class PhaserPreview {
-  constructor() {
-    this.x = VW / 2; this.y = 200;
-    this.vx = 140; this.vy = 0;
-    this.angle = 0;
-    this.radius = 20;
-    this.health = 3;
-    this.cycle = 0;
-    this.phased = false;
-    this.hull = hexPoints(this.radius);
-  }
-  update(dt) {
-    bouncePhysics(this, dt, this.radius);
-    this.cycle += dt;
-    const SOLID = 1.5, PHASE = 0.8;
-    this.phased = (this.cycle % (SOLID + PHASE)) >= SOLID;
-  }
-  render() {
-    const pts = worldHull(this.hull, this.x, this.y, this.angle);
-    if (this.phased) {
-      const flicker = 0.15 + Math.random() * 0.25;
-      strokePaths([{ points: pts, closed: true }], {
-        color: AMBER, lineWidth: 2, alpha: flicker,
-      });
-    } else {
-      strokePaths([{ points: pts, closed: true }], {
-        color: AMBER, lineWidth: 2, glowBlur: 6, glowColor: AMBER,
-      });
-      drawText(String(this.health), this.x, this.y, { font: HEALTH_FONT, color: '#ffffff' });
-    }
-  }
-}
+// Round carapace "head" — smoothed 11-point dome, drawn last so every limb
+// below reads as attached to it.
+const HEAD_PIVOT = [0, -2];
+const HEAD_PART = {
+  type: 'smooth', pivot: HEAD_PIVOT,
+  color: BODY_COLOR, fillColor: BODY_FILL, lineWidth: 2.5, glowBlur: 16,
+  sway: { amp: 0.02, freq: 0.9, phase: 0 },
+  rel: [
+    [-11, 5], [-12, -4], [-8, -12], [-2, -16], [4, -16], [10, -12], [12, -4], [11, 5],
+    [7, 10], [0, 12], [-7, 10],
+  ].map((p) => sub2(p, HEAD_PIVOT)),
+};
 
-// ── #5 "Shielded" ────────────────────────────────────────────────────────────
-// An outer hexagonal shield ring (independent slow rotation) absorbs
-// `shieldHits` before the inner core can take damage. Click/tap the shape to
-// fire a test hit — the shield flashes and depletes first, then falls away
-// and the core behaves like a normal Bouncer.
-class ShieldedPreview {
-  constructor() {
-    this.x = VW / 2; this.y = 250;
-    this.vx = -120; this.vy = 0;
-    this.angle = 0; this.shieldAngle = 0;
-    this.radius = 20; this.shieldRadius = 32;
-    this.health = 3; this.shieldHits = 2;
-    this.flash = 0; this.shieldFlash = 0;
-    this.hull = hexPoints(this.radius);
-    this.shieldHull = hexPoints(this.shieldRadius);
-  }
-  get activeRadius() { return this.shieldHits > 0 ? this.shieldRadius : this.radius; }
-  update(dt) {
-    bouncePhysics(this, dt, this.activeRadius);
-    this.shieldAngle -= 1.2 * dt;
-    if (this.flash > 0) this.flash -= dt;
-    if (this.shieldFlash > 0) this.shieldFlash -= dt;
-  }
-  hitTest(px, py) {
-    const r = this.activeRadius;
-    const dx = px - this.x, dy = py - this.y;
-    return dx * dx + dy * dy <= r * r;
-  }
-  hit() {
-    if (this.shieldHits > 0) {
-      this.shieldHits--;
-      this.shieldFlash = 0.12;
-    } else {
-      this.health = Math.max(0, this.health - 1);
-      this.flash = 0.08;
-    }
-  }
-  render() {
-    if (this.shieldHits > 0) {
-      const pts = worldHull(this.shieldHull, this.x, this.y, this.shieldAngle);
-      const flash = this.shieldFlash > 0;
-      strokePaths([{ points: pts, closed: true }], {
-        color: flash ? '#ffffff' : SHIELD_COLOR, lineWidth: 2, alpha: 0.6,
-        glowBlur: flash ? 14 : 6, glowColor: flash ? '#ffffff' : SHIELD_COLOR,
-      });
-    }
-    const pts = worldHull(this.hull, this.x, this.y, this.angle);
-    const flash = this.flash > 0;
-    strokePaths([{ points: pts, closed: true }], {
-      color: flash ? '#ffffff' : AMBER, lineWidth: 2,
-      glowBlur: flash ? 14 : 6, glowColor: flash ? '#ffffff' : AMBER,
-    });
-    drawText(String(this.shieldHits > 0 ? this.shieldHits : this.health), this.x, this.y, {
-      font: HEALTH_FONT, color: '#ffffff',
-    });
-  }
-}
-
-let current = '2';
-let phaser   = new PhaserPreview();
-let shielded = new ShieldedPreview();
-
-window.addEventListener('keydown', (e) => {
-  if (e.key === '2' || e.key === '5') {
-    current = e.key;
-    phaser   = new PhaserPreview();
-    shielded = new ShieldedPreview();
-  }
+// Big horn-claws sweeping up and outward from the shoulders.
+const CLAW_R = bladePart([11, -9], [39, -60], 11, 20, {
+  color: BODY_COLOR, fillColor: BODY_FILL, lineWidth: 2.5, glowBlur: 16,
+  sway: { amp: 0.06, freq: 0.75, phase: 2.0 },
 });
+const CLAW_L = mirrorPart(CLAW_R, { amp: 0.06, freq: 0.75, phase: 0.3 });
 
-canvas.addEventListener('pointerdown', (e) => {
-  if (current !== '5') return;
-  const rect = canvas.getBoundingClientRect();
-  const px = (e.clientX - rect.left) / rect.width  * VW;
-  const py = (e.clientY - rect.top)  / rect.height * VH;
-  if (shielded.hitTest(px, py)) shielded.hit();
+// Pale fin spikes layered behind the claws.
+const FIN_R = bladePart([19, -11], [30, -49], 5.5, 8, {
+  color: ACCENT_COLOR, fillColor: ACCENT_FILL, lineWidth: 2, glowBlur: 10,
+  sway: { amp: 0.09, freq: 1.15, phase: 1.6 },
 });
+const FIN_L = mirrorPart(FIN_R, { amp: 0.09, freq: 1.15, phase: 0 });
 
-function drawFloor() {
-  strokePaths([{ points: [[0, FLOOR_Y], [VW, FLOOR_Y]], closed: false }], {
-    color: '#4DEFFF', lineWidth: 1, alpha: 0.3,
+// Long, slender talon-claws radiating from the body's underside — two per
+// side, curving like a scythe (same proportions as the big horn-claws, just
+// smaller) to match the reference's curved gray claws.
+const LEG1_R = bladePart([6, 16], [14, 54], 3, 10, {
+  color: ACCENT_COLOR, fillColor: ACCENT_FILL, lineWidth: 2, glowBlur: 10,
+  sway: { amp: 0.16, freq: 1.6, phase: 1.9 },
+});
+const LEG1_L = mirrorPart(LEG1_R, { amp: 0.16, freq: 1.6, phase: 0.5 });
+const LEG2_R = bladePart([11, 14], [30, 46], 3, 9, {
+  color: ACCENT_COLOR, fillColor: ACCENT_FILL, lineWidth: 2, glowBlur: 10,
+  sway: { amp: 0.13, freq: 1.4, phase: 2.6 },
+});
+const LEG2_L = mirrorPart(LEG2_R, { amp: 0.13, freq: 1.4, phase: 1.1 });
+
+// Gray cannon-arms with a glowing purple eye near the tip.
+const ARM_R_PIVOT = [15, 3];
+const ARM_R = {
+  type: 'arm', pivot: ARM_R_PIVOT,
+  color: ACCENT_COLOR, fillColor: ACCENT_FILL, lineWidth: 2, glowBlur: 10,
+  sway: { amp: 0.05, freq: 0.6, phase: 2.3 },
+  points: [[-1, -6], [33, 16], [29, 25], [-4, 6]].map((p) => p),
+  orb: { pos: [29, 20], radius: 5.5, phase: 0 },
+};
+const ARM_L = mirrorPart(ARM_R, { amp: 0.05, freq: 0.6, phase: 0.8 });
+ARM_L.orb.phase = Math.PI;
+
+// Draw order: back-to-front so every limb reads as attached to the head.
+const PARTS = [FIN_L, FIN_R, CLAW_L, CLAW_R, LEG1_L, LEG1_R, LEG2_L, LEG2_R, ARM_L, ARM_R, HEAD_PART];
+
+class BossPreview {
+  constructor() {
+    this.maxHealth = 240;
+    this.health    = this.maxHealth;
+
+    this.angle = 0; // body never rotates — limbs sway independently instead
+    this._age  = 0;
+
+    this.x = VW / 2;
+    this.y = -100; // off-screen above
+
+    // Entry phase: descend to a resting height, then drift in a gentle
+    // figure-8 forever. Limb sway runs throughout, including entry.
+    this._state      = 'entering';
+    this._entryY     = VH * 0.3;
+    this._entrySpeed = 110; // vp/sec
+
+    this._t     = 0;
+    this._omega = 0.6;  // rad/sec — pattern speed
+    this._ampX  = 90;   // vp — horizontal half-width of the loop
+    this._ampY  = 55;   // vp — vertical half-height of the loop
+  }
+
+  update(dt) {
+    this._age += dt;
+
+    if (this._state === 'entering') {
+      this.y += this._entrySpeed * dt;
+      if (this.y >= this._entryY) {
+        this.y = this._entryY;
+        this._centerX = this.x;
+        this._centerY = this.y;
+        this._state = 'pattern';
+      }
+    } else {
+      this._t += dt * this._omega;
+      const sinT = Math.sin(this._t), cosT = Math.cos(this._t);
+      this.x = this._centerX + this._ampX * sinT;
+      this.y = this._centerY + this._ampY * sinT * cosT;
+    }
+
+    for (const part of PARTS) {
+      part._sway = part.sway.amp * Math.sin(this._age * part.sway.freq + part.sway.phase);
+    }
+  }
+
+  render() {
+    for (const part of PARTS) {
+      const rotation = this.angle + part._sway;
+      const [px, py] = part.pivot;
+      const wx = this.x + px * BOSS_SCALE;
+      const wy = this.y + py * BOSS_SCALE;
+
+      if (part.type === 'blade') {
+        fillStrokeBlade(part.rel.b1, part.rel.c1, part.rel.tip, part.rel.c2, part.rel.b2, {
+          x: wx, y: wy, scale: BOSS_SCALE, rotation,
+          fillColor: part.fillColor, strokeColor: part.color,
+          lineWidth: part.lineWidth, glowBlur: part.glowBlur, glowColor: part.color,
+        });
+      } else if (part.type === 'smooth') {
+        fillStrokeSmoothPath(part.rel, {
+          x: wx, y: wy, scale: BOSS_SCALE, rotation,
+          fillColor: part.fillColor, strokeColor: part.color,
+          lineWidth: part.lineWidth, glowBlur: part.glowBlur, glowColor: part.color,
+        });
+
+        // Pulsing core eye, nestled into the head.
+        const pulse = 0.5 + 0.5 * Math.abs(Math.sin(this._age * 3));
+        ctx.save();
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = CORE_COLOR;
+        ctx.shadowColor = CORE_COLOR;
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.arc(wx, wy + 3 * BOSS_SCALE, 4 * BOSS_SCALE, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (part.type === 'arm') {
+        fillStrokePaths([{ points: part.points, closed: true }], {
+          x: wx, y: wy, scale: BOSS_SCALE, rotation,
+          fillColor: part.fillColor, strokeColor: part.color,
+          lineWidth: part.lineWidth, glowBlur: part.glowBlur, glowColor: part.color,
+        });
+
+        // Glowing eye orb near the arm's tip — rotates with the arm.
+        const c = Math.cos(rotation), s = Math.sin(rotation);
+        const [ox, oy] = part.orb.pos;
+        const owx = wx + (c * ox - s * oy) * BOSS_SCALE;
+        const owy = wy + (s * ox + c * oy) * BOSS_SCALE;
+        const pulse = 0.5 + 0.5 * Math.abs(Math.sin(this._age * 3 + part.orb.phase));
+        ctx.save();
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = CORE_COLOR;
+        ctx.shadowColor = CORE_COLOR;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(owx, owy, part.orb.radius * BOSS_SCALE, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+}
+
+const boss = new BossPreview();
+
+// ── Boss health bar — full-width strip near the top of the screen ──────────
+function drawBossHealthBar() {
+  const barW = 360, barH = 14;
+  const x = (VW - barW) / 2, y = 24;
+  const pct = Math.max(0, boss.health / boss.maxHealth);
+
+  drawText('BOSS', VW / 2, y - 12, {
+    font: '400 14px "Audiowide", "Courier New", monospace',
+    color: BODY_COLOR, glowBlur: 6, glowColor: BODY_COLOR,
   });
-}
 
-function drawLabel() {
-  const text = current === '2'
-    ? 'Variety #3 candidate: PHASER  (press 2 / 5 to switch)'
-    : 'Variety #3 candidate: SHIELDED — click to hit  (press 2 / 5 to switch)';
-  drawText(text, VW / 2, 40, { font: LABEL_FONT, color: '#aab4d4' });
+  strokePaths([{ points: [[x, y], [x + barW, y], [x + barW, y + barH], [x, y + barH]], closed: true }], {
+    color: BODY_COLOR, lineWidth: 2, glowBlur: 6, glowColor: BODY_COLOR,
+  });
+
+  if (pct > 0) {
+    fillStrokePaths([{ points: [[x + 2, y + 2], [x + 2 + (barW - 4) * pct, y + 2], [x + 2 + (barW - 4) * pct, y + barH - 2], [x + 2, y + barH - 2]], closed: true }], {
+      fillColor: BODY_COLOR, strokeColor: 'transparent', lineWidth: 0,
+    });
+  }
+
+  drawText(`${Math.ceil(boss.health)} / ${boss.maxHealth}`, VW / 2, y + barH / 2, {
+    font: '400 11px "Audiowide", "Courier New", monospace',
+    color: '#05060c', baseline: 'middle',
+  });
 }
 
 function render(dt) {
   clear('#05060c');
-  drawFloor();
-  drawLabel();
 
-  if (current === '2') {
-    phaser.update(dt);
-    phaser.render();
-  } else {
-    shielded.update(dt);
-    shielded.render();
-  }
+  boss.update(dt);
+  boss.render();
+  drawBossHealthBar();
 
   // Player marker — move the pointer over the canvas to reposition it.
   fillStrokePaths([{ points: [[0,-10],[8,8],[0,4],[-8,8]], closed: true }], {

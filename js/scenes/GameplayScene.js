@@ -18,6 +18,7 @@
  * when or how it should appear; it just knows how to draw and scroll.
  */
 import { Config } from '../core/Config.js';
+import { flickerAlpha } from '../core/animation.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
 import { HUD } from '../entities/HUD.js';
@@ -83,7 +84,7 @@ export class GameplayScene {
   /** Render one frame. */
   render() {
     this.renderer.clear(Config.colors.void);
-    this._drawStarfield();
+    this._renderStarfield();
     const playerDamage = Config.player.damage + (this._level - 1) * Config.player.damagePerLevel;
     this.barrier.render(this.renderer, playerDamage);
     this.player.render(this.renderer);
@@ -115,10 +116,9 @@ export class GameplayScene {
    */
   _checkCollisions() {
     const enemies = this._waveManager.enemies;
-    const { hitRadius } = Config.enemy.scout;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      if (this.bullets.checkHit(e.x, e.y, e.hitRadius ?? hitRadius)) {
+      if (this.bullets.checkHit(e.x, e.y, e.hitRadius)) {
         this._waveManager.handleBulletHit(e);
       }
     }
@@ -148,7 +148,7 @@ export class GameplayScene {
     if (t < fadeInDuration) {
       alpha = t / fadeInDuration;                          // clean rise
     } else if (t < holdEnd) {
-      alpha = this._levelFlicker(t);                       // unstable hold
+      alpha = flickerAlpha(t, [6.7, 15.3, 24.9], [1.1, 0.6], 0.82, 0.76); // unstable hold
     } else {
       alpha = Math.max(0, 1 - (t - holdEnd) / fadeOutDuration); // clean fall
     }
@@ -164,18 +164,8 @@ export class GameplayScene {
     });
   }
 
-  /**
-   * Three incommensurate sine waves summed — their interference produces
-   * quasi-random dips that feel like a weak or corrupted signal without
-   * any per-frame randomness (same shape every time, no state needed).
-   */
-  _levelFlicker(t) {
-    const n = (Math.sin(t * 6.7) + Math.sin(t * 15.3 + 1.1) + Math.cos(t * 24.9 + 0.6)) / 3;
-    return Math.max(0.08, Math.min(1, 0.82 + n * 0.76));
-  }
-
   /** Ease the whole starfield in from transparent over `Config.starfield.fadeInDuration` — see class doc's "Entrance" note. */
-  _drawStarfield() {
+  _renderStarfield() {
     const { fadeInDuration } = Config.starfield;
     const alpha = Math.min(this._age / fadeInDuration, 1);
     this.starfield.render(this.renderer, alpha);

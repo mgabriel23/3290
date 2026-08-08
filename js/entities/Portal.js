@@ -27,6 +27,7 @@
  * portals stay on screen.
  */
 import { Config } from '../core/Config.js';
+import { easeOutCubic } from '../core/animation.js';
 
 const { spiral, core } = Config.prologue.portals;
 
@@ -93,7 +94,7 @@ export class Portal {
 
     const { appearDuration, color, lineWidth, glowBlur } = Config.prologue.portals;
     const appearT = Math.min(elapsed / appearDuration, 1);
-    const eased = 1 - (1 - appearT) ** 3; // ease-out cubic
+    const eased = easeOutCubic(appearT);
 
     // Rotate all geometry in JS then hand the whole portal to strokePaths
     // as one call — one shadow-blur pass instead of (armCount + 1).

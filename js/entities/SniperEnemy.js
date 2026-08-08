@@ -2,8 +2,9 @@
  * SniperEnemy.js
  * Variant 3 — same Scout hull silhouette, electric violet, 8 health.
  *
- * Fires an instant laser beam at where the player WAS 1.3 seconds ago,
- * giving a skilled player a dodge window if they read the warning.
+ * Fires an instant laser beam at where the player WAS `historyWindow`
+ * seconds ago (see Config.enemy.sniper), giving a skilled player a dodge
+ * window if they read the warning.
  *
  * Shot cycle (repeats immediately):
  *   charging (2 s)  — nose orb grows; ship tracks player as normal
@@ -16,13 +17,17 @@
  * Angle convention: same as Scout — atan2(-dx, dy) makes the NOSE face AWAY
  * from the player during normal tracking. In locked/flashing, the angle is
  * overridden to Math.atan2(tdx, -tdy) so the nose faces TOWARD the target.
+ *
+ * Entry-glide, hit/death-flash, and engine flame/core rendering are shared
+ * with Enemy.js via EnemyCombat.js — see that file's header for why.
  */
 import { Config } from '../core/Config.js';
-import { SCOUT_HULL_PTS } from './Enemy.js';
+import { SCOUT_S } from './Enemy.js';
+import { applyHit, tickDeathState, setState, stepEntryGlide, renderEngineFlame, renderEngineCore } from './EnemyCombat.js';
 
-const S            = 22;
+const S            = SCOUT_S; // shared with Scout — both hulls use the same 22vp base size
 const HIST_STEP    = 0.05;  // seconds between position samples
-const HIST_SAMPLES = Math.round(Config.enemy.sniper.historyWindow / HIST_STEP); // = 26
+const HIST_SAMPLES = Math.round(Config.enemy.sniper.historyWindow / HIST_STEP);
 
 // Engine-flame anchor in local space — same vertex Scout uses for its exhaust.
 const NOSE_LX = 0;
@@ -88,6 +93,9 @@ export class SniperEnemy {
   get type()  { return this._type;  }
   get angle() { return this._angle; }
 
+  /** Collision radius — used by GameplayScene's bullet↔enemy hit test. */
+  get hitRadius() { return this._cfg.hitRadius; }
+
   /**
    * @param {number} dt
    * @param {number} playerX
@@ -98,12 +106,7 @@ export class SniperEnemy {
     const cfg = this._cfg;
     this._stateAge    += dt;
     this._enginePhase += dt * 9;
-    if (this._hitFlash > 0) this._hitFlash -= dt;
-
-    if (this._dying) {
-      if (this._hitFlash <= 0) this.alive = false;
-      return;
-    }
+    if (tickDeathState(this, dt)) return;
 
     // ── Angle tracking ───────────────────────────────────────────────────────
     // Charging/entering: nose points away from player (same as Scout).
@@ -145,14 +148,7 @@ export class SniperEnemy {
 
     // ── State machine ────────────────────────────────────────────────────────
     if (this._state === 'entering') {
-      this.y += cfg.entrySpeed * dt;
-      const t = Math.max(0, Math.min(1, this.y / this._restY));
-      this.x  = this._spawnX + (this._restX - this._spawnX) * t;
-      if (this.y >= this._restY) {
-        this.x = this._restX;
-        this.y = this._restY;
-        this._setState('charging');
-      }
+      stepEntryGlide(this, cfg, dt, 'charging');
 
     } else if (this._state === 'charging') {
       if (this._stateAge >= cfg.chargeWarmup) {
@@ -160,22 +156,22 @@ export class SniperEnemy {
         const oldestIdx  = (this._histHead + 1) % HIST_SAMPLES;
         this._targetX    = this._histX[oldestIdx];
         this._targetY    = this._histY[oldestIdx];
-        this._setState('locked');
+        setState(this, 'locked');
       }
 
     } else if (this._state === 'locked') {
       if (this._stateAge >= cfg.warningDuration) {
-        this._setState('flashing');
+        setState(this, 'flashing');
       }
 
     } else if (this._state === 'flashing') {
       if (this._stateAge >= Config.laser.flashDuration) {
-        this._setState('recovering');
+        setState(this, 'recovering');
       }
 
     } else if (this._state === 'recovering') {
       if (this._stateAge >= cfg.recoverDuration) {
-        this._setState('charging');
+        setState(this, 'charging');
       }
     }
   }
@@ -186,24 +182,12 @@ export class SniperEnemy {
    * @returns {boolean}
    */
   hit(damage = 1) {
-    if (this._dying) return false;
-    this._hitFlash = 0.15;
-    this._health -= damage;
-    if (this._health <= 0) {
-      this._dying = true;
-      return true;
-    }
-    return false;
+    return applyHit(this, damage);
   }
 
   /** Engine exhaust — drawn behind the hull by WaveManager. */
   renderFlame(renderer) {
-    const cfg = this._cfg;
-    renderer.drawFlame(NOSE_LX, NOSE_LY, S * 0.45 + Math.sin(this._enginePhase) * 2, {
-      x: this.x, y: this.y, rotation: this._angle,
-      halfWidth: cfg.flameHalfWidth,
-      color:     cfg.flameColor,
-    });
+    renderEngineFlame(renderer, this, NOSE_LX, NOSE_LY, S * 0.45);
   }
 
   /** Engine orb + nose charge orb — drawn on top of hull by WaveManager. */
@@ -211,11 +195,7 @@ export class SniperEnemy {
     const cfg   = this._cfg;
     const flash = this._hitFlash > 0;
 
-    // Engine core orb
-    renderer.fillEllipse(0, S * 0.05, S * 0.14, S * 0.10, {
-      x: this.x, y: this.y, rotation: this._angle,
-      fillColor: flash ? cfg.color : cfg.engineCoreColor,
-    });
+    renderEngineCore(renderer, this, 0, S * 0.05, S * 0.14, S * 0.10);
 
     if (flash) return;
 
@@ -228,22 +208,22 @@ export class SniperEnemy {
     if (this._state === 'charging') {
       // Orb grows from nothing toward full charge
       const t = this._stateAge / cfg.chargeWarmup;
-      renderer.strokeCircle(noseX, noseY, 3 + t * 7, {
+      renderer.strokeCircle(noseX, noseY, cfg.chargeOrbStartRadius + t * cfg.chargeOrbGrowth, {
         color:    cfg.color,
-        lineWidth: 2,
-        glowBlur:  6,
+        lineWidth: cfg.chargeOrbLineWidth,
+        glowBlur:  cfg.chargeOrbGlowBlur,
         glowColor: cfg.color,
-        alpha:     0.2 + t * 0.8,
+        alpha:     cfg.chargeOrbAlphaMin + t * (1 - cfg.chargeOrbAlphaMin),
       });
 
     } else if (this._state === 'locked') {
       // Full charge — rapid blink to signal imminent fire
       const t     = this._stateAge / cfg.warningDuration;
-      const blink = 0.5 + 0.5 * Math.abs(Math.sin(t * Math.PI * 6));
-      renderer.strokeCircle(noseX, noseY, 10, {
+      const blink = 0.5 + 0.5 * Math.abs(Math.sin(t * Math.PI * cfg.lockedBlinkSpeed));
+      renderer.strokeCircle(noseX, noseY, cfg.lockedOrbRadius, {
         color:    cfg.color,
-        lineWidth: 2.5,
-        glowBlur:  8,
+        lineWidth: cfg.lockedOrbLineWidth,
+        glowBlur:  cfg.lockedOrbGlowBlur,
         glowColor: cfg.color,
         alpha:     blink,
       });
@@ -251,10 +231,10 @@ export class SniperEnemy {
     } else if (this._state === 'flashing') {
       // Charge orb releases outward into the laser — expanding ring that fades fast
       const t = this._stateAge / Config.laser.flashDuration;
-      renderer.strokeCircle(noseX, noseY, 10 + t * 14, {
+      renderer.strokeCircle(noseX, noseY, cfg.lockedOrbRadius + t * cfg.flashOrbGrowth, {
         color:    cfg.color,
-        lineWidth: 2.5,
-        glowBlur:  8,
+        lineWidth: cfg.lockedOrbLineWidth,
+        glowBlur:  cfg.lockedOrbGlowBlur,
         glowColor: cfg.color,
         alpha:     1 - t,
       });
@@ -268,32 +248,33 @@ export class SniperEnemy {
   renderExtras(renderer) {
     // ── Warning marker ────────────────────────────────────────────────────────
     if (this._state === 'locked') {
-      const t     = this._stateAge / this._cfg.warningDuration;
-      const base  = Math.min(1, t * 6);           // fast fade-in
-      const pulse = base * (0.6 + 0.4 * Math.abs(Math.sin(t * Math.PI * 4)));
+      const cfg   = this._cfg;
+      const t     = this._stateAge / cfg.warningDuration;
+      const base  = Math.min(1, t * cfg.warningFadeInSpeed);
+      const pulse = base * (0.6 + 0.4 * Math.abs(Math.sin(t * Math.PI * cfg.warningPulseSpeed)));
 
       // Outer pulsing ring — no glow (alpha-only ring is cheap and still reads
       // clearly against the inner dot + "!" which carry the glow)
-      renderer.strokeCircle(this._targetX, this._targetY, 20, {
+      renderer.strokeCircle(this._targetX, this._targetY, cfg.warningRingRadius, {
         color:    '#ffffff',
-        lineWidth: 2,
-        alpha:     pulse * 0.6,
+        lineWidth: cfg.warningRingLineWidth,
+        alpha:     pulse * cfg.warningRingAlphaMult,
       });
 
       // Inner filled dot to mark the exact hit point
-      renderer.strokeCircle(this._targetX, this._targetY, 4, {
+      renderer.strokeCircle(this._targetX, this._targetY, cfg.warningDotRadius, {
         color:    '#ffffff',
-        lineWidth: 3,
-        glowBlur:  6,
+        lineWidth: cfg.warningDotLineWidth,
+        glowBlur:  cfg.warningDotGlowBlur,
         glowColor: '#ffffff',
         alpha:     pulse,
       });
 
       // "!" label above the marker — white, larger
-      renderer.drawText('!', this._targetX, this._targetY - 32, {
-        font:      '400 28px "Audiowide", "Courier New", monospace',
+      renderer.drawText('!', this._targetX, this._targetY - cfg.warningLabelOffset, {
+        font:      cfg.warningLabelFont,
         color:     '#ffffff',
-        glowBlur:  10,
+        glowBlur:  cfg.warningLabelGlowBlur,
         glowColor: '#ffffff',
         alpha:     pulse,
       });
@@ -318,16 +299,14 @@ export class SniperEnemy {
       const ux   = ddx / dlen;
       const uy   = ddy / dlen;
 
+      const beamLength = Config.laser.beamLength;
       this._laserPath[0].points[0][0] = noseX;
       this._laserPath[0].points[0][1] = noseY;
-      this._laserPath[0].points[1][0] = noseX + ux * 1200;
-      this._laserPath[0].points[1][1] = noseY + uy * 1200;
+      this._laserPath[0].points[1][0] = noseX + ux * beamLength;
+      this._laserPath[0].points[1][1] = noseY + uy * beamLength;
 
       this._laserStyle.alpha = alpha;
       renderer.strokePaths(this._laserPath, this._laserStyle, 1);
     }
   }
-
-  // ---------------------------------------------------------------------------
-  _setState(s) { this._state = s; this._stateAge = 0; }
 }
