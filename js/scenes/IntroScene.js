@@ -8,13 +8,20 @@
  * Swiping up dismisses the label with a "typewriter" fade — each letter
  * fading to transparent in sequence, first letter first — before handing
  * off via `onContinue` to whatever scene follows (Prologue → Tutorial →
- * Gameplay). The background music itself is started later, by
+ * Gameplay). Gameplay's own background music is started later, by
  * `Game._startGameplay`, once that chain actually reaches gameplay —
- * still safely inside the original swipe's user-gesture activation
- * window (each scene hands off via a direct synchronous callback from a
- * tap/swipe, never deferred past an animation frame). This scene doesn't
- * start its own copy, since that would leave two independent `Audio`
- * instances playing the same track with no way to stop the first.
+ * still safely inside a (later, fresh) gesture's own activation window.
+ *
+ * The prologue's music is different: it needs to start playing right as
+ * the prologue itself begins, but `onContinue` doesn't fire until
+ * `_exitDuration` after the swipe (once the letter fade-out finishes) —
+ * by then we're inside an `update()` tick (a `requestAnimationFrame`
+ * callback), not the original synchronous swipe event, which risks
+ * missing the browser's user-gesture window for `audio.play()`. The
+ * optional `onSwipeDetected` callback exists exactly for this: it fires
+ * synchronously from `handleSwipeUp` itself, at the exact moment of the
+ * real gesture, so `Game._startPrologueMusic` can safely start playback
+ * there instead of waiting for `onContinue`.
  */
 import { Config } from '../core/Config.js';
 
@@ -29,11 +36,14 @@ const ARROW_CHEVRON = [
 export class IntroScene {
   /**
    * @param {import('../core/Renderer.js').Renderer} renderer
-   * @param {{ onContinue: () => void }} options  invoked once the dismiss animation finishes
+   * @param {{ onContinue: () => void, onSwipeDetected?: () => void }} options
+   *   `onContinue` fires once the dismiss animation finishes; `onSwipeDetected`
+   *   (optional) fires synchronously, right at the real swipe gesture — see class doc.
    */
-  constructor(renderer, { onContinue }) {
+  constructor(renderer, { onContinue, onSwipeDetected }) {
     this.renderer = renderer;
     this.onContinue = onContinue;
+    this._onSwipeDetected = onSwipeDetected;
 
     this._age = 0; // seconds since the scene started — drives the arrow's idle bob
 
@@ -55,10 +65,14 @@ export class IntroScene {
     }
   }
 
-  /** Begin the dismiss animation. Fires once per intro. */
+  /**
+   * Begin the dismiss animation. Fires once per intro. `onSwipeDetected`
+   * fires first, synchronously — see class doc for why that timing matters.
+   */
   handleSwipeUp() {
     if (this._exiting) return;
     this._exiting = true;
+    this._onSwipeDetected?.();
   }
 
   /** Render one frame: void backdrop, the label (mid-fade once dismissing), and the arrow hint. */

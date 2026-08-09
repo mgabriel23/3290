@@ -26,7 +26,10 @@ export class Game {
   constructor(canvas, stage) {
     this.stage = stage;
     this.renderer = new Renderer(canvas);
-    this.scene = new IntroScene(this.renderer, { onContinue: () => this._startPrologue() });
+    this.scene = new IntroScene(this.renderer, {
+      onContinue: () => this._startPrologue(),
+      onSwipeDetected: () => this._startPrologueMusic(),
+    });
     this._lastTimestamp = 0;
     this._consecutiveTickErrors = 0; // see _tick's doc — trips _showFatalError after too many in a row
 
@@ -109,8 +112,43 @@ export class Game {
     }
   }
 
-  /** Swap the cinematic out for the tutorial once the player taps PLAY on the title card. */
+  /**
+   * Start the prologue's own background music — called from IntroScene's
+   * `onSwipeDetected`, which fires synchronously from the real swipe
+   * gesture (see IntroScene's class doc for why that timing matters,
+   * unlike `onContinue` which fires later from an `update()` tick). The
+   * `!this._prologueAudio` guard mirrors `_startGameplay`'s own theme-audio
+   * guard, in case this is somehow reached more than once.
+   */
+  _startPrologueMusic() {
+    if (this._prologueAudio) return;
+    try {
+      const { prologueThemeSrc, prologueThemeVolume, prologueThemeLoop } = Config.audio;
+      this._prologueAudio = new Audio(prologueThemeSrc);
+      this._prologueAudio.volume = prologueThemeVolume;
+      this._prologueAudio.loop = prologueThemeLoop;
+      this._prologueAudio.muted = isMuted();
+      onMutedChange((muted) => { this._prologueAudio.muted = muted; });
+      this._prologueAudio.play().catch(() => {});
+    } catch (err) {
+      console.error('Failed to start the prologue music:', err);
+      // Deliberately no _showFatalError here — losing background music
+      // is not worth interrupting the player's swipe into the prologue.
+    }
+  }
+
+  /**
+   * Swap the cinematic out for the tutorial once the player taps PLAY on
+   * the title card. Stops the prologue's own music here — this is the
+   * single place PrologueScene's `onContinue` always eventually reaches,
+   * whether the player watched the whole thing or used SKIP — so gameplay's
+   * later theme (`_startGameplay`) never overlaps it. Stopping already-
+   * playing audio has no gesture requirement, so it's safe to do here even
+   * though this itself runs from a `requestAnimationFrame` tick, not a
+   * fresh tap/swipe.
+   */
   _startTutorial() {
+    this._prologueAudio?.pause();
     try {
       this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
     } catch (err) {

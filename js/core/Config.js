@@ -454,7 +454,8 @@ export const Config = Object.freeze({
       blip: Object.freeze({
         src: 'assets/audio/typewriter-blip.mp3',
         // Fires at up to 12/sec (year card) and 6/sec (briefing) — kept very low
-        // so rapid stacking stays as subtle texture beneath BGM at 0.22.
+        // so rapid stacking stays as subtle texture beneath the prologue's
+        // own BGM (Config.audio.prologueThemeVolume, 0.15).
         volume: 0.06,
         perSecond: 6,
       }),
@@ -1280,10 +1281,25 @@ export const Config = Object.freeze({
   }),
 
   /**
-   * Background music. A single looping theme track, started the moment
-   * the player swipes past the intro prompt.
+   * Background music — two separate looping tracks that never overlap:
+   *   - the prologue's own theme, started the instant the player swipes
+   *     past the intro prompt (IntroScene's `onSwipeDetected` fires
+   *     synchronously from the real swipe gesture, still safely inside
+   *     its user-gesture activation window — see Game._startPrologueMusic),
+   *     and stopped the moment the prologue ends (Game._startTutorial).
+   *   - gameplay's theme, started once the tutorial's last hint is
+   *     dismissed (Game._startGameplay), inside that gesture's own window.
    */
   audio: Object.freeze({
+    prologueThemeSrc: 'assets/audio/bg-prologue.mp3',
+    // Lowered from an initial 0.25 — at that level the music drowned out
+    // the typewriter blip (Config.prologue.<year/briefing>.blip, 0.06),
+    // which fires rapidly enough (up to 12/sec) that it needs real
+    // headroom below the music to still read as text-reveal texture
+    // rather than getting buried.
+    prologueThemeVolume: 0.15,
+    prologueThemeLoop: true,
+
     themeSrc: 'assets/audio/bg-music.mp3',
     themeVolume: 0.22, // BGM bed — lower than SFX so bullets and explosions always sit clearly on top
     themeLoop: true,
