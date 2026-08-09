@@ -44,7 +44,17 @@
  * `title` simply waits for `handleTap` to land on PLAY and fire
  * `onContinue` — the constructor-injected completion callback `Game`
  * uses to swap in GameplayScene, following the same shape IntroScene
- * uses for its own handoff.
+ * uses for its own handoff. The full cinematic (`yearCard` → `fadeOut`)
+ * always plays in full on every launch — there's no "skip it if you've
+ * already seen it" persistence; the constructor's `devSkipToTitle` option
+ * exists purely as a manual convenience for jumping straight to the
+ * title beat while testing (Game.js does not currently set it).
+ *
+ * The prologue's own background music (started by Game the instant the
+ * player swipes past the intro prompt) plays continuously through this
+ * entire scene — cinematic AND the title/PLAY card ("the main menu") —
+ * with no stop point in here at all; `Game._startGameplay` is what stops
+ * it, once gameplay's own separate theme is ready to take over.
  */
 import { Config } from '../core/Config.js';
 import { Portal } from '../entities/Portal.js';
@@ -66,7 +76,10 @@ const _CREATURE_PATH_FACTORIES = {
 export class PrologueScene {
   /**
    * @param {import('../core/Renderer.js').Renderer} renderer
-   * @param {{ onContinue: () => void }} options  called once PLAY is tapped
+   * @param {{ onContinue: () => void, devSkipToTitle?: boolean }} options
+   *   `onContinue` fires once PLAY is tapped. `devSkipToTitle` starts
+   *   straight on the title/PLAY card instead of the cinematic — a
+   *   manual testing convenience, not wired to anything by default.
    */
   constructor(renderer, { onContinue, devSkipToTitle = false }) {
     this.renderer = renderer;
@@ -594,13 +607,23 @@ export class PrologueScene {
     return Config.virtual.height * 0.40;
   }
 
+  /**
+   * The title glyph flickers with the exact same signal-interference
+   * effect `_renderYearCard` uses for "EARTH — YEAR 3290" (same
+   * frequencies/phases/base/depth — see Config.prologue.title's own
+   * doc for why these are hardcoded here rather than Config-driven,
+   * matching that precedent) — `alpha` here is still the beat's overall
+   * fade-in, multiplied by the flicker exactly like the year card
+   * multiplies its own fade alpha by it.
+   */
   _renderTitleText(alpha) {
     const { text, font, textColor, glowBlur, subtitleText, subtitleFont, subtitleColor } =
       Config.prologue.title;
     const { width: vW } = Config.virtual;
     const ty = this._titleY();
 
-    this.renderer.drawText(text, vW / 2, ty, { font, color: textColor, alpha, glowBlur });
+    const flicker = flickerAlpha(this._beatAge, [7.3, 11.7, 19.1], [2.0, 0.8], 0.8, 0.85);
+    this.renderer.drawText(text, vW / 2, ty, { font, color: textColor, alpha: alpha * flicker, glowBlur });
     this.renderer.drawText(subtitleText, vW / 2, ty + 55, {
       font: subtitleFont,
       color: subtitleColor,

@@ -139,16 +139,11 @@ export class Game {
 
   /**
    * Swap the cinematic out for the tutorial once the player taps PLAY on
-   * the title card. Stops the prologue's own music here — this is the
-   * single place PrologueScene's `onContinue` always eventually reaches,
-   * whether the player watched the whole thing or used SKIP — so gameplay's
-   * later theme (`_startGameplay`) never overlaps it. Stopping already-
-   * playing audio has no gesture requirement, so it's safe to do here even
-   * though this itself runs from a `requestAnimationFrame` tick, not a
-   * fresh tap/swipe.
+   * the title card. The prologue's own music keeps playing straight
+   * through the tutorial too (it has no theme of its own) — it's only
+   * stopped once actual gameplay begins, in `_startGameplay`.
    */
   _startTutorial() {
-    this._prologueAudio?.pause();
     try {
       this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
     } catch (err) {
@@ -166,6 +161,12 @@ export class Game {
    * construction a clean run (full health, level 1, zero score).
    */
   _startGameplay() {
+    // The prologue's own music has been playing continuously since the
+    // intro swipe, straight through the cinematic, the title/PLAY card,
+    // and the tutorial — this is the one place it finally stops, right as
+    // gameplay's own separate theme (below) is about to take over. A
+    // harmless no-op on the restart path, where it's already stopped.
+    this._prologueAudio?.pause();
     try {
       // Start background music here — we're inside the user-gesture call chain
       // (last tutorial hint tap → onContinue → here), so audio.play() is permitted.
