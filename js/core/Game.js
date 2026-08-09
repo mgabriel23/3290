@@ -28,6 +28,7 @@ export class Game {
     this.renderer = new Renderer(canvas);
     this.scene = new IntroScene(this.renderer, { onContinue: () => this._startPrologue() });
     this._lastTimestamp = 0;
+    this._consecutiveTickErrors = 0; // see _tick's doc — trips _showFatalError after too many in a row
 
     this._tick = this._tick.bind(this);
 
@@ -86,16 +87,25 @@ export class Game {
    * if constructing the next scene throws, the outgoing scene's own
    * `onContinue` caller (a tap/swipe handler, not `_tick`) is where the
    * exception would otherwise surface uncaught; catching it here means
-   * `this.scene` is simply left as whatever it already was (the outgoing
-   * scene keeps rendering its last frame) instead of the whole page
-   * silently breaking, and the real error is at least visible in the
-   * console for diagnosis.
+   * `this.scene` is simply left as whatever it already was, rather than
+   * the whole page silently breaking. Without `_showFatalError`, though,
+   * "left as whatever it already was" means a scene that already
+   * considers itself finished (e.g. TutorialScene after its last hint,
+   * `_done` already true) — its own `update`/`render`/`handleTap` are all
+   * now deliberate no-ops, so the outgoing scene doesn't just keep
+   * rendering its last frame, it appears to hang: no visible change, taps
+   * do nothing, with only a console.error (invisible on a phone with no
+   * devtools attached) to say why. `_showFatalError` replaces `this.scene`
+   * with a minimal always-inert one that draws the actual error on-screen
+   * instead, so a transition failure reads as "something broke" rather
+   * than "the game froze."
    */
   _startPrologue() {
     try {
       this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startTutorial() });
     } catch (err) {
       console.error('Failed to start the prologue:', err);
+      this._showFatalError(err);
     }
   }
 
@@ -105,6 +115,7 @@ export class Game {
       this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
     } catch (err) {
       console.error('Failed to start the tutorial:', err);
+      this._showFatalError(err);
     }
   }
 
@@ -137,6 +148,7 @@ export class Game {
       this.scene = new GameplayScene(this.renderer, { onGameOver: () => this._startGameplay() });
     } catch (err) {
       console.error('Failed to start gameplay:', err);
+      this._showFatalError(err);
     }
   }
 
@@ -151,7 +163,13 @@ export class Game {
    * callback normally would (it silently prevents the next rAF from ever
    * being scheduled — the whole game just freezes on that frame with no
    * visible error). Logging + continuing means the game recovers on the
-   * next frame wherever possible instead of dying outright.
+   * next frame wherever possible instead of dying outright — but if the
+   * SAME scene throws on every single frame (not a one-off hiccup, an
+   * actual bug), "recovers next frame" never actually happens: the loop
+   * just silently fails and retries forever, which looks identical to a
+   * hang from the outside. `_consecutiveTickErrors` catches that case —
+   * once a run of failures crosses the threshold, `_showFatalError` takes
+   * over instead of continuing to fail silently.
    * @param {number} timestamp  high-resolution time in ms, supplied by rAF
    */
   _tick(timestamp) {
@@ -165,11 +183,45 @@ export class Game {
     try {
       this.scene.update(dt);
       this.scene.render();
+      this._consecutiveTickErrors = 0;
     } catch (err) {
       console.error('Game loop error (frame skipped, loop continues):', err);
+      this._consecutiveTickErrors++;
+      if (this._consecutiveTickErrors >= 5) this._showFatalError(err);
     }
 
     requestAnimationFrame(this._tick);
+  }
+
+  /**
+   * Last-resort visible failure display — see the doc comments above for
+   * why this exists (a caught-but-silent error reads as a plain hang on a
+   * device with no attached console). Replaces `this.scene` with a
+   * minimal, permanently-inert one whose `update` is a true no-op (so it
+   * can never itself throw and re-trigger this same path) and whose
+   * `render` draws the error directly via the renderer's own primitives —
+   * still going through the Renderer seam, never the raw canvas context.
+   * @param {unknown} err
+   */
+  _showFatalError(err) {
+    const message = String(err?.message ?? err ?? 'Unknown error').slice(0, 70);
+    const { renderer } = this;
+    this.scene = {
+      update() {},
+      render() {
+        const { width: vW, height: vH } = Config.virtual;
+        renderer.clear('#1a0000');
+        renderer.drawText('SOMETHING WENT WRONG', vW / 2, vH / 2 - 40, {
+          font: '400 22px "Audiowide", "Courier New", monospace', color: '#ff3b3b',
+        });
+        renderer.drawText(message, vW / 2, vH / 2, {
+          font: '400 13px "Courier New", monospace', color: '#ffffff',
+        });
+        renderer.drawText('Please reload the page', vW / 2, vH / 2 + 40, {
+          font: '400 15px "Audiowide", "Courier New", monospace', color: '#aab4d4',
+        });
+      },
+    };
   }
 
   /**

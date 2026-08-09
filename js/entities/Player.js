@@ -28,10 +28,14 @@
  * ignored — GameplayScene reads `takeDamage`'s return value to know
  * whether a hit actually applied before triggering shake/hit-stop
  * feedback. Below `Config.player.lowHealth.threshold` the hull pulses
- * warning red, identical in shape to Barrier's own low-health pulse.
+ * warning red, identical in shape to Barrier's own low-health pulse, and a
+ * short danger blip plays immediately on crossing into that state, then
+ * repeats every `Config.player.lowHealth.warningInterval` seconds for as
+ * long as it stays there (Barrier.js mirrors this for its own health).
  */
 import { Config } from '../core/Config.js';
 import { easeOutCubic } from '../core/animation.js';
+import { AudioPool } from '../core/AudioPool.js';
 
 // Local ship-space outline coordinates (nose toward -Y — "forward", since
 // the ship faces up the screen). Only the right half is authored; it's
@@ -113,6 +117,12 @@ export class Player {
     this.health = Config.player.maxHealth;
     this._hitFlash    = 0; // seconds remaining in the white hit-flash
     this._invulnTimer = 0; // seconds remaining of post-hit grace, during which takeDamage is a no-op
+
+    // Low-health danger blip — see class doc.
+    const { warningAudioSrc, warningVolume } = Config.player.lowHealth;
+    this._warningAudio = new AudioPool(warningAudioSrc, 4, warningVolume);
+    this._warningTimer = 0;   // seconds until the next blip; only ticks while low
+    this._wasLowHealth = false; // edge-detects the moment danger starts, for an immediate first blip
   }
 
   /** True once the entry animation has completed and the ship is controllable. */
@@ -149,6 +159,7 @@ export class Player {
     this._age += dt;
     if (this._hitFlash > 0) this._hitFlash -= dt;
     if (this._invulnTimer > 0) this._invulnTimer -= dt;
+    this._updateLowHealthWarning(dt);
 
     const { entryDuration } = Config.player;
     const t = Math.min(this._age / entryDuration, 1);
@@ -215,6 +226,27 @@ export class Player {
   /** Fast on/off blink while `_invulnTimer` is counting down, so the grace window reads as a deliberate state. */
   _invulnBlinkAlpha() {
     return Math.floor(this._invulnTimer * 20) % 2 === 0 ? 1 : 0.35;
+  }
+
+  /**
+   * Repeating danger blip while low on health — plays immediately the
+   * instant health crosses into the danger zone (edge-triggered via
+   * `_wasLowHealth`), then every `warningInterval` seconds for as long as
+   * it stays there. Stops on its own the moment health recovers, and can
+   * never ring after death since GameplayScene stops calling `update()`
+   * entirely once the game-over overlay takes over.
+   */
+  _updateLowHealthWarning(dt) {
+    const low = this._isLowHealth();
+    if (low) {
+      if (!this._wasLowHealth) this._warningTimer = 0; // just entered danger — blip right away
+      this._warningTimer -= dt;
+      if (this._warningTimer <= 0) {
+        this._warningAudio.play();
+        this._warningTimer = Config.player.lowHealth.warningInterval;
+      }
+    }
+    this._wasLowHealth = low;
   }
 
   // --- Thruster flame -------------------------------------------------------

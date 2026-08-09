@@ -1,0 +1,14 @@
+# Development-only: this project has no build step or filename hashing, so
+# every JS/CSS/HTML file is served under the same URL forever — a browser
+# (especially mobile Chrome) that caches those files can end up running a
+# broken MIX of old and new code after an update (e.g. an old Renderer.js
+# without a method a newer scene file already calls), which reads as a
+# random crash/freeze with no obvious cause. Forcing no-cache on every
+# reload avoids that class of bug during active development.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|html)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires 0
+  </FilesMatch>
+</IfModule>

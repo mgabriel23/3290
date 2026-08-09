@@ -118,6 +118,18 @@ export const Config = Object.freeze({
       color:      '#ff3b3b',
       pulseSpeed: 4.0,
       pulseDepth: 0.5,
+
+      // Repeating short danger blip while health stays at/below threshold —
+      // plays immediately on crossing into danger, then every
+      // `warningInterval` seconds for as long as it stays there (Player.js
+      // stops ticking this the instant GameplayScene freezes for game over,
+      // so it can't ring past death). No dedicated alarm asset exists in
+      // this project yet — points at a new `warning.mp3` that needs adding;
+      // AudioPool degrades silently if it's missing, so nothing breaks
+      // meanwhile, it's just quiet until the file exists.
+      warningAudioSrc: 'assets/audio/warning.mp3',
+      warningVolume:   0.5,
+      warningInterval: 1.8,
     }),
 
     /** The engine flame: a small pulsing neon triangle beneath the ship. */
@@ -150,16 +162,26 @@ export const Config = Object.freeze({
   /**
    * Game over — a full-screen overlay GameplayScene shows once the
    * player's health reaches 0 (see GameplayScene's `_isGameOver`).
-   * Same clean fade-in text treatment as `level` above (no flicker —
-   * this is somber, not an alarm), plus a smaller restart prompt beneath.
-   * Freezes gameplay exactly like the codex/pause overlays already do;
-   * a tap restarts via a brand-new GameplayScene (see Game.js's
-   * `onGameOver` wiring) rather than resetting state in place.
+   * The ship explodes first (particle burst + explosion SFX, same
+   * Particles pool shape every enemy death already uses, at the player's
+   * last position — see GameplayScene._triggerGameOver) and is hidden;
+   * only once `explosionDelay` has passed does the dim overlay + title
+   * begin their fade-in — `render()`'s `_renderGameOver` reads
+   * `Math.max(0, _gameOverAge - explosionDelay)` as the fade clock, so the
+   * explosion gets a clear beat to read before "GAME OVER" appears. Same
+   * clean fade-in text treatment as `level` above once it starts (no
+   * flicker — this is somber, not an alarm), plus a smaller restart
+   * prompt beneath. Freezes gameplay exactly like the codex/pause
+   * overlays already do; a tap restarts via a brand-new GameplayScene
+   * (see Game.js's `onGameOver` wiring) rather than resetting state in place.
    */
   gameOver: Object.freeze({
+    explosionDelay: 0.5,  // seconds the death explosion plays before the overlay starts fading in
     fadeInDuration: 0.6,
-    dimAlpha: 0.75,       // darkens the frozen gameplay frame behind the text, same idea as codex.overlay.dimAlpha
-    minRestartDelay: 0.5, // seconds before a tap is accepted as "restart" — avoids an accidental instant-restart tap
+    dimAlpha: 0.75,        // darkens the frozen gameplay frame behind the text, same idea as codex.overlay.dimAlpha
+    // Covers explosionDelay + fadeInDuration (1.1s) with a small margin, so
+    // a tap can't restart before GAME OVER has even finished appearing.
+    minRestartDelay: 1.2,
     titleText: 'GAME OVER',
     titleFont: '400 56px "Audiowide", "Courier New", monospace',
     titleColor: '#ff3b3b', // matches Config.player.lowHealth.color — this is the ultimate low-health state
@@ -168,6 +190,15 @@ export const Config = Object.freeze({
     promptFont: '400 18px "Audiowide", "Courier New", monospace',
     promptColor: '#aab4d4',
     promptOffsetY: 60, // vp below the title
+
+    // Death explosion — reuses the same shared explosion.mp3 every enemy
+    // death already plays, just louder/bigger: this is the single most
+    // significant explosion in the game.
+    explosionColor: '#4DEFFF', // matches Config.player.color
+    explosionSparksPerEmit: 28, // above Config.particles.defaultSparksPerEmit (14) — a bigger, one-off burst
+    explosionAudioSrc: 'assets/audio/explosion.mp3',
+    explosionVolume: 0.7,
+    deathTrauma: 0.6, // screen-shake trauma for the death explosion itself — stronger than Config.screenShake.playerHitTrauma's ordinary hit
   }),
 
   /**
@@ -1333,6 +1364,12 @@ export const Config = Object.freeze({
       color:      '#ff3b3b', // warning red
       pulseSpeed: 4.0,       // rad/sec — noticeably faster than the ~2.0 UI buttons pulse at
       pulseDepth: 0.5,       // how far the alpha dips at the trough of each pulse
+
+      // Same repeating danger-blip treatment as Config.player.lowHealth —
+      // see that config's own comment for the asset-availability caveat.
+      warningAudioSrc: 'assets/audio/warning.mp3',
+      warningVolume:   0.5,
+      warningInterval: 1.8,
     }),
   }),
 

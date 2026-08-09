@@ -57,23 +57,31 @@
  * Player damage: `_checkPlayerHit` is `_checkCollisions`' mirror image —
  * every enemy-attack source tested against the player once per frame (see
  * WaveManager.checkPlayerHit) instead of every enemy tested against the
- * player's bullets. Reaching 0 health freezes gameplay behind a "GAME
- * OVER" overlay (`_isGameOver`), the same mutually-exclusive full-screen-
- * overlay shape the codex/pause buttons already establish — starfield
- * keeps drifting underneath, everything else stops. A tap restarts by
- * calling the optional `onGameOver` constructor callback (same
- * constructor-injected-callback convention every other scene already
- * uses for its own `onContinue`) — Game.js wires this to simply construct
- * a brand-new GameplayScene, so "restart" is just "start over clean"
- * rather than resetting state in place.
+ * player's bullets. Reaching 0 health triggers the ship's own death
+ * explosion (`_triggerGameOver` — a `Particles` burst plus explosion SFX
+ * at the player's last position, same effect language every enemy death
+ * already uses, and the ship itself stops rendering) and freezes gameplay
+ * behind a "GAME OVER" overlay (`_isGameOver`) — the same mutually-
+ * exclusive full-screen-overlay shape the codex/pause buttons already
+ * establish, starfield keeps drifting underneath, everything else stops.
+ * The overlay's own fade-in is deliberately delayed by
+ * `Config.gameOver.explosionDelay` (see `_renderGameOver`) so the
+ * explosion gets a clear beat to read before "GAME OVER" appears. A tap
+ * (once `minRestartDelay` has passed) restarts by calling the optional
+ * `onGameOver` constructor callback (same constructor-injected-callback
+ * convention every other scene already uses for its own `onContinue`) —
+ * Game.js wires this to simply construct a brand-new GameplayScene, so
+ * "restart" is just "start over clean" rather than resetting state in place.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
+import { AudioPool } from '../core/AudioPool.js';
 import { ScreenShake } from '../core/ScreenShake.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
 import { EnemyCodex } from '../entities/EnemyCodex.js';
 import { HUD } from '../entities/HUD.js';
+import { Particles } from '../entities/Particles.js';
 import { Player } from '../entities/Player.js';
 import { PlaybackControls } from '../entities/PlaybackControls.js';
 import { Starfield } from '../entities/Starfield.js';
@@ -102,7 +110,9 @@ export class GameplayScene {
 
     // Game-over overlay — see class doc's "Player damage" note.
     this._isGameOver  = false;
-    this._gameOverAge = 0; // seconds since the overlay appeared — drives its fade-in and the restart-tap debounce
+    this._gameOverAge = 0; // seconds since death — drives the explosion delay, overlay fade-in, and the restart-tap debounce
+    this._playerParticles = new Particles(Config.gameOver.explosionColor, Config.gameOver.explosionSparksPerEmit);
+    this._deathExplosionAudio = new AudioPool(Config.gameOver.explosionAudioSrc, 4, Config.gameOver.explosionVolume);
 
     // Level / wave state -------------------------------------------------------
     // 'intro'  — level indicator is on screen; bullets are suppressed
@@ -130,7 +140,11 @@ export class GameplayScene {
     this._codex.update(dt);
     this._playback.update(dt);
     this.starfield.update(dt); // keeps drifting even while paused/codex/game-over is showing — purely cosmetic, not gameplay
-    if (this._isGameOver) { this._gameOverAge += dt; return; } // frozen for good — only a restart tap moves things forward
+    if (this._isGameOver) {
+      this._gameOverAge += dt;
+      this._playerParticles.update(dt); // let the death burst finish animating while everything else is frozen
+      return; // frozen for good — only a restart tap moves things forward
+    }
     if (this._codex.isOpen || this._playback.isPaused) return; // frozen — nothing gameplay-related advances
 
     this._screenShake.update(dt);
@@ -197,7 +211,8 @@ export class GameplayScene {
     this.barrier.render(this.renderer, playerDamage);
 
     this.renderer.setCameraOffset(worldOffsetX, shake.y);
-    this.player.render(this.renderer);
+    if (!this._isGameOver) this.player.render(this.renderer); // the ship is destroyed — see _triggerGameOver's explosion
+    this._playerParticles.render(this.renderer); // no-op when inactive — cheap to always call, same as WaveManager's own pools
     this.bullets.render(this.renderer);
     this._waveManager?.render(this.renderer);
 
@@ -327,11 +342,19 @@ export class GameplayScene {
     this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.playerHitDuration);
   }
 
-  /** Freeze gameplay for good and start the "GAME OVER" overlay's fade-in — see class doc. */
+  /**
+   * Blow up the ship (particle burst + explosion SFX at its last position,
+   * the player.render() call this frees up its `!this._isGameOver` guard
+   * skips from now on), freeze gameplay for good, and start the countdown
+   * to the "GAME OVER" overlay's fade-in — see class doc and
+   * `_renderGameOver`'s `explosionDelay` for why the overlay itself waits.
+   */
   _triggerGameOver() {
     this._isGameOver  = true;
     this._gameOverAge = 0;
-    this._screenShake.trigger(Config.screenShake.playerHitTrauma);
+    this._playerParticles.emit(this.player.x, this.player.y);
+    this._deathExplosionAudio.play();
+    this._screenShake.trigger(Config.gameOver.deathTrauma);
     this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.playerHitDuration);
   }
 
@@ -386,14 +409,19 @@ export class GameplayScene {
    * "GAME OVER" overlay — a dimming layer over the last live frame (same
    * idea as EnemyCodex's own dimAlpha), plus a clean fade-in title and
    * restart prompt. No flicker, unlike the level intro — this is somber,
-   * not an alarm. Called with the camera already reset to (0,0) (the UI
-   * layer's state at the point render() calls this), so the dim rect is
-   * always full-screen and fixed regardless of the world's current pan.
+   * not an alarm. Held back entirely for `explosionDelay` seconds so the
+   * ship's death explosion (see `_triggerGameOver`) gets a clear beat
+   * against the still-normal (undimmed) screen before this appears. Called
+   * with the camera already reset to (0,0) (the UI layer's state at the
+   * point render() calls this), so the dim rect is always full-screen and
+   * fixed regardless of the world's current pan.
    */
   _renderGameOver() {
     const { width: vW, height: vH } = Config.virtual;
-    const cfg   = Config.gameOver;
-    const alpha = Math.min(this._gameOverAge / cfg.fadeInDuration, 1);
+    const cfg = Config.gameOver;
+    const revealAge = Math.max(0, this._gameOverAge - cfg.explosionDelay);
+    const alpha = Math.min(revealAge / cfg.fadeInDuration, 1);
+    if (alpha <= 0) return; // still inside explosionDelay — let the explosion read clearly first
 
     this.renderer.clear(Config.colors.void, cfg.dimAlpha * alpha);
     this.renderer.drawText(cfg.titleText, vW / 2, vH / 2, {

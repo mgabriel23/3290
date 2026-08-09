@@ -16,13 +16,17 @@
  * health readout) switches from its normal cyan to a pulsing warning red —
  * see _isLowHealth/_lowHealthPulseAlpha, same breathing-alpha formula the
  * UI's pulsing buttons already use, just faster/deeper so it reads as
- * urgent rather than idle chrome.
+ * urgent rather than idle chrome. The same threshold also triggers a short
+ * danger blip immediately, then repeating every
+ * `Config.barrier.lowHealth.warningInterval` seconds for as long as it
+ * stays low — mirrors Player.js's own low-health warning sound.
  *
  * All geometry is computed once from Config in the constructor — `render`
  * produces zero per-frame allocations.
  */
 import { Config } from '../core/Config.js';
 import { diamondPath } from '../core/shapes.js';
+import { AudioPool } from '../core/AudioPool.js';
 
 export class Barrier {
   constructor() {
@@ -31,6 +35,12 @@ export class Barrier {
     this._pulseT = -1; // -1 = no ripple in progress
     this._age = 0; // seconds — drives the low-health warning pulse only
     this._initGeometry();
+
+    // Low-health danger blip — see class doc.
+    const { warningAudioSrc, warningVolume } = Config.barrier.lowHealth;
+    this._warningAudio = new AudioPool(warningAudioSrc, 4, warningVolume);
+    this._warningTimer = 0;
+    this._wasLowHealth = false;
   }
 
   /**
@@ -56,6 +66,7 @@ export class Barrier {
   /** @param {number} dt */
   update(dt) {
     this._age += dt;
+    this._updateLowHealthWarning(dt);
     if (this._pulseT < 0) return;
     this._pulseT += dt;
     if (this._pulseT >= Config.barrier.pulse.duration) this._pulseT = -1;
@@ -89,6 +100,20 @@ export class Barrier {
   _lowHealthPulseAlpha() {
     const { pulseSpeed, pulseDepth } = Config.barrier.lowHealth;
     return 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._age * pulseSpeed));
+  }
+
+  /** Repeating danger blip while low on health — identical shape to Player.js's own; see that class's doc. */
+  _updateLowHealthWarning(dt) {
+    const low = this._isLowHealth();
+    if (low) {
+      if (!this._wasLowHealth) this._warningTimer = 0;
+      this._warningTimer -= dt;
+      if (this._warningTimer <= 0) {
+        this._warningAudio.play();
+        this._warningTimer = Config.barrier.lowHealth.warningInterval;
+      }
+    }
+    this._wasLowHealth = low;
   }
 
   /**
