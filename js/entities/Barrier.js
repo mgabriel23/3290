@@ -18,8 +18,11 @@
  * UI's pulsing buttons already use, just faster/deeper so it reads as
  * urgent rather than idle chrome. The same threshold also triggers a short
  * danger blip immediately, then repeating every
- * `Config.barrier.lowHealth.warningInterval` seconds for as long as it
- * stays low — mirrors Player.js's own low-health warning sound.
+ * `Config.barrier.lowHealth.warningInterval` seconds, capped at
+ * `warningMaxRepeats` plays per danger episode — mirrors Player.js's own
+ * low-health warning sound exactly. A pulsing "!" icon beside the SHIELD
+ * readout (see _renderHealth) isn't capped the same way — it stays up for
+ * as long as the danger persists, only the sound stops nagging.
  *
  * All geometry is computed once from Config in the constructor — `render`
  * produces zero per-frame allocations.
@@ -40,6 +43,7 @@ export class Barrier {
     const { warningAudioSrc, warningVolume } = Config.barrier.lowHealth;
     this._warningAudio = new AudioPool(warningAudioSrc, 4, warningVolume);
     this._warningTimer = 0;
+    this._warningPlays = 0;
     this._wasLowHealth = false;
   }
 
@@ -102,15 +106,18 @@ export class Barrier {
     return 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._age * pulseSpeed));
   }
 
-  /** Repeating danger blip while low on health — identical shape to Player.js's own; see that class's doc. */
+  /** Capped, repeating danger blip while low on health — identical shape to Player.js's own; see that class's doc. */
   _updateLowHealthWarning(dt) {
     const low = this._isLowHealth();
     if (low) {
-      if (!this._wasLowHealth) this._warningTimer = 0;
-      this._warningTimer -= dt;
-      if (this._warningTimer <= 0) {
-        this._warningAudio.play();
-        this._warningTimer = Config.barrier.lowHealth.warningInterval;
+      if (!this._wasLowHealth) { this._warningTimer = 0; this._warningPlays = 0; }
+      if (this._warningPlays < Config.barrier.lowHealth.warningMaxRepeats) {
+        this._warningTimer -= dt;
+        if (this._warningTimer <= 0) {
+          this._warningAudio.play();
+          this._warningPlays++;
+          this._warningTimer = Config.barrier.lowHealth.warningInterval;
+        }
       }
     }
     this._wasLowHealth = low;
@@ -141,17 +148,24 @@ export class Barrier {
   }
 
   _renderHealth(renderer) {
-    const { baseY, arcHeight, healthLabelFont, healthValueFont, healthColor, healthGlowBlur } =
-      Config.barrier;
+    const { baseY, arcHeight, healthLabelFont, healthValueFont, healthColor, healthGlowBlur,
+             warningIconOffsetX, warningIconFont, warningIconGlowBlur } = Config.barrier;
     const { width: vW } = Config.virtual;
     const peakY = baseY - arcHeight; // y of the arc's topmost point
-    const color = this._isLowHealth() ? Config.barrier.lowHealth.color : healthColor;
+    const low   = this._isLowHealth();
+    const color = low ? Config.barrier.lowHealth.color : healthColor;
     renderer.drawText('SHIELD', vW / 2, peakY + 26, {
       font: healthLabelFont, color, alpha: 0.5,
     });
     renderer.drawText(String(this.health), vW / 2, peakY + 52, {
       font: healthValueFont, color, glowBlur: healthGlowBlur,
     });
+    if (low) {
+      renderer.drawText('!', vW / 2 + warningIconOffsetX, peakY + 39, {
+        font: warningIconFont, color, glowBlur: warningIconGlowBlur, glowColor: color,
+        alpha: this._lowHealthPulseAlpha(),
+      });
+    }
   }
 
   /** Player bullet damage readout, mirroring _renderHealth's layout but offset toward the dome's left side. */

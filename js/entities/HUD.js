@@ -104,7 +104,11 @@ export class HUD {
   /**
    * Player health bar. Below `Config.player.lowHealth.threshold` the fill
    * switches to the same warning red/pulse Player.js's own hull uses —
-   * see that config's own doc for why the two are meant to read as one cue.
+   * see that config's own doc for why the two are meant to read as one cue
+   * — and a pulsing "!" appears beside the bar (same glowing-glyph
+   * language as SniperEnemy's own warning marker). The icon stays up for
+   * as long as the danger persists; only the danger *sound* is capped
+   * (see Player.js's `_updateLowHealthWarning`).
    */
   _renderHealthBar(renderer, health) {
     const cfg = Config.hud.health;
@@ -134,6 +138,12 @@ export class HUD {
     renderer.drawText(`${Math.ceil(clamped)} / ${maxHealth}`, cfg.x, this._healthLabelY, {
       font: cfg.labelFont, color: cfg.labelColor, alpha: 0.75,
     });
+
+    if (low) {
+      renderer.drawText('!', this._healthIconX, this._healthIconY, {
+        font: cfg.iconFont, color, glowBlur: cfg.iconGlowBlur, glowColor: color, alpha,
+      });
+    }
   }
 
   _initGeometry() {
@@ -160,5 +170,9 @@ export class HUD {
     this._healthTrackPath = { points: [[this._healthLeft, top], [right, top], [right, bottom], [this._healthLeft, bottom]], closed: true };
     this._healthFillPath  = { points: [[this._healthLeft, top], [this._healthLeft, top], [this._healthLeft, bottom], [this._healthLeft, bottom]], closed: true };
     this._healthLabelY = bottom + 12;
+
+    // Low-health warning icon — sits just left of the bar, vertically centered on it.
+    this._healthIconX = this._healthLeft - hCfg.iconOffsetX;
+    this._healthIconY = (top + bottom) / 2;
   }
 }

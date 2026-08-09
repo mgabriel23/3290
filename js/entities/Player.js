@@ -28,10 +28,13 @@
  * ignored — GameplayScene reads `takeDamage`'s return value to know
  * whether a hit actually applied before triggering shake/hit-stop
  * feedback. Below `Config.player.lowHealth.threshold` the hull pulses
- * warning red, identical in shape to Barrier's own low-health pulse, and a
+ * warning red, identical in shape to Barrier's own low-health pulse; a
  * short danger blip plays immediately on crossing into that state, then
- * repeats every `Config.player.lowHealth.warningInterval` seconds for as
- * long as it stays there (Barrier.js mirrors this for its own health).
+ * repeats every `Config.player.lowHealth.warningInterval` seconds, capped
+ * at `warningMaxRepeats` plays per danger episode (Barrier.js mirrors
+ * this for its own health); and HUD's health bar shows a pulsing "!" icon
+ * for as long as the danger persists (independent of the capped blip —
+ * the icon isn't capped, only the sound is).
  */
 import { Config } from '../core/Config.js';
 import { easeOutCubic } from '../core/animation.js';
@@ -122,7 +125,8 @@ export class Player {
     const { warningAudioSrc, warningVolume } = Config.player.lowHealth;
     this._warningAudio = new AudioPool(warningAudioSrc, 4, warningVolume);
     this._warningTimer = 0;   // seconds until the next blip; only ticks while low
-    this._wasLowHealth = false; // edge-detects the moment danger starts, for an immediate first blip
+    this._warningPlays = 0;   // blips played so far this danger episode — capped at warningMaxRepeats
+    this._wasLowHealth = false; // edge-detects the moment danger starts, for an immediate first blip and a fresh play count
   }
 
   /** True once the entry animation has completed and the ship is controllable. */
@@ -229,21 +233,26 @@ export class Player {
   }
 
   /**
-   * Repeating danger blip while low on health — plays immediately the
-   * instant health crosses into the danger zone (edge-triggered via
-   * `_wasLowHealth`), then every `warningInterval` seconds for as long as
-   * it stays there. Stops on its own the moment health recovers, and can
-   * never ring after death since GameplayScene stops calling `update()`
-   * entirely once the game-over overlay takes over.
+   * Danger blip while low on health — plays immediately the instant
+   * health crosses into the danger zone (edge-triggered via
+   * `_wasLowHealth`), then every `warningInterval` seconds, up to
+   * `warningMaxRepeats` total plays for this danger episode (not
+   * indefinitely). Recovering above the threshold and dropping low again
+   * resets the count, so a fresh emergency gets its own full set of
+   * blips. Can never ring after death since GameplayScene stops calling
+   * `update()` entirely once the game-over overlay takes over.
    */
   _updateLowHealthWarning(dt) {
     const low = this._isLowHealth();
     if (low) {
-      if (!this._wasLowHealth) this._warningTimer = 0; // just entered danger — blip right away
-      this._warningTimer -= dt;
-      if (this._warningTimer <= 0) {
-        this._warningAudio.play();
-        this._warningTimer = Config.player.lowHealth.warningInterval;
+      if (!this._wasLowHealth) { this._warningTimer = 0; this._warningPlays = 0; } // just entered danger — blip right away, fresh count
+      if (this._warningPlays < Config.player.lowHealth.warningMaxRepeats) {
+        this._warningTimer -= dt;
+        if (this._warningTimer <= 0) {
+          this._warningAudio.play();
+          this._warningPlays++;
+          this._warningTimer = Config.player.lowHealth.warningInterval;
+        }
       }
     }
     this._wasLowHealth = low;

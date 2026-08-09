@@ -119,17 +119,18 @@ export const Config = Object.freeze({
       pulseSpeed: 4.0,
       pulseDepth: 0.5,
 
-      // Repeating short danger blip while health stays at/below threshold —
-      // plays immediately on crossing into danger, then every
-      // `warningInterval` seconds for as long as it stays there (Player.js
-      // stops ticking this the instant GameplayScene freezes for game over,
-      // so it can't ring past death). No dedicated alarm asset exists in
-      // this project yet — points at a new `warning.mp3` that needs adding;
-      // AudioPool degrades silently if it's missing, so nothing breaks
-      // meanwhile, it's just quiet until the file exists.
-      warningAudioSrc: 'assets/audio/warning.mp3',
-      warningVolume:   0.5,
-      warningInterval: 1.8,
+      // Short danger blip while health stays at/below threshold — plays
+      // immediately on crossing into danger, then every `warningInterval`
+      // seconds, capped at `warningMaxRepeats` total plays per danger
+      // episode (not indefinitely — a nag that never stops is worse than
+      // no warning at all). Recovering above the threshold and dropping
+      // low again resets the count, so a fresh emergency always gets its
+      // own full set of blips. Player.js stops ticking this the instant
+      // GameplayScene freezes for game over, so it can't ring past death.
+      warningAudioSrc:   'assets/audio/warning.mp3',
+      warningVolume:     0.5,
+      warningInterval:   1.8,
+      warningMaxRepeats: 3,
     }),
 
     /** The engine flame: a small pulsing neon triangle beneath the ship. */
@@ -1342,6 +1343,15 @@ export const Config = Object.freeze({
     powerXRatio: 0.22, // fraction of virtual width — x position of the power readout
     powerColor: '#4DEFFF',
 
+    // Small pulsing "!" beside the SHIELD readout, only while low — offset
+    // to the right (powerXRatio's readout already occupies the left side,
+    // so the icon goes the other way to avoid crowding it). Same glowing-
+    // glyph language as Config.hud.health's own icon and SniperEnemy's
+    // warning marker.
+    warningIconOffsetX: 42, // vp to the right of screen-center
+    warningIconFont: '400 16px "Audiowide", "Courier New", monospace',
+    warningIconGlowBlur: 8,
+
     // Impact ripple — a damped spring deformation applied to the arc near
     // an impact point (e.g. BouncerEnemy bouncing off the dome), so the
     // shield visibly flexes inward then springs back rather than the hit
@@ -1365,11 +1375,12 @@ export const Config = Object.freeze({
       pulseSpeed: 4.0,       // rad/sec — noticeably faster than the ~2.0 UI buttons pulse at
       pulseDepth: 0.5,       // how far the alpha dips at the trough of each pulse
 
-      // Same repeating danger-blip treatment as Config.player.lowHealth —
-      // see that config's own comment for the asset-availability caveat.
-      warningAudioSrc: 'assets/audio/warning.mp3',
-      warningVolume:   0.5,
-      warningInterval: 1.8,
+      // Same repeating (capped) danger-blip treatment as
+      // Config.player.lowHealth — see that config's own comment.
+      warningAudioSrc:   'assets/audio/warning.mp3',
+      warningVolume:     0.5,
+      warningInterval:   1.8,
+      warningMaxRepeats: 3,
     }),
   }),
 
@@ -1410,6 +1421,14 @@ export const Config = Object.freeze({
       color: '#4DEFFF',      // normal (non-low-health) fill color
       labelFont: '400 9px "Audiowide", "Courier New", monospace',
       labelColor: '#aab4d4',
+
+      // Small pulsing "!" beside the bar, only while low — same glowing-
+      // glyph language SniperEnemy's own warning marker already uses
+      // (see Config.enemy.sniper.warningLabelFont), reused here rather
+      // than inventing a separate icon shape.
+      iconOffsetX: 12, // vp to the left of the bar's left edge
+      iconFont: '400 16px "Audiowide", "Courier New", monospace',
+      iconGlowBlur: 8,
     }),
   }),
 
