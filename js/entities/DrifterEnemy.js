@@ -10,11 +10,13 @@
  * off-screen.
  *
  * Independently of movement, each clone runs its own attack timer: when
- * it elapses, a random tentacle whips toward the player's CURRENT
- * position (locked at that instant), then `onFire` launches a slow
- * projectile from the tentacle tip toward that locked point — WaveManager
- * routes this into a shared projectile pool (DrifterProjectiles) which
- * handles travel and the AOE burst on arrival.
+ * it elapses, it only actually lashes if the player is within
+ * `Config.enemy.drifter.engageRangeX` of the clone's current x (otherwise
+ * it re-checks shortly rather than firing blind) — a random tentacle whips
+ * toward the player's CURRENT position (locked at that instant), then
+ * `onFire` launches a slow projectile from the tentacle tip toward that
+ * locked point — WaveManager routes this into a shared projectile pool
+ * (DrifterProjectiles) which handles travel and the AOE burst on arrival.
  */
 import { Config } from '../core/Config.js';
 import { applyHit, tickDeathState } from './EnemyCombat.js';
@@ -345,6 +347,15 @@ export class DrifterEnemy {
     if (this._fireState === 'idle') {
       this._fireTimer -= dt;
       if (this._fireTimer <= 0) {
+        // Only actually lash if the player is roughly beneath/near this
+        // clone — otherwise the attack read as blind (firing regardless of
+        // where the player is). Withholding just re-checks shortly rather
+        // than resetting the full random interval, so it engages promptly
+        // once the player wanders into range.
+        if (Math.abs(playerX - x) > cfg.engageRangeX) {
+          this._fireTimer = cfg.engageRetryInterval;
+          return;
+        }
         this._fireState   = 'lashing';
         this._fireAge     = 0;
         this._tentacleIdx = Math.floor(Math.random() * TENTACLE_BASES.length);

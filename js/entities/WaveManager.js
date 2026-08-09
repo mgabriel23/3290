@@ -11,6 +11,11 @@
  *   scout     → EnemyBullets (straight aimed capsule)
  *   rocketeer → Rockets (homing, detonates on proximity or timer)
  *   sniper    → no-op (_onFire unused; sniper manages its own laser internally)
+ *
+ * `checkPlayerHit` is the reverse of `handleBulletHit` — every enemy-attack
+ * source (enemy bullets, rocket proximity, drifter orb arrival, sniper
+ * laser, bouncer contact) tested against the player once per frame,
+ * returning total damage for GameplayScene to apply.
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
@@ -22,6 +27,7 @@ import { Rockets } from './Rockets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { AudioPool } from '../core/AudioPool.js';
+import { distanceToSegmentSquared } from '../core/vectorMath.js';
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -90,6 +96,13 @@ export class WaveManager {
     this._allSpawned = false;
     this._spawnTimer = 0;
 
+    // Accumulates damage from sources whose "did it hit the player" check
+    // naturally happens inside their own update() (Rockets/DrifterProjectiles
+    // detect proximity/arrival there) rather than via an external point-test —
+    // checkPlayerHit reads and clears this each frame alongside the sources
+    // it tests directly (enemy bullets, sniper laser, bouncer contact).
+    this._pendingPlayerDamage = 0;
+
     this._enemies      = [];
     this._enemyBullets = new EnemyBullets();
     this._rockets      = new Rockets({
@@ -97,6 +110,7 @@ export class WaveManager {
         this._rocketeerParticles.emit(x, y);
         this._playExplosionSfx(Config.enemy.rocketeer.audio.volume);
       },
+      onPlayerHit: () => { this._pendingPlayerDamage += Config.rocket.damage; },
     });
     this._drifterProjectiles = new DrifterProjectiles({
       onImpact: (x, y, color) => {
@@ -106,6 +120,7 @@ export class WaveManager {
         else if (color === Config.enemy.drifter.weaver.color) particles = this._weaverParticles;
         particles.emit(x, y);
       },
+      onPlayerHit: () => { this._pendingPlayerDamage += Config.enemy.drifter.projectileDamage; },
     });
 
     this._particles          = new Particles(Config.enemy.scout.color);
@@ -125,6 +140,11 @@ export class WaveManager {
     this._fireBullet           = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
     this._fireRocket           = (ox, oy, tx, ty) => this._rockets.fire(ox, oy, tx, ty);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
+    // Passed into Enemy.js's repositioning so it picks a fresh rest point
+    // that's already clear of other enemies, instead of a blind random one
+    // — see _findClearRestPoint's own doc for why picking clear beats only
+    // reactively separating afterward.
+    this._findClearRestPoint = (enemy) => this._findClearRestPointFor(enemy);
 
     this._waveClear = false;
   }
@@ -147,7 +167,7 @@ export class WaveManager {
     this._weaverParticles.update(dt);
     this._bouncerParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
-    this._drifterProjectiles.update(dt);
+    this._drifterProjectiles.update(dt, playerX, playerY);
     this._enemyBullets.update(dt);
 
     if (this._waveClear) return;
@@ -186,7 +206,9 @@ export class WaveManager {
       else if (e.type === 'sniper')    cb = _noFire;
       else if (e.type === 'drifter')   cb = this._fireDrifterProjectile;
       else                             cb = this._fireBullet;
-      e.update(dt, playerX, playerY, cb);
+      // Sniper/Drifter's update() signatures simply don't read this 5th
+      // arg — only Enemy.js (Scout/Rocketeer) uses it, for repositioning.
+      e.update(dt, playerX, playerY, cb, this._findClearRestPoint);
     }
 
     this._resolveOverlaps();
@@ -457,6 +479,42 @@ export class WaveManager {
     return { particles: this._drifterParticles, audio: Config.enemy.drifter.audio };
   }
 
+  /**
+   * Called once per frame by GameplayScene — the mirror image of
+   * handleBulletHit's direction. Tests every live enemy-attack source
+   * against `player` and returns the total damage this frame (0 if none);
+   * GameplayScene applies it via `player.takeDamage()`. Doesn't itself
+   * check invulnerability — Player.takeDamage already no-ops while
+   * invulnerable, so a hit source here just gets consumed (bullet removed,
+   * etc.) even during that window, same as a real impact would be.
+   * @param {{ x: number, y: number, hitRadius: number }} player
+   * @returns {number}
+   */
+  checkPlayerHit(player) {
+    let damage = this._pendingPlayerDamage;
+    this._pendingPlayerDamage = 0;
+
+    const { x, y, hitRadius } = player;
+
+    if (this._enemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemyBullet.damage;
+
+    for (let i = 0; i < this._enemies.length; i++) {
+      const e = this._enemies[i];
+      if (e.type === 'sniper') {
+        const beam = e.laserBeam;
+        if (beam && distanceToSegmentSquared(x, y, beam.x1, beam.y1, beam.x2, beam.y2) <= hitRadius * hitRadius) {
+          damage += Config.laser.damage;
+        }
+      } else if (e.type === 'bouncer') {
+        const dx = e.x - x, dy = e.y - y;
+        const r  = e.hitRadius + hitRadius;
+        if (dx * dx + dy * dy <= r * r) damage += Config.enemy.bouncer.contactDamage;
+      }
+    }
+
+    return damage;
+  }
+
   /** Direct reference — GameplayScene runs the bullet↔enemy collision loop. */
   get enemies() { return this._enemies; }
 
@@ -509,7 +567,54 @@ export class WaveManager {
         a.y = Math.max(yLo, Math.min(yHi, a.y - ny * push));
         b.x = Math.max(xLo, Math.min(xHi, b.x + nx * push));
         b.y = Math.max(yLo, Math.min(yHi, b.y + ny * push));
+
+        // A repositioning enemy recomputes x/y from _restX/_restY every
+        // frame (see Enemy.js's 'repositioning' branch) — without also
+        // nudging the target itself, this push would just get overwritten
+        // again next frame and the two could keep drifting back together.
+        if (a._state === 'repositioning') {
+          a._restX = Math.max(xLo, Math.min(xHi, a._restX - nx * push));
+          a._restY = Math.max(yLo, Math.min(yHi, a._restY - ny * push));
+        }
+        if (b._state === 'repositioning') {
+          b._restX = Math.max(xLo, Math.min(xHi, b._restX + nx * push));
+          b._restY = Math.max(yLo, Math.min(yHi, b._restY + ny * push));
+        }
       }
+    }
+  }
+
+  /**
+   * A clear (or best-effort) rest point for `enemy` to reposition to —
+   * called from Enemy.js's repositioning trigger instead of it picking a
+   * blind random point, so an enemy doesn't visibly glide toward wherever
+   * another one already is. Retries a handful of times against every other
+   * non-entering, non-drifter, non-bouncer enemy's CURRENT position (the
+   * same population _resolveOverlaps itself considers); if nothing fully
+   * clear turns up in that budget, the last candidate is used anyway — the
+   * ordinary push-apart in _resolveOverlaps still catches whatever this
+   * doesn't, exactly as it already does for spawn-time placement.
+   */
+  _findClearRestPointFor(enemy) {
+    const { restXMargin, restYMin, restYMax, minSeparation } = enemy._cfg;
+    const { width: vW, height: vH } = Config.virtual;
+    const xLo = restXMargin,        xHi = vW - restXMargin;
+    const yLo = vH * restYMin,      yHi = vH * restYMax;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const x = xLo + Math.random() * (xHi - xLo);
+      const y = yLo + Math.random() * (yHi - yLo);
+
+      let clear = true;
+      for (let i = 0; i < this._enemies.length; i++) {
+        const other = this._enemies[i];
+        if (other === enemy || other._state === 'entering' || other._type === 'drifter' || other._type === 'bouncer') continue;
+        const sep = Math.max(minSeparation, other._cfg.minSeparation);
+        const dx  = other.x - x, dy = other.y - y;
+        if (dx * dx + dy * dy < sep * sep) { clear = false; break; }
+      }
+      if (clear) return { x, y };
+      if (attempt === 7) return { x, y }; // budget spent — best effort, _resolveOverlaps backstops the rest
     }
   }
 

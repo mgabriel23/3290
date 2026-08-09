@@ -4,13 +4,24 @@
  *
  * Behaviour: enters from the top at speed, gliding diagonally to a random
  * resting position, then fires aimed shots at the player on a fixed reload
- * cycle. The ship continuously rotates to keep its NOSE pointing AWAY from
+ * cycle, leading the shot by however much the player moved during the aim
+ * window (`Config.enemy.<type>.leadFactor` — 0 for Rocketeer, whose rocket
+ * already homes continuously after launch). After a reload, a
+ * `repositionChance` roll may send it gliding to a fresh rest point
+ * (`repositioning` state, eased with `core/animation.js`'s `easeOutCubic`)
+ * instead of aiming again from the same spot — so it doesn't camp forever.
+ * The ship continuously rotates to keep its NOSE pointing AWAY from
  * the player (tail toward player) — giving a "looking upward" silhouette
  * even while tracking. One player bullet kills it; a particle burst from
  * WaveManager provides the death visual.
  *
  * Separation: WaveManager checks pairwise distances each frame and nudges
  * overlapping enemies apart directly (see WaveManager._resolveOverlaps).
+ * Repositioning's target also comes from WaveManager (`findRestPoint`,
+ * i.e. `_findClearRestPointFor`), which tries to land somewhere already
+ * clear of other enemies rather than picking blind — reactive push-apart
+ * alone isn't enough here, since 'repositioning' recomputes x/y from the
+ * target every frame and would just erase a push next frame otherwise.
  *
  * Hit/death-flash/entry-glide/engine rendering are shared with SniperEnemy
  * (and, partially, DrifterEnemy/BouncerEnemy) via EnemyCombat.js — see that
@@ -18,6 +29,7 @@
  * class.
  */
 import { Config } from '../core/Config.js';
+import { easeOutCubic } from '../core/animation.js';
 import { applyHit, tickDeathState, setState, stepEntryGlide, renderEngineFlame, renderEngineCore, renderHull } from './EnemyCombat.js';
 
 // Exported so WaveManager can pre-transform hull points to world space for batched rendering.
@@ -63,6 +75,15 @@ export class Enemy {
 
     this._state    = 'entering';
     this._stateAge = 0;
+
+    // Lead-prediction aim: sampled at the moment 'aiming' begins, compared
+    // against the player's position at fire time — see the 'aiming' branch.
+    this._aimStartX = spawnX;
+    this._aimStartY = 0;
+
+    // Mid-fight repositioning target — see the 'repositioning' branch.
+    this._repoStartX = restX;
+    this._repoStartY = restY;
   }
 
   /** Enemy variant — used by WaveManager to route rendering and projectile creation. */
@@ -73,8 +94,11 @@ export class Enemy {
    * @param {number} playerX
    * @param {number} playerY
    * @param {(ox:number, oy:number, tx:number, ty:number) => void} onFire
+   * @param {(enemy: Enemy) => {x:number, y:number}} findRestPoint  supplies
+   *   a rest point clear of other enemies (or a best-effort one) when
+   *   repositioning — see WaveManager._findClearRestPointFor.
    */
-  update(dt, playerX, playerY, onFire) {
+  update(dt, playerX, playerY, onFire, findRestPoint) {
     const cfg = this._cfg;
     this._stateAge    += dt;
     this._enginePhase += dt * 9;
@@ -92,13 +116,48 @@ export class Enemy {
       stepEntryGlide(this, cfg, dt, 'aiming');
 
     } else if (this._state === 'aiming') {
+      // Sample once, on the first tick of this state (stateAge was just
+      // reset to 0 by whichever transition led here, then bumped by dt
+      // above — this is the dt-independent way to detect "just arrived").
+      if (this._stateAge <= dt) {
+        this._aimStartX = playerX;
+        this._aimStartY = playerY;
+      }
       if (this._stateAge >= cfg.aimPause) {
-        onFire(this.x, this.y, playerX, playerY);
+        // Lead prediction: extrapolate however far the player moved during
+        // the aim window forward by `leadFactor` more of the same motion.
+        // leadFactor 0 (Rocketeer) reduces this to plain current-position
+        // aim — the rocket's own continuous homing makes leading the
+        // initial heading redundant.
+        const leadX = playerX + (playerX - this._aimStartX) * cfg.leadFactor;
+        const leadY = playerY + (playerY - this._aimStartY) * cfg.leadFactor;
+        onFire(this.x, this.y, leadX, leadY);
         setState(this, 'firing');
       }
 
     } else if (this._state === 'firing') {
-      if (this._stateAge >= cfg.reloadTime) setState(this, 'aiming');
+      if (this._stateAge >= cfg.reloadTime) {
+        if (Math.random() < cfg.repositionChance) {
+          this._repoStartX = this.x;
+          this._repoStartY = this.y;
+          const target = findRestPoint(this);
+          this._restX = target.x;
+          this._restY = target.y;
+          setState(this, 'repositioning');
+        } else {
+          setState(this, 'aiming');
+        }
+      }
+
+    } else if (this._state === 'repositioning') {
+      // Same ease-out-cubic Player.js's own entry animation uses — not
+      // stepEntryGlide, which is hard-coded to "enter from the top edge"
+      // and doesn't fit a mid-fight reposition between two arbitrary points.
+      const t = Math.min(this._stateAge / cfg.repositionDuration, 1);
+      const eased = easeOutCubic(t);
+      this.x = this._repoStartX + (this._restX - this._repoStartX) * eased;
+      this.y = this._repoStartY + (this._restY - this._repoStartY) * eased;
+      if (t >= 1) setState(this, 'aiming');
     }
   }
 

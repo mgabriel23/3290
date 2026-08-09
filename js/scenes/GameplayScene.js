@@ -53,6 +53,19 @@
  * tiles nor anything else would repaint it, since they're exactly
  * canvas-width). Clearing before the pan guarantees the exposed edge is
  * always void-colored, never leftover pixels from a previous frame.
+ *
+ * Player damage: `_checkPlayerHit` is `_checkCollisions`' mirror image —
+ * every enemy-attack source tested against the player once per frame (see
+ * WaveManager.checkPlayerHit) instead of every enemy tested against the
+ * player's bullets. Reaching 0 health freezes gameplay behind a "GAME
+ * OVER" overlay (`_isGameOver`), the same mutually-exclusive full-screen-
+ * overlay shape the codex/pause buttons already establish — starfield
+ * keeps drifting underneath, everything else stops. A tap restarts by
+ * calling the optional `onGameOver` constructor callback (same
+ * constructor-injected-callback convention every other scene already
+ * uses for its own `onContinue`) — Game.js wires this to simply construct
+ * a brand-new GameplayScene, so "restart" is just "start over clean"
+ * rather than resetting state in place.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
@@ -67,9 +80,14 @@ import { Starfield } from '../entities/Starfield.js';
 import { WaveManager } from '../entities/WaveManager.js';
 
 export class GameplayScene {
-  /** @param {import('../core/Renderer.js').Renderer} renderer */
-  constructor(renderer) {
+  /**
+   * @param {import('../core/Renderer.js').Renderer} renderer
+   * @param {{ onGameOver?: () => void }} [callbacks]  called once, on the
+   *   restart tap after the player's health reaches 0 — see class doc.
+   */
+  constructor(renderer, { onGameOver } = {}) {
     this.renderer = renderer;
+    this._onGameOver = onGameOver;
     this.starfield = new Starfield();
     this.barrier = new Barrier();
     this.player = new Player();
@@ -81,6 +99,10 @@ export class GameplayScene {
     this._hitStopTimer = 0; // seconds of gameplay-time freeze remaining — see update()'s effectiveDt
     this._age = 0; // seconds since this scene started — drives the starfield fade-in
     this._pointerDown = false;
+
+    // Game-over overlay — see class doc's "Player damage" note.
+    this._isGameOver  = false;
+    this._gameOverAge = 0; // seconds since the overlay appeared — drives its fade-in and the restart-tap debounce
 
     // Level / wave state -------------------------------------------------------
     // 'intro'  — level indicator is on screen; bullets are suppressed
@@ -107,7 +129,8 @@ export class GameplayScene {
   update(dt) {
     this._codex.update(dt);
     this._playback.update(dt);
-    this.starfield.update(dt); // keeps drifting even while paused/codex is open — purely cosmetic, not gameplay
+    this.starfield.update(dt); // keeps drifting even while paused/codex/game-over is showing — purely cosmetic, not gameplay
+    if (this._isGameOver) { this._gameOverAge += dt; return; } // frozen for good — only a restart tap moves things forward
     if (this._codex.isOpen || this._playback.isPaused) return; // frozen — nothing gameplay-related advances
 
     this._screenShake.update(dt);
@@ -125,12 +148,14 @@ export class GameplayScene {
 
     this.barrier.update(effectiveDt);
     this.player.update(effectiveDt);
+    this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
 
     // Bullets and enemies are suppressed during the level intro.
     if (this._levelState === 'active') {
       this.bullets.update(effectiveDt, this.player);
       this._waveManager.update(effectiveDt, this.player.x, this.player.y);
       this._checkCollisions();
+      this._checkPlayerHit();
 
       // Wave cleared AND all death effects finished → begin the next level intro
       if (this._waveManager.isDone) {
@@ -177,7 +202,7 @@ export class GameplayScene {
     this._waveManager?.render(this.renderer);
 
     this.renderer.setCameraOffset(0, 0);
-    this.hud.render(this.renderer);
+    this.hud.render(this.renderer, this.player.health);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
     // Codex, then playback controls — both must sit on top of everything else,
@@ -185,6 +210,8 @@ export class GameplayScene {
     // buttons stay visible and tappable even while the codex card is open.
     this._codex.render(this.renderer);
     this._playback.render(this.renderer);
+    // Game over sits on top of literally everything — the final word on the frame.
+    if (this._isGameOver) this._renderGameOver();
   }
 
   /**
@@ -203,6 +230,7 @@ export class GameplayScene {
   }
 
   handlePointerDown(x, y) {
+    if (this._isGameOver) return; // the ship is gone — nothing left to drag around
     // Both TapInput and DragInput fire on the same physical tap (pointerdown
     // fires before the tap is recognized) — without these guards, the tap
     // that opens an overlay or toggles mute would first snap the ship to
@@ -216,6 +244,7 @@ export class GameplayScene {
   }
 
   handlePointerMove(x, y) {
+    if (this._isGameOver) return;
     if (!this._pointerDown || this._codex.isOpen || this._playback.isPaused) return;
     this.player.moveTo(x, y);
   }
@@ -225,13 +254,21 @@ export class GameplayScene {
   }
 
   /**
-   * Mute always wins first — it never opens an overlay, so it's always
-   * safe to toggle. Pause and the Codex are mutually exclusive full-screen
-   * overlays: opening either is ignored while the other is already open,
-   * so their dimming layers can never stack. Any remaining tap routes to
-   * whichever overlay (if any) is currently open.
+   * Game over wins first — once it's showing, nothing else is interactible
+   * (mirrors why mute/pause/codex are all mutually exclusive below, just
+   * one level higher). `minRestartDelay` guards against the residual tap
+   * that triggered the fatal hit being immediately reinterpreted as a
+   * restart. Otherwise: mute always wins next — it never opens an overlay,
+   * so it's always safe to toggle. Pause and the Codex are mutually
+   * exclusive full-screen overlays: opening either is ignored while the
+   * other is already open, so their dimming layers can never stack. Any
+   * remaining tap routes to whichever overlay (if any) is currently open.
    */
   handleTap(x, y) {
+    if (this._isGameOver) {
+      if (this._gameOverAge >= Config.gameOver.minRestartDelay) this._onGameOver?.();
+      return;
+    }
     if (this._playback.isInsideMuteButton(x, y)) {
       this._playback.toggleMute();
       return;
@@ -268,6 +305,34 @@ export class GameplayScene {
         }
       }
     }
+  }
+
+  /**
+   * Test every live enemy-attack source against the player once per frame
+   * — `_checkCollisions`' mirror image, in the other direction (see
+   * WaveManager.checkPlayerHit). A hit that actually applies (not absorbed
+   * by the player's post-hit invulnerability window) triggers shake/
+   * hit-stop, or ends the run once health reaches 0.
+   */
+  _checkPlayerHit() {
+    const damage = this._waveManager.checkPlayerHit(this.player);
+    if (damage <= 0) return;
+    if (!this.player.takeDamage(damage)) return; // invulnerable — hit source still consumed, no further effect
+
+    if (this.player.health <= 0) {
+      this._triggerGameOver();
+      return;
+    }
+    this._screenShake.trigger(Config.screenShake.playerHitTrauma);
+    this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.playerHitDuration);
+  }
+
+  /** Freeze gameplay for good and start the "GAME OVER" overlay's fade-in — see class doc. */
+  _triggerGameOver() {
+    this._isGameOver  = true;
+    this._gameOverAge = 0;
+    this._screenShake.trigger(Config.screenShake.playerHitTrauma);
+    this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.playerHitDuration);
   }
 
   /**
@@ -315,5 +380,27 @@ export class GameplayScene {
     const { fadeInDuration } = Config.starfield;
     const alpha = Math.min(this._age / fadeInDuration, 1);
     this.starfield.render(this.renderer, alpha);
+  }
+
+  /**
+   * "GAME OVER" overlay — a dimming layer over the last live frame (same
+   * idea as EnemyCodex's own dimAlpha), plus a clean fade-in title and
+   * restart prompt. No flicker, unlike the level intro — this is somber,
+   * not an alarm. Called with the camera already reset to (0,0) (the UI
+   * layer's state at the point render() calls this), so the dim rect is
+   * always full-screen and fixed regardless of the world's current pan.
+   */
+  _renderGameOver() {
+    const { width: vW, height: vH } = Config.virtual;
+    const cfg   = Config.gameOver;
+    const alpha = Math.min(this._gameOverAge / cfg.fadeInDuration, 1);
+
+    this.renderer.clear(Config.colors.void, cfg.dimAlpha * alpha);
+    this.renderer.drawText(cfg.titleText, vW / 2, vH / 2, {
+      font: cfg.titleFont, color: cfg.titleColor, alpha, glowBlur: cfg.titleGlowBlur,
+    });
+    this.renderer.drawText(cfg.promptText, vW / 2, vH / 2 + cfg.promptOffsetY, {
+      font: cfg.promptFont, color: cfg.promptColor, alpha,
+    });
   }
 }

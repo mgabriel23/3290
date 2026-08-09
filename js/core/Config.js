@@ -101,6 +101,25 @@ export const Config = Object.freeze({
     damage:         1,     // health points removed from an enemy per bullet hit, at level 1
     damagePerLevel: 0.25,  // added to `damage` for each level beyond 1 (level 4 → 1 + 3*0.25 = 1.75)
 
+    maxHealth:        100,  // player HP — see Player.js's takeDamage and HUD's health bar
+    hitRadius:        18,   // vp — collision circle for enemy attacks vs the player (ship is ~32vp wide at scale 0.5)
+    invulnDuration:   0.6,  // seconds of grace after taking a hit — stops one attack (e.g. a laser sweep) re-hitting across several consecutive frames
+    hitFlashDuration: 0.15, // seconds the hull flashes white on a hit — matches Config.enemy.hitFlashDuration
+
+    /**
+     * Below `threshold`, the hull switches to a pulsing warning red —
+     * identical shape/formula to Barrier's own low-health pulse (see
+     * Config.barrier.lowHealth and Barrier._isLowHealth/_lowHealthPulseAlpha)
+     * so both cues read as the same warning language. HUD's health bar
+     * reads this same config for its own low-health color.
+     */
+    lowHealth: Object.freeze({
+      threshold:  25,
+      color:      '#ff3b3b',
+      pulseSpeed: 4.0,
+      pulseDepth: 0.5,
+    }),
+
     /** The engine flame: a small pulsing neon triangle beneath the ship. */
     flame: Object.freeze({
       color: '#FF8A3D',           // warm neon orange — contrasts with the cyan hull
@@ -129,6 +148,29 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * Game over — a full-screen overlay GameplayScene shows once the
+   * player's health reaches 0 (see GameplayScene's `_isGameOver`).
+   * Same clean fade-in text treatment as `level` above (no flicker —
+   * this is somber, not an alarm), plus a smaller restart prompt beneath.
+   * Freezes gameplay exactly like the codex/pause overlays already do;
+   * a tap restarts via a brand-new GameplayScene (see Game.js's
+   * `onGameOver` wiring) rather than resetting state in place.
+   */
+  gameOver: Object.freeze({
+    fadeInDuration: 0.6,
+    dimAlpha: 0.75,       // darkens the frozen gameplay frame behind the text, same idea as codex.overlay.dimAlpha
+    minRestartDelay: 0.5, // seconds before a tap is accepted as "restart" — avoids an accidental instant-restart tap
+    titleText: 'GAME OVER',
+    titleFont: '400 56px "Audiowide", "Courier New", monospace',
+    titleColor: '#ff3b3b', // matches Config.player.lowHealth.color — this is the ultimate low-health state
+    titleGlowBlur: 16,
+    promptText: 'TAP TO RESTART',
+    promptFont: '400 18px "Audiowide", "Courier New", monospace',
+    promptColor: '#aab4d4',
+    promptOffsetY: 60, // vp below the title
+  }),
+
+  /**
    * Camera shake — a small "trauma" accumulator (see core/ScreenShake.js):
    * each trigger adds trauma (clamped at 1), which decays linearly over
    * time while the actual offset is trauma SQUARED × maxOffset, so it
@@ -143,6 +185,7 @@ export const Config = Object.freeze({
     maxOffset: 8,        // virtual px — camera offset at full (1.0) trauma
     killTrauma: 0.18,    // added per enemy kill — a burst of rapid kills stacks up further (capped at 1)
     barrierTrauma: 0.28, // added per barrier impact — stronger than a kill; it's your defense taking a hit
+    playerHitTrauma: 0.35, // added when the player takes damage — the strongest shake in the game; it's the thing you're trying not to let happen
   }),
 
   /**
@@ -155,7 +198,8 @@ export const Config = Object.freeze({
    * stutters.
    */
   hitStop: Object.freeze({
-    killDuration: 0.05, // seconds — short enough to read as a punch, not lag, even on back-to-back kills
+    killDuration: 0.05,      // seconds — short enough to read as a punch, not lag, even on back-to-back kills
+    playerHitDuration: 0.08, // seconds — slightly longer than a kill's; sells the weight of taking a hit yourself
   }),
 
   /**
@@ -531,6 +575,9 @@ export const Config = Object.freeze({
       reloadTime:       2.2,
       hitRadius:        16,
       minSeparation:    60,
+      repositionChance:  0.5, // odds a finished firing cycle sends it to a fresh rest point instead of aiming again in place
+      repositionDuration: 0.9, // seconds to ease to the new rest point (core/animation.js's easeOutCubic)
+      leadFactor:        1.0, // extrapolates the player's movement during the aim window forward by this much — its bullet is unguided, so leading it matters
       // EffortScore 3.00 (hitsToKill 3, stationary, mandatory) — see the
       // methodology comment above `hitFlashDuration`. Calibration anchor:
       // the scaling constant is chosen so Scout, the very first enemy, lands at 100.
@@ -632,6 +679,9 @@ export const Config = Object.freeze({
       reloadTime:       3.8,         // slow reload — rockets are powerful
       hitRadius:        16,
       minSeparation:    64,
+      repositionChance:  0.5, // odds a finished firing cycle sends it to a fresh rest point instead of aiming again in place
+      repositionDuration: 0.9, // seconds to ease to the new rest point (core/animation.js's easeOutCubic)
+      leadFactor:        0,   // no lead — the rocket already homes continuously after launch, so leading the initial heading is redundant
       // Equal to Scout by design — see the EffortScore methodology comment
       // above `hitFlashDuration` near the top of this `enemy` block.
       points:           100,
@@ -692,6 +742,9 @@ export const Config = Object.freeze({
       lashLen:          40,   // tentacle extension at full lash (2x tentacleLen)
       projectileSpeed:  320,  // vp/sec toward the locked target
       projectileRadius: 4,
+      projectileDamage: 8,    // player HP lost if still within range when the orb arrives — see Config.player.maxHealth
+      engageRangeX:     160,  // vp — a lash only fires if the player is within this horizontal range of the clone
+      engageRetryInterval: 0.3, // seconds before re-checking range after a would-be lash was withheld
 
       hitRadius:     18,
       // EffortScore 5.29 (hitsToKill 4, path-moving ×1.15, optional-to-
@@ -898,7 +951,8 @@ export const Config = Object.freeze({
 
       flashDuration: 0.08, // seconds — white hit-flash overlay
 
-      barrierDamage: 5, // Barrier.health lost per bounce off the barrier
+      barrierDamage: 5,  // Barrier.health lost per bounce off the barrier
+      contactDamage: 10, // player HP lost per contact tick if the player touches it — throttled by Config.player.invulnDuration under sustained overlap
 
       healthFont:  '400 16px "Audiowide", "Courier New", monospace',
       healthColor: '#ffffff',
@@ -974,12 +1028,15 @@ export const Config = Object.freeze({
     halfLen:   5,
     glowBlur:  8,
     poolSize:  32,
+    damage:    6,   // player HP lost per hit — see Config.player.maxHealth
   }),
 
   /**
    * Sniper laser beam — an instant full-screen flash fired by the Sniper.
    * Rendered as a single glowing line segment that fades out in flashDuration
-   * seconds. No projectile travels; the hit is instantaneous (future milestone).
+   * seconds. No projectile travels; the hit is instantaneous — SniperEnemy's
+   * `laserBeam` getter exposes the live segment (only during 'flashing') for
+   * WaveManager.checkPlayerHit to test the player's hitbox against.
    */
   laser: Object.freeze({
     color:         '#BF5FFF',   // matches Sniper hull
@@ -987,6 +1044,7 @@ export const Config = Object.freeze({
     glowBlur:      12,          // 20→12: blur cost ∝ radius², ~64% cheaper, still reads as a hot beam
     flashDuration: 0.20,        // seconds the beam remains visible
     beamLength:    1200,        // vp — drawn well past any edge so the beam always reaches off-screen
+    damage:        25,          // player HP lost if caught in the beam — the hardest single hit in the game, balanced by its telegraph (SniperEnemy.laserBeam is only live during 'flashing')
   }),
 
   /**
@@ -1005,6 +1063,7 @@ export const Config = Object.freeze({
     halfLen:         13,
     glowBlur:        10,
     poolSize:        16,
+    damage:          15,           // player HP lost on a proximity detonation — hard to dodge (homing), so priced above enemyBullet
   }),
 
   /**
@@ -1296,6 +1355,25 @@ export const Config = Object.freeze({
     chromeLineWidth: 1,
     chromeGlowBlur: 4,   // reduced from 5
     bracketSize: 12,     // leg length (virtual px) of the L-bracket corner accent
+
+    /**
+     * Player health bar — centered under the mute/codex/pause button row
+     * (those sit at y=34, radius ≤16 — see Config.codex.button/
+     * Config.playback.muteButton/pauseButton), clear of the SCORE/GOLD
+     * corner panels since it's centered rather than edge-anchored. Low
+     * health reuses Config.player.lowHealth's color/threshold so the bar
+     * and the ship's own hull pulse read as one consistent warning cue.
+     */
+    health: Object.freeze({
+      x: 270,      // vp — screen-center, matches the button row above it
+      y: 58,       // vp — just under the button row
+      width: 140,
+      height: 8,
+      trackColor: '#1a2035', // dim background showing the "empty" portion
+      color: '#4DEFFF',      // normal (non-low-health) fill color
+      labelFont: '400 9px "Audiowide", "Courier New", monospace',
+      labelColor: '#aab4d4',
+    }),
   }),
 
   /**

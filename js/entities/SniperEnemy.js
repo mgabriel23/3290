@@ -20,6 +20,11 @@
  *
  * Entry-glide, hit/death-flash, and engine flame/core rendering are shared
  * with Enemy.js via EnemyCombat.js — see that file's header for why.
+ *
+ * `laserBeam` exposes the live beam segment (only during 'flashing') so
+ * WaveManager.checkPlayerHit can test the player's hitbox against it and
+ * apply `Config.laser.damage` — the "!" telegraph is what gives a player
+ * time to actually dodge it.
  */
 import { Config } from '../core/Config.js';
 import { SCOUT_HULL_PTS, SCOUT_S } from './Enemy.js';
@@ -95,6 +100,26 @@ export class SniperEnemy {
 
   /** Collision radius — used by GameplayScene's bullet↔enemy hit test. */
   get hitRadius() { return this._cfg.hitRadius; }
+
+  /**
+   * The live laser segment `{x1,y1,x2,y2}` — only non-null during the
+   * 'flashing' state (the instant the beam is actually visible/lethal),
+   * else null. Same nose-position/direction math renderExtras uses,
+   * computed independently here so WaveManager.checkPlayerHit can test the
+   * player's hitbox against it without depending on render having run.
+   */
+  get laserBeam() {
+    if (this._state !== 'flashing') return null;
+    const c = this._cosA, s = this._sinA;
+    const noseX = this.x + c * GUN_LX - s * GUN_LY;
+    const noseY = this.y + s * GUN_LX + c * GUN_LY;
+    const ddx = this._targetX - noseX;
+    const ddy = this._targetY - noseY;
+    const dlen = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+    const ux = ddx / dlen, uy = ddy / dlen;
+    const beamLength = Config.laser.beamLength;
+    return { x1: noseX, y1: noseY, x2: noseX + ux * beamLength, y2: noseY + uy * beamLength };
+  }
 
   /**
    * @param {number} dt

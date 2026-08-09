@@ -71,6 +71,31 @@ export class EnemyBullets {
   /** True while any bullet is still in flight — used by WaveManager.isDone. */
   get active() { return this._count > 0; }
 
+  /**
+   * Test whether any active bullet is within `radius` virtual px of `(px, py)`.
+   * If one is found, remove it (compact swap) and return `true` — same
+   * swap-remove-on-hit shape as Bullets.checkHit, mirrored here for the
+   * player-vs-enemy-bullet direction (used by WaveManager.checkPlayerHit).
+   * @param {number} px @param {number} py @param {number} radius
+   * @returns {boolean}
+   */
+  checkHit(px, py, radius) {
+    const r2 = radius * radius;
+    for (let i = 0; i < this._count; i++) {
+      const dx = this._x[i] - px;
+      const dy = this._y[i] - py;
+      if (dx * dx + dy * dy <= r2) {
+        this._count--;
+        if (i < this._count) {
+          this._x[i]  = this._x[this._count];  this._y[i]  = this._y[this._count];
+          this._vx[i] = this._vx[this._count]; this._vy[i] = this._vy[this._count];
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
     if (this._count === 0) return;

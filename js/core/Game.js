@@ -108,7 +108,14 @@ export class Game {
     }
   }
 
-  /** Swap the tutorial out for the gameplay scene once all hints are dismissed. */
+  /**
+   * Swap the tutorial out for the gameplay scene once all hints are
+   * dismissed. Also reused verbatim as the "restart" path: GameplayScene's
+   * `onGameOver` callback below is this same method, so a post-death tap
+   * just calls this again — the `_themeAudio` guard already anticipated
+   * being called more than once, and a fresh `GameplayScene` is by
+   * construction a clean run (full health, level 1, zero score).
+   */
   _startGameplay() {
     try {
       // Start background music here — we're inside the user-gesture call chain
@@ -127,7 +134,7 @@ export class Game {
         onMutedChange((muted) => { this._themeAudio.muted = muted; });
         this._themeAudio.play().catch(() => {});
       }
-      this.scene = new GameplayScene(this.renderer);
+      this.scene = new GameplayScene(this.renderer, { onGameOver: () => this._startGameplay() });
     } catch (err) {
       console.error('Failed to start gameplay:', err);
     }

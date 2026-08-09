@@ -122,7 +122,10 @@ export class TutorialScene {
     const starAlpha = Math.min(this._age / fadeInDuration, 1);
     this._starfield.render(renderer, starAlpha);
     this._barrier.render(renderer);
-    this._hud.render(renderer);
+    // No real Player exists in this scene — this HUD is a preview of the
+    // real gameplay chrome the hints point at, so it shows a nominal full
+    // health bar rather than an undefined/NaN one.
+    this._hud.render(renderer, Config.player.maxHealth);
 
     // Fade in from black — covers the cut from PrologueScene's black fade-out
     if (this._age < fadeInDuration) {

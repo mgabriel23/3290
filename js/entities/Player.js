@@ -20,6 +20,15 @@
  * This is the game's first entity: a plain object with its own
  * `update(dt)` / `render(renderer)`, composed into GameplayScene rather
  * than owning a Renderer or touching anything outside itself.
+ *
+ * Health/damage: `health` is a plain public field (same convention as
+ * `Barrier.health`) that WaveManager.checkPlayerHit drains via
+ * `takeDamage`. A hit triggers a brief white flash plus an invulnerability
+ * window (`Config.player.invulnDuration`) during which further damage is
+ * ignored — GameplayScene reads `takeDamage`'s return value to know
+ * whether a hit actually applied before triggering shake/hit-stop
+ * feedback. Below `Config.player.lowHealth.threshold` the hull pulses
+ * warning red, identical in shape to Barrier's own low-health pulse.
  */
 import { Config } from '../core/Config.js';
 import { easeOutCubic } from '../core/animation.js';
@@ -96,10 +105,34 @@ export class Player {
     // frame (mutated in _renderFlame), so no new arrays are created on
     // the hot path.
     this._flame = [[-6, 38], [0, 38], [6, 38]];
+
+    // Health/damage — see takeDamage. `_hitFlash` and `_invulnTimer` mirror
+    // the enemy hit-flash convention (EnemyCombat.applyHit) and Barrier's
+    // own damage-taking shape respectively; `_age` above already drives the
+    // low-health pulse the same way it drives Barrier's.
+    this.health = Config.player.maxHealth;
+    this._hitFlash    = 0; // seconds remaining in the white hit-flash
+    this._invulnTimer = 0; // seconds remaining of post-hit grace, during which takeDamage is a no-op
   }
 
   /** True once the entry animation has completed and the ship is controllable. */
   get ready() { return this._entryDone; }
+
+  /** Collision radius — used by WaveManager's enemy-attack↔player hit tests. */
+  get hitRadius() { return Config.player.hitRadius; }
+
+  /**
+   * Apply `amount` damage unless still within the post-hit grace window.
+   * @param {number} amount
+   * @returns {boolean} true if the damage actually applied (false while invulnerable)
+   */
+  takeDamage(amount) {
+    if (this._invulnTimer > 0) return false;
+    this.health = Math.max(0, this.health - amount);
+    this._hitFlash    = Config.player.hitFlashDuration;
+    this._invulnTimer = Config.player.invulnDuration;
+    return true;
+  }
 
   /**
    * Move the ship to (x, y) in virtual coordinates, clamped to the play area.
@@ -111,9 +144,11 @@ export class Player {
     this._targetY = Math.max(this._minY, Math.min(this._maxY, y));
   }
 
-  /** Advance the entrance animation and thruster flicker by `dt` seconds. */
+  /** Advance the entrance animation, thruster flicker, and damage timers by `dt` seconds. */
   update(dt) {
     this._age += dt;
+    if (this._hitFlash > 0) this._hitFlash -= dt;
+    if (this._invulnTimer > 0) this._invulnTimer -= dt;
 
     const { entryDuration } = Config.player;
     const t = Math.min(this._age / entryDuration, 1);
@@ -136,11 +171,23 @@ export class Player {
     }
   }
 
-  /** Draw the thruster flame, then the ship's neon wireframe on top of it. */
+  /**
+   * Draw the thruster flame, then the ship's neon wireframe on top of it.
+   * Precedence when several damage-feedback states overlap: hit-flash
+   * (pure white) beats low-health (warning red) beats normal color — the
+   * same priority order Barrier and every enemy hull already use. While
+   * invulnerable the whole ship blinks so the grace window is legible
+   * rather than a silent free pass.
+   */
   render(renderer) {
-    const { color, lineWidth, glowBlur, scale } = Config.player;
+    const { lineWidth, glowBlur, scale } = Config.player;
 
     this._renderFlame(renderer);
+
+    const flashing = this._hitFlash > 0;
+    const low      = this._isLowHealth();
+    const color    = flashing ? '#ffffff' : low ? Config.player.lowHealth.color : Config.player.color;
+    const alpha    = this._invulnTimer > 0 ? this._invulnBlinkAlpha() : (low ? this._lowHealthPulseAlpha() : 1);
 
     renderer.strokePaths(
       [
@@ -148,8 +195,26 @@ export class Player {
         { points: CANOPY },
         { points: SPINE, closed: false },
       ],
-      { x: this.x, y: this.y, scale, color, lineWidth, glowBlur }
+      { x: this.x, y: this.y, scale, color, lineWidth, glowBlur, alpha }
     );
+  }
+
+  // --- Health/damage ----------------------------------------------------------
+
+  /** Latching (not just-crossed) — stays true all the way to 0, matching Barrier's own convention. */
+  _isLowHealth() {
+    return this.health <= Config.player.lowHealth.threshold;
+  }
+
+  /** Same "breathing alpha" formula as Barrier's low-health pulse and the UI's pulsing buttons. */
+  _lowHealthPulseAlpha() {
+    const { pulseSpeed, pulseDepth } = Config.player.lowHealth;
+    return 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._age * pulseSpeed));
+  }
+
+  /** Fast on/off blink while `_invulnTimer` is counting down, so the grace window reads as a deliberate state. */
+  _invulnBlinkAlpha() {
+    return Math.floor(this._invulnTimer * 20) % 2 === 0 ? 1 : 0.35;
   }
 
   // --- Thruster flame -------------------------------------------------------

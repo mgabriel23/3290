@@ -9,7 +9,10 @@
  *   • Timer     — the rocket exhausts its fuel (Config.rocket.maxLife seconds)
  *
  * When either condition fires, `onDetonate(x, y)` is called so WaveManager
- * can emit a particle explosion at the impact point.
+ * can emit a particle explosion at the impact point. A proximity detonation
+ * additionally calls `onPlayerHit()` — it actually reached the player,
+ * unlike a timeout detonation — which WaveManager.checkPlayerHit reads to
+ * apply `Config.rocket.damage`.
  *
  * Visual: a motion-trail polyline drawn through the rocket's recent position
  * history. When flying straight the trail is a straight line; when the homing
@@ -27,10 +30,14 @@ const TRAIL_STEP   = 0.04; // seconds between recorded positions (~2.4 frames at
 
 export class Rockets {
   /**
-   * @param {{ onDetonate: (x: number, y: number) => void }} callbacks
+   * @param {{ onDetonate: (x: number, y: number) => void, onPlayerHit: () => void }} callbacks
+   *   `onDetonate` fires on every detonation (proximity or timeout) for the
+   *   visual explosion; `onPlayerHit` fires only on a proximity detonation
+   *   (i.e. it actually reached the player, not just ran out of fuel).
    */
-  constructor({ onDetonate }) {
-    this._onDetonate = onDetonate;
+  constructor({ onDetonate, onPlayerHit }) {
+    this._onDetonate  = onDetonate;
+    this._onPlayerHit = onPlayerHit;
 
     this._x    = new Float32Array(MAX);
     this._y    = new Float32Array(MAX);
@@ -140,8 +147,10 @@ export class Rockets {
       // ── Detonation check ────────────────────────────────────────────────────
       const dx2 = playerX - this._x[i];
       const dy2 = playerY - this._y[i];
-      if (dx2 * dx2 + dy2 * dy2 <= prox2 || this._age[i] >= maxLife) {
+      const proximityHit = dx2 * dx2 + dy2 * dy2 <= prox2;
+      if (proximityHit || this._age[i] >= maxLife) {
         this._onDetonate(this._x[i], this._y[i]);
+        if (proximityHit) this._onPlayerHit();
         continue;
       }
 

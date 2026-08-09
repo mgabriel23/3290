@@ -3,8 +3,11 @@
  * Pool of slow orbs spat by Drifter clones toward a locked target position.
  * Each orb travels in a straight line at a fixed speed; on arrival it calls
  * `onImpact(x, y)` (WaveManager wires this to a particle burst) and is
- * removed. Shared across every Drifter clone, same pooled-array shape as
- * EnemyBullets/Rockets — zero per-frame heap allocation.
+ * removed. If the player is still within range of that (launch-time-locked)
+ * point at the moment of arrival, `onPlayerHit()` also fires — moving away
+ * after the lash's wind-up correctly avoids it. Shared across every Drifter
+ * clone, same pooled-array shape as EnemyBullets/Rockets — zero per-frame
+ * heap allocation.
  */
 import { Config } from '../core/Config.js';
 import { directionalVelocity } from '../core/vectorMath.js';
@@ -13,10 +16,15 @@ const MAX = 16;
 
 export class DrifterProjectiles {
   /**
-   * @param {{ onImpact: (x: number, y: number) => void }} callbacks
+   * @param {{ onImpact: (x: number, y: number) => void, onPlayerHit: () => void }} callbacks
+   *   `onImpact` fires on every arrival (for the particle burst); `onPlayerHit`
+   *   fires only if the player is still within range of the impact point at
+   *   that moment — the target was locked at launch, so a player who moved
+   *   away in the meantime correctly avoids it.
    */
-  constructor({ onImpact }) {
-    this._onImpact = onImpact;
+  constructor({ onImpact, onPlayerHit }) {
+    this._onImpact    = onImpact;
+    this._onPlayerHit = onPlayerHit;
 
     this._x  = new Float32Array(MAX);
     this._y  = new Float32Array(MAX);
@@ -62,8 +70,17 @@ export class DrifterProjectiles {
     this._color[i] = color;
   }
 
-  /** @param {number} dt */
-  update(dt) {
+  /**
+   * @param {number} dt
+   * @param {number} playerX  current player position — checked against the
+   *   (launch-time-locked) impact point on arrival, so a player who has
+   *   since moved away is correctly missed.
+   * @param {number} playerY
+   */
+  update(dt, playerX, playerY) {
+    const hitR = Config.enemy.drifter.projectileRadius + Config.player.hitRadius;
+    const hitR2 = hitR * hitR;
+
     let w = 0;
     for (let i = 0; i < this._count; i++) {
       const px = this._x[i], py = this._y[i];
@@ -78,6 +95,8 @@ export class DrifterProjectiles {
 
       if (arrived) {
         this._onImpact(this._tx[i], this._ty[i], this._color[i]);
+        const pdx = playerX - this._tx[i], pdy = playerY - this._ty[i];
+        if (pdx * pdx + pdy * pdy <= hitR2) this._onPlayerHit();
         continue;
       }
 
