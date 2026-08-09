@@ -1206,6 +1206,25 @@ export const Config = Object.freeze({
   }),
 
   /**
+   * GameplayScene's subtle camera-follow: the "world" layer (starfield,
+   * player, bullets, enemies — see GameplayScene.render's world/UI split,
+   * the same split screen-shake uses) pans a small amount opposite the
+   * player's horizontal offset from center, the same way panning a real
+   * camera toward where you're looking makes the world slide the other
+   * way. Deliberately no smoothing/lerp — the player's own movement is
+   * already instant (Player.moveTo snaps, no easing), so the follow
+   * offset is just a small, direct fraction of that same instant motion,
+   * consistent with how nothing else in this game's movement has inertia.
+   * No border/frame is needed to hide the pan's trailing edge — see
+   * GameplayScene.render's comment on why the world-layer clear runs at a
+   * fixed (0,0) transform before the pan is applied, so the edge the pan
+   * exposes is always void-colored, never a stale/leftover pixel strip.
+   */
+  camera: Object.freeze({
+    followFactor: 0.07, // fraction of the player's offset from horizontal center
+  }),
+
+  /**
    * The planetary shield barrier: a wide shallow dome spanning the full
    * screen width along the bottom edge. The arc's geometry is derived from
    * the chord/sagitta formula so `baseY` and `arcHeight` are the only two

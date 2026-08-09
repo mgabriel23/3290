@@ -33,6 +33,26 @@
  * construction). `render()` applies the shake offset only to the "world"
  * layer, resetting to (0, 0) before the UI layer so HUD/codex/playback
  * buttons never visually drift from their own tap hit-boxes.
+ *
+ * The world layer (starfield/player/bullets/enemies) also carries a subtle
+ * camera-follow pan (`_cameraFollowX`, combined with shake into one
+ * `worldOffsetX`) — a small fraction of the player's horizontal distance
+ * from center, opposite direction, so the world reads as something being
+ * panned through rather than a static backdrop the ship slides around on.
+ * The barrier is deliberately NOT part of that panning layer — it renders
+ * in its own fixed-camera pass (still ordered behind player/bullets/enemies)
+ * so the thing the player is defending reads as a stationary emplacement,
+ * not something drifting with the ship.
+ *
+ * No border/frame hides the pan's trailing edge — instead `render()` clears
+ * the whole canvas at a FIXED (0, 0) transform, before the pan is applied
+ * for the rest of the world layer. Renderer.clear's fill rect is sized to
+ * the virtual surface and would otherwise pan WITH the world layer if
+ * cleared after the offset is set, leaving a stale, unrendered sliver at
+ * whichever edge the camera just panned away from (neither Starfield's
+ * tiles nor anything else would repaint it, since they're exactly
+ * canvas-width). Clearing before the pan guarantees the exposed edge is
+ * always void-colored, never leftover pixels from a previous frame.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
@@ -123,19 +143,35 @@ export class GameplayScene {
   }
 
   /**
-   * Render one frame. The "world" layer (starfield/barrier/player/bullets/
-   * enemies) is drawn under `_screenShake`'s current offset; the UI layer
-   * (HUD, level intro, codex, playback controls) is drawn after resetting
-   * the camera back to (0, 0), so buttons never visually drift away from
-   * their own (unshaken) tap hit-boxes.
+   * Render one frame. The whole canvas is cleared first at a FIXED (0, 0)
+   * transform (see class doc for why — it's what lets the pan's trailing
+   * edge stay void-colored without a dedicated border/frame entity). The
+   * "world" layer (starfield/player/bullets/enemies) is then drawn under a
+   * combined offset — screen-shake plus a subtle camera-follow pan (see
+   * `_cameraFollowX`) — so the world reads as something the player is
+   * actually moving through, not a static backdrop. The barrier renders in
+   * between, in its own fixed-camera pass (camera reset to (0, 0)) so it
+   * stays visually stationary while still drawing behind player/bullets/
+   * enemies. The UI layer (HUD, level intro, codex, playback controls) is
+   * drawn last, also fixed, so buttons never visually drift away from
+   * their own tap hit-boxes.
    */
   render() {
     const shake = this._screenShake.getOffset();
-    this.renderer.setCameraOffset(shake.x, shake.y);
+    const followX = this._cameraFollowX();
+    const worldOffsetX = shake.x + followX;
+
+    this.renderer.setCameraOffset(0, 0);
     this.renderer.clear(Config.colors.void);
+
+    this.renderer.setCameraOffset(worldOffsetX, shake.y);
     this._renderStarfield();
+
+    this.renderer.setCameraOffset(0, 0);
     const playerDamage = Config.player.damage + (this._level - 1) * Config.player.damagePerLevel;
     this.barrier.render(this.renderer, playerDamage);
+
+    this.renderer.setCameraOffset(worldOffsetX, shake.y);
     this.player.render(this.renderer);
     this.bullets.render(this.renderer);
     this._waveManager?.render(this.renderer);
@@ -149,6 +185,21 @@ export class GameplayScene {
     // buttons stay visible and tappable even while the codex card is open.
     this._codex.render(this.renderer);
     this._playback.render(this.renderer);
+  }
+
+  /**
+   * A small, direct fraction of the player's horizontal offset from
+   * center, in the opposite direction — panning the camera toward where
+   * the player is makes the world slide the other way, the same as
+   * turning your head right makes a room appear to slide left. No
+   * smoothing: the player's own movement is already instant (Player.moveTo
+   * snaps with no easing), so this stays consistent with that rather than
+   * introducing the only damped motion in the game.
+   */
+  _cameraFollowX() {
+    const { width: vW } = Config.virtual;
+    const offsetFromCenter = this.player.x - vW / 2;
+    return -offsetFromCenter * Config.camera.followFactor;
   }
 
   handlePointerDown(x, y) {

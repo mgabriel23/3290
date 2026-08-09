@@ -75,23 +75,45 @@ export class AudioPool {
   /**
    * Play one instance of the clip. Overlapping retriggers are free (each
    * gets its own disposable playback node) — no round-robin bookkeeping.
+   *
+   * Wrapped end-to-end in try/catch: audio is a side effect, never a
+   * gameplay dependency, and every step here touches a real browser API
+   * (AudioContext construction, node creation) that this codebase has only
+   * ever been able to verify in mocked Node tests, never a real device. If
+   * any of it throws for a reason specific to some browser/device, that
+   * exception must never be allowed to propagate into the caller — e.g.
+   * Bullets._fire() calls this synchronously from inside Bullets.update(),
+   * and an uncaught throw there aborts the rest of that update() call
+   * before it ever reaches collision handling, silently breaking movement,
+   * kills, and the screen-shake/hit-stop they trigger, with no visible
+   * error and no plausible way to connect the symptom back to "audio."
    * @param {number} [volume]  overrides this instance's volume for this play only
    */
   play(volume) {
-    if (isMuted()) return; // skip entirely — no fetch, no decode, no playback
-    if (!this._bufferPromise) this._bufferPromise = _loadBuffer(this._src);
+    try {
+      if (isMuted()) return; // skip entirely — no fetch, no decode, no playback
+      if (!this._bufferPromise) this._bufferPromise = _loadBuffer(this._src);
 
-    const ctx = _getContext();
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const ctx = _getContext();
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-    this._bufferPromise.then((buffer) => {
-      if (!buffer) return; // failed to load/decode — degrade silently
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      const gain = ctx.createGain();
-      gain.gain.value = volume !== undefined ? volume : this._volume;
-      source.connect(gain).connect(ctx.destination);
-      source.start();
-    });
+      this._bufferPromise.then((buffer) => {
+        if (!buffer) return; // failed to load/decode — degrade silently
+        try {
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          const gain = ctx.createGain();
+          gain.gain.value = volume !== undefined ? volume : this._volume;
+          source.connect(gain).connect(ctx.destination);
+          source.start();
+        } catch {
+          // Node creation/playback failed for some device/browser-specific
+          // reason — degrade silently, same as a failed load above.
+        }
+      });
+    } catch {
+      // AudioContext construction (or anything else synchronous above)
+      // failed — degrade silently rather than breaking the caller.
+    }
   }
 }
