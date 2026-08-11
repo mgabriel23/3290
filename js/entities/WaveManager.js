@@ -10,11 +10,11 @@
  * Each enemy type routes its onFire callback differently:
  *   scout     → EnemyBullets (straight aimed capsule)
  *   rocketeer → Rockets (homing, detonates on proximity or timer)
- *   sniper    → no-op (_onFire unused; sniper manages its own laser internally)
+ *   sniper    → SniperBullets (straight shot, slow-start/fast-finish speed curve)
  *
  * `checkPlayerHit` is the reverse of `handleBulletHit` — every enemy-attack
- * source (enemy bullets, rocket proximity, drifter orb arrival, sniper
- * laser, bouncer contact) tested against the player once per frame,
+ * source (enemy bullets, sniper bullets, rocket proximity, drifter orb
+ * arrival, bouncer contact) tested against the player once per frame,
  * returning total damage for GameplayScene to apply.
  */
 import { Config } from '../core/Config.js';
@@ -24,10 +24,10 @@ import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, cr
 import { BouncerEnemy } from './BouncerEnemy.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
+import { SniperBullets } from './SniperBullets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { AudioPool } from '../core/AudioPool.js';
-import { distanceToSegmentSquared } from '../core/vectorMath.js';
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -66,9 +66,6 @@ const _diverFlashHulls  = _mkDrifterPool();
 const _weaverNormalHulls = _mkDrifterPool();
 const _weaverFlashHulls  = _mkDrifterPool();
 
-// Sniper fire: laser is managed internally by SniperEnemy — callback is a no-op.
-const _noFire = () => {};
-
 export class WaveManager {
   /**
    * @param {number} level  1-based. Values beyond the config array reuse the last entry.
@@ -100,11 +97,12 @@ export class WaveManager {
     // naturally happens inside their own update() (Rockets/DrifterProjectiles
     // detect proximity/arrival there) rather than via an external point-test —
     // checkPlayerHit reads and clears this each frame alongside the sources
-    // it tests directly (enemy bullets, sniper laser, bouncer contact).
+    // it tests directly (enemy bullets, sniper bullets, bouncer contact).
     this._pendingPlayerDamage = 0;
 
     this._enemies      = [];
     this._enemyBullets = new EnemyBullets();
+    this._sniperBullets = new SniperBullets();
     this._rockets      = new Rockets({
       onDetonate: (x, y) => {
         this._rocketeerParticles.emit(x, y);
@@ -139,6 +137,7 @@ export class WaveManager {
     // Pre-bound fire callbacks — stored once, zero closures per frame.
     this._fireBullet           = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
     this._fireRocket           = (ox, oy, tx, ty) => this._rockets.fire(ox, oy, tx, ty);
+    this._fireSniperBullet     = (ox, oy, tx, ty) => this._sniperBullets.fire(ox, oy, tx, ty);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
     // Passed into Enemy.js's repositioning so it picks a fresh rest point
     // that's already clear of other enemies, instead of a blind random one
@@ -169,6 +168,7 @@ export class WaveManager {
     this._rockets.update(dt, playerX, playerY);
     this._drifterProjectiles.update(dt, playerX, playerY);
     this._enemyBullets.update(dt);
+    this._sniperBullets.update(dt);
 
     if (this._waveClear) return;
 
@@ -203,7 +203,7 @@ export class WaveManager {
       }
       let cb;
       if      (e.type === 'rocketeer') cb = this._fireRocket;
-      else if (e.type === 'sniper')    cb = _noFire;
+      else if (e.type === 'sniper')    cb = this._fireSniperBullet;
       else if (e.type === 'drifter')   cb = this._fireDrifterProjectile;
       else                             cb = this._fireBullet;
       // Sniper/Drifter's update() signatures simply don't read this 5th
@@ -237,9 +237,10 @@ export class WaveManager {
     this._renderExplosions(renderer);
   }
 
-  /** Projectile pools — enemy bullets, homing rockets, drifter orbs. */
+  /** Projectile pools — enemy bullets, sniper bullets, homing rockets, drifter orbs. */
   _renderProjectiles(renderer) {
     this._enemyBullets.render(renderer);
+    this._sniperBullets.render(renderer);
     this._rockets.render(renderer);
     this._drifterProjectiles.render(renderer);
   }
@@ -382,7 +383,7 @@ export class WaveManager {
     }
   }
 
-  /** Sniper's "!" warning markers and laser flash beams — a no-op for every other type. */
+  /** Sniper's "!" warning markers — a no-op for every other type. */
   _renderSniperExtras(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       this._enemies[i].renderExtras?.(renderer);
@@ -497,15 +498,11 @@ export class WaveManager {
     const { x, y, hitRadius } = player;
 
     if (this._enemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemyBullet.damage;
+    if (this._sniperBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.sniper.bullet.damage;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'sniper') {
-        const beam = e.laserBeam;
-        if (beam && distanceToSegmentSquared(x, y, beam.x1, beam.y1, beam.x2, beam.y2) <= hitRadius * hitRadius) {
-          damage += Config.laser.damage;
-        }
-      } else if (e.type === 'bouncer') {
+      if (e.type === 'bouncer') {
         const dx = e.x - x, dy = e.y - y;
         const r  = e.hitRadius + hitRadius;
         if (dx * dx + dy * dy <= r * r) damage += Config.enemy.bouncer.contactDamage;
@@ -533,7 +530,8 @@ export class WaveManager {
       && !this._bouncerParticles.active
       && !this._rockets.active
       && !this._drifterProjectiles.active
-      && !this._enemyBullets.active;
+      && !this._enemyBullets.active
+      && !this._sniperBullets.active;
   }
 
   // ---------------------------------------------------------------------------

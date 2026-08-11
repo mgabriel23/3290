@@ -10,6 +10,11 @@ export function easeOutCubic(t) {
   return 1 - (1 - t) ** 3;
 }
 
+/** Ease-in cubic: gentle start, sudden brisk finish toward t=1 — a "kicks into gear" curve. */
+export function easeInCubic(t) {
+  return t ** 3;
+}
+
 /**
  * Three incommensurate sine/cosine waves summed together — their
  * interference produces quasi-random "signal-drop" dips without any

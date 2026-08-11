@@ -120,7 +120,7 @@ const ENTRIES = [
     color: Config.enemy.sniper.color,
     hp: Config.enemy.sniper.health, hpPerLevel: Config.enemy.sniper.healthPerLevel,
     points: Config.enemy.sniper.points, gold: Config.enemy.sniper.gold,
-    description: 'Charges, then fires an instant laser at where the player WAS a moment ago. Watch for the white "!" warning.' },
+    description: 'Charges, then fires a bullet at the player. It crawls at first, then rockets to full speed. Watch for the white "!" warning.' },
 
   { buildOrder: 4, type: 'drifter', name: 'Drifter', family: 'Drifter family', kind: 'drifter',
     color: Config.enemy.drifter.color,

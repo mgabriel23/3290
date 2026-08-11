@@ -8,14 +8,14 @@ Same hull silhouette (a 10-point wireframe fighter), entrance glide → park →
 
 | # | Name | `type` | Color | Base HP (+/level) | Behavior |
 |---|------|--------|-------|-------------------|----------|
-| 1 | **Scout** | `scout` | Magenta `#ff3ec9` | 3 (+1) | Parks, then fires aimed bullet bursts on a 2.2s reload. |
+| 1 | **Scout** | `scout` | Magenta `#ff3ec9` | 3 (+1) | Parks, then fires a 3-round burst of aimed bullets (each round re-aimed at the player's current position) on a 2.7s reload. |
 | 2 | **Rocketeer** | `rocketeer` | Amber `#FFB020` | 2 (+1) | Slower reload (3.8s) but fires a homing rocket that tracks and detonates on proximity — harder to dodge than Scout's straight bullets. |
 
 ## Sniper — `js/entities/SniperEnemy.js`
 
 | # | Name | `type` | Color | Base HP (+/level) | Behavior |
 |---|------|--------|-------|-------------------|----------|
-| 3 | **Sniper** | `sniper` | Electric violet `#BF5FFF` | 8 (+2) | Same hull as Scout. Continuously records player position; charges (1.5s, nose orb grows) → locks onto where the player *was* 0.3s ago (white "!" telegraph, 0.7s) → fires an instant full-screen laser → recovers and repeats. Tanky — rewards reading the warning rather than tanking hits. |
+| 3 | **Sniper** | `sniper` | Electric violet `#BF5FFF` | 8 (+2) | Same hull as Scout. Charges (1.0s, nose orb grows) → locks onto the player's CURRENT position (white "!" telegraph, 0.7s) → fires a real bullet that crawls at 35vp/s for 0.35s, then rockets up to 900vp/s over 0.25s → recovers (0.6s) and repeats. Tanky — rewards reading the warning AND the bullet's slow start rather than tanking hits. |
 
 ## Drifter family — `js/entities/DrifterEnemy.js`
 

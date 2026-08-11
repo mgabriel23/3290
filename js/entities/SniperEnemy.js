@@ -2,44 +2,42 @@
  * SniperEnemy.js
  * Variant 3 — same Scout hull silhouette, electric violet, 8 health.
  *
- * Fires an instant laser beam at where the player WAS `historyWindow`
- * seconds ago (see Config.enemy.sniper), giving a skilled player a dodge
- * window if they read the warning.
+ * Fires a real bullet (see SniperBullets.js) straight at wherever the player
+ * was the instant it locked on — no continuous tracking after launch, no
+ * historical-position misdirection. The threat instead comes from the
+ * bullet's own speed curve: it crawls at `Config.enemy.sniper.bullet.
+ * startSpeed` for a beat, then rockets up to `maxSpeed`, so a player who
+ * reads the charge/warning telegraph AND keeps watching the bullet itself
+ * has a real (if brief) window before it's actually dangerous.
  *
  * Shot cycle (repeats immediately):
- *   charging (2 s)  — nose orb grows; ship tracks player as normal
- *   locked   (1 s)  — target locked from history; nose SNAPS to face target
- *                      and STOPS tracking player; ! marker shown on canvas;
- *                      nose orb blinks at full size
- *   flashing (0.2s) — instant laser beam; angle still held on target
- *   → back to charging (resumes player tracking)
+ *   charging (1.5s) — nose orb grows; ship tracks player as normal
+ *   locked   (0.7s) — target locked to the player's CURRENT position; nose
+ *                      SNAPS to face target and STOPS tracking player; !
+ *                      marker shown on canvas; nose orb blinks at full size
+ *   → fires the bullet, then → recovering (resumes player tracking)
  *
  * Angle convention: same as Scout — atan2(-dx, dy) makes the NOSE face AWAY
- * from the player during normal tracking. In locked/flashing, the angle is
- * overridden to Math.atan2(tdx, -tdy) so the nose faces TOWARD the target.
+ * from the player during normal tracking. In locked, the angle is frozen at
+ * whatever it last tracked to (which, thanks to update()'s ordering, is
+ * already facing away from the just-locked target — see the angle-tracking
+ * block below).
  *
  * Entry-glide, hit/death-flash, and engine flame/core rendering are shared
  * with Enemy.js via EnemyCombat.js — see that file's header for why.
- *
- * `laserBeam` exposes the live beam segment (only during 'flashing') so
- * WaveManager.checkPlayerHit can test the player's hitbox against it and
- * apply `Config.laser.damage` — the "!" telegraph is what gives a player
- * time to actually dodge it.
  */
 import { Config } from '../core/Config.js';
 import { SCOUT_HULL_PTS, SCOUT_S } from './Enemy.js';
 import { applyHit, tickDeathState, setState, stepEntryGlide, renderEngineFlame, renderEngineCore, renderHull } from './EnemyCombat.js';
 
-const S            = SCOUT_S; // shared with Scout — both hulls use the same 22vp base size
-const HIST_STEP    = 0.05;  // seconds between position samples
-const HIST_SAMPLES = Math.round(Config.enemy.sniper.historyWindow / HIST_STEP);
+const S = SCOUT_S; // shared with Scout — both hulls use the same 22vp base size
 
 // Engine-flame anchor in local space — same vertex Scout uses for its exhaust.
 const NOSE_LX = 0;
 const NOSE_LY = -S * 0.30;
 
 // Gun muzzle in local space — the hull's single sharp tip, where the charge
-// orb glows and the laser actually fires from.
+// orb glows and the bullet actually fires from.
 const GUN_LX = 0;
 const GUN_LY = S * 0.70;
 
@@ -75,24 +73,9 @@ export class SniperEnemy {
     this._state    = 'entering';
     this._stateAge = 0;
 
-    // ── Player position history (ring buffer) ─────────────────────────────────
-    this._histX    = new Float32Array(HIST_SAMPLES);
-    this._histY    = new Float32Array(HIST_SAMPLES);
-    this._histHead = 0;
-    this._histTick = 0;
-
-    // ── Locked target ─────────────────────────────────────────────────────────
+    // ── Locked target — the player's position at the instant 'charging' ends ──
     this._targetX = 0;
     this._targetY = 0;
-
-    // ── Laser flash (pre-allocated, no per-frame heap) ────────────────────────
-    this._laserPath  = [{ points: [[0, 0], [0, 0]], closed: false }];
-    const lc = Config.laser;
-    this._laserStyle = {
-      color: lc.color, lineWidth: lc.lineWidth,
-      glowBlur: lc.glowBlur, glowColor: lc.color,
-      lineCap: 'round', alpha: 1,
-    };
   }
 
   get type()  { return this._type;  }
@@ -102,32 +85,12 @@ export class SniperEnemy {
   get hitRadius() { return this._cfg.hitRadius; }
 
   /**
-   * The live laser segment `{x1,y1,x2,y2}` — only non-null during the
-   * 'flashing' state (the instant the beam is actually visible/lethal),
-   * else null. Same nose-position/direction math renderExtras uses,
-   * computed independently here so WaveManager.checkPlayerHit can test the
-   * player's hitbox against it without depending on render having run.
-   */
-  get laserBeam() {
-    if (this._state !== 'flashing') return null;
-    const c = this._cosA, s = this._sinA;
-    const noseX = this.x + c * GUN_LX - s * GUN_LY;
-    const noseY = this.y + s * GUN_LX + c * GUN_LY;
-    const ddx = this._targetX - noseX;
-    const ddy = this._targetY - noseY;
-    const dlen = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
-    const ux = ddx / dlen, uy = ddy / dlen;
-    const beamLength = Config.laser.beamLength;
-    return { x1: noseX, y1: noseY, x2: noseX + ux * beamLength, y2: noseY + uy * beamLength };
-  }
-
-  /**
    * @param {number} dt
    * @param {number} playerX
    * @param {number} playerY
-   * @param {Function} _onFire  unused — sniper manages its own laser internally
+   * @param {(ox:number, oy:number, tx:number, ty:number) => void} onFire  fires the sniper bullet — see WaveManager's routing
    */
-  update(dt, playerX, playerY, _onFire) {
+  update(dt, playerX, playerY, onFire) {
     const cfg = this._cfg;
     this._stateAge    += dt;
     this._enginePhase += dt * 9;
@@ -135,11 +98,11 @@ export class SniperEnemy {
 
     // ── Angle tracking ───────────────────────────────────────────────────────
     // Charging/entering: nose points away from player (same as Scout).
-    // Locked/flashing: angle frozen at whatever it was — no tracking, no snap,
-    // no sweep. The laser fires from the nose toward _targetX/Y directly, so
-    // the beam direction is independent of the ship's visual orientation.
-    // Recovering: slowly turns back to face away from the player again, so
-    // the post-fire reorientation reads as a deliberate motion, not an instant snap.
+    // Locked: angle frozen at whatever it was — no tracking, no sweep. The
+    // bullet fires from the nose toward _targetX/Y directly, so its
+    // direction is independent of the ship's visual orientation. Recovering:
+    // slowly turns back to face away from the player again, so the post-fire
+    // reorientation reads as a deliberate motion, not an instant snap.
     if (this._state === 'recovering') {
       const dx          = playerX - this.x;
       const dy          = playerY - this.y;
@@ -152,24 +115,15 @@ export class SniperEnemy {
       this._angle += Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
       this._cosA = Math.cos(this._angle);
       this._sinA = Math.sin(this._angle);
-    } else if (this._state !== 'locked' && this._state !== 'flashing') {
+    } else if (this._state !== 'locked') {
       const dx    = playerX - this.x;
       const dy    = playerY - this.y;
       this._angle = Math.atan2(-dx, dy);
       this._cosA  = Math.cos(this._angle);
       this._sinA  = Math.sin(this._angle);
     }
-    // Locked/flashing: angle frozen — _cosA/_sinA still hold the values from
-    // the last frame they changed, so renderCore/renderExtras need no new trig calls.
-
-    // ── Record player position history ───────────────────────────────────────
-    this._histTick += dt;
-    if (this._histTick >= HIST_STEP) {
-      this._histTick -= HIST_STEP;
-      this._histHead  = (this._histHead + 1) % HIST_SAMPLES;
-      this._histX[this._histHead] = playerX;
-      this._histY[this._histHead] = playerY;
-    }
+    // Locked: angle frozen — _cosA/_sinA still hold the values from the last
+    // frame they changed, so renderCore/renderExtras need no new trig calls.
 
     // ── State machine ────────────────────────────────────────────────────────
     if (this._state === 'entering') {
@@ -177,20 +131,20 @@ export class SniperEnemy {
 
     } else if (this._state === 'charging') {
       if (this._stateAge >= cfg.chargeWarmup) {
-        // Read the oldest history slot = historyWindow seconds in the past
-        const oldestIdx  = (this._histHead + 1) % HIST_SAMPLES;
-        this._targetX    = this._histX[oldestIdx];
-        this._targetY    = this._histY[oldestIdx];
+        // Lock onto the player's CURRENT position — not a historical one.
+        this._targetX = playerX;
+        this._targetY = playerY;
         setState(this, 'locked');
       }
 
     } else if (this._state === 'locked') {
       if (this._stateAge >= cfg.warningDuration) {
-        setState(this, 'flashing');
-      }
-
-    } else if (this._state === 'flashing') {
-      if (this._stateAge >= Config.laser.flashDuration) {
+        // Gun muzzle world position — reuses cos/sin frozen at lock time.
+        const c     = this._cosA;
+        const s     = this._sinA;
+        const noseX = this.x + c * GUN_LX - s * GUN_LY;
+        const noseY = this.y + s * GUN_LX + c * GUN_LY;
+        onFire(noseX, noseY, this._targetX, this._targetY);
         setState(this, 'recovering');
       }
 
@@ -225,8 +179,8 @@ export class SniperEnemy {
    * every on-screen enemy for performance); this is for contexts that
    * render exactly one enemy at a time, e.g. EnemyCodex's preview cards or
    * PrologueScene's portal creatures (which pass `alpha` to fade in on spawn).
-   * Doesn't include renderExtras (the "!" warning marker / laser flash) —
-   * those are attack-telegraph state, not part of the ship's resting look.
+   * Doesn't include renderExtras (the "!" warning marker) — that's
+   * attack-telegraph state, not part of the ship's resting look.
    */
   render(renderer, alpha = 1) {
     this.renderFlame(renderer, alpha);
@@ -271,86 +225,44 @@ export class SniperEnemy {
         glowColor: cfg.color,
         alpha:     blink * alpha,
       });
-
-    } else if (this._state === 'flashing') {
-      // Charge orb releases outward into the laser — expanding ring that fades fast
-      const t = this._stateAge / Config.laser.flashDuration;
-      renderer.strokeCircle(noseX, noseY, cfg.lockedOrbRadius + t * cfg.flashOrbGrowth, {
-        color:    cfg.color,
-        lineWidth: cfg.lockedOrbLineWidth,
-        glowBlur:  cfg.lockedOrbGlowBlur,
-        glowColor: cfg.color,
-        alpha:     (1 - t) * alpha,
-      });
     }
   }
 
   /**
-   * White ! warning indicator and laser flash beam.
+   * White ! warning indicator marking the locked firing point.
    * Optional-chained in WaveManager so Scout/Rocketeer skip it automatically.
    */
   renderExtras(renderer) {
-    // ── Warning marker ────────────────────────────────────────────────────────
-    if (this._state === 'locked') {
-      const cfg   = this._cfg;
-      const t     = this._stateAge / cfg.warningDuration;
-      const base  = Math.min(1, t * cfg.warningFadeInSpeed);
-      const pulse = base * (0.6 + 0.4 * Math.abs(Math.sin(t * Math.PI * cfg.warningPulseSpeed)));
+    if (this._state !== 'locked') return;
+    const cfg   = this._cfg;
+    const t     = this._stateAge / cfg.warningDuration;
+    const base  = Math.min(1, t * cfg.warningFadeInSpeed);
+    const pulse = base * (0.6 + 0.4 * Math.abs(Math.sin(t * Math.PI * cfg.warningPulseSpeed)));
 
-      // Outer pulsing ring — no glow (alpha-only ring is cheap and still reads
-      // clearly against the inner dot + "!" which carry the glow)
-      renderer.strokeCircle(this._targetX, this._targetY, cfg.warningRingRadius, {
-        color:    '#ffffff',
-        lineWidth: cfg.warningRingLineWidth,
-        alpha:     pulse * cfg.warningRingAlphaMult,
-      });
+    // Outer pulsing ring — no glow (alpha-only ring is cheap and still reads
+    // clearly against the inner dot + "!" which carry the glow)
+    renderer.strokeCircle(this._targetX, this._targetY, cfg.warningRingRadius, {
+      color:    '#ffffff',
+      lineWidth: cfg.warningRingLineWidth,
+      alpha:     pulse * cfg.warningRingAlphaMult,
+    });
 
-      // Inner filled dot to mark the exact hit point
-      renderer.strokeCircle(this._targetX, this._targetY, cfg.warningDotRadius, {
-        color:    '#ffffff',
-        lineWidth: cfg.warningDotLineWidth,
-        glowBlur:  cfg.warningDotGlowBlur,
-        glowColor: '#ffffff',
-        alpha:     pulse,
-      });
+    // Inner filled dot to mark the exact hit point
+    renderer.strokeCircle(this._targetX, this._targetY, cfg.warningDotRadius, {
+      color:    '#ffffff',
+      lineWidth: cfg.warningDotLineWidth,
+      glowBlur:  cfg.warningDotGlowBlur,
+      glowColor: '#ffffff',
+      alpha:     pulse,
+    });
 
-      // "!" label above the marker — white, larger
-      renderer.drawText('!', this._targetX, this._targetY - cfg.warningLabelOffset, {
-        font:      cfg.warningLabelFont,
-        color:     '#ffffff',
-        glowBlur:  cfg.warningLabelGlowBlur,
-        glowColor: '#ffffff',
-        alpha:     pulse,
-      });
-    }
-
-    // ── Laser flash ───────────────────────────────────────────────────────────
-    if (this._state === 'flashing') {
-      const flashT = this._stateAge / Config.laser.flashDuration;
-      const rem    = 1 - flashT;
-      const alpha  = rem * Math.sqrt(rem); // == rem^1.5, cheaper than Math.pow
-
-      // Reuse cos/sin cached in update() — angle is frozen during flashing
-      const c     = this._cosA;
-      const s     = this._sinA;
-      const noseX = this.x + c * GUN_LX - s * GUN_LY;
-      const noseY = this.y + s * GUN_LX + c * GUN_LY;
-
-      // Direction from nose through target, extended off-screen
-      const ddx  = this._targetX - noseX;
-      const ddy  = this._targetY - noseY;
-      const dlen = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
-      const ux   = ddx / dlen;
-      const uy   = ddy / dlen;
-
-      const beamLength = Config.laser.beamLength;
-      this._laserPath[0].points[0][0] = noseX;
-      this._laserPath[0].points[0][1] = noseY;
-      this._laserPath[0].points[1][0] = noseX + ux * beamLength;
-      this._laserPath[0].points[1][1] = noseY + uy * beamLength;
-
-      this._laserStyle.alpha = alpha;
-      renderer.strokePaths(this._laserPath, this._laserStyle, 1);
-    }
+    // "!" label above the marker — white, larger
+    renderer.drawText('!', this._targetX, this._targetY - cfg.warningLabelOffset, {
+      font:      cfg.warningLabelFont,
+      color:     '#ffffff',
+      glowBlur:  cfg.warningLabelGlowBlur,
+      glowColor: '#ffffff',
+      alpha:     pulse,
+    });
   }
 }

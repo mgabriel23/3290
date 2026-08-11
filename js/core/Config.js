@@ -682,17 +682,19 @@ export const Config = Object.freeze({
 
 		/**
 		 * Sniper — same hull silhouette, electric violet. High health (8 hits).
-		 * Continuously records the player's position history; when it fires it
-		 * targets where the player WAS `historyWindow` seconds ago, giving a
-		 * skilled player a chance to dodge if they read the warning indicator.
-		 * Charge sequence: 2 s warmup (nose orb grows) → 1 s locked (! shown,
-		 * nose blinking) → instant laser flash → immediately recharge.
+		 * Charge sequence: 1.5s warmup (nose orb grows, tracks player) → 0.7s
+		 * locked (target locked to the player's position AT THAT MOMENT, !
+		 * shown, nose blinking) → fires a real bullet (see `bullet` below)
+		 * straight at that locked point → recovers, tracking resumes.
+		 * Previously fired an instant laser at a HISTORICAL player position;
+		 * now fires a real projectile at the player's CURRENT position, with
+		 * its own distinct threat instead — see `bullet`'s own doc.
 		 */
 		sniper: Object.freeze({
 			size: 22,
 			health: 8,
 			healthPerLevel: 2, // +2 health per level beyond 1 — already tanky, scales faster
-			color: "#BF5FFF", // electric violet — reads as energy/laser weapon
+			color: "#BF5FFF", // electric violet — reads as energy weapon
 			fillColor: "#110022",
 			lineWidth: 1.8,
 			glowBlur: 12,
@@ -704,10 +706,9 @@ export const Config = Object.freeze({
 			restXMargin: 80,
 			restYMin: 0.08,
 			restYMax: 0.35,
-			chargeWarmup: 1.5, // seconds of nose charge before ! appears
-			warningDuration: 0.7, // seconds ! is shown before the shot fires
-			historyWindow: 0.3, // seconds into the past to sample player position
-			recoverDuration: 1.0, // seconds after firing before player-tracking resumes
+			chargeWarmup: 1.0, // seconds of nose charge before ! appears — shortened from 1.5 for a faster fire rate
+			warningDuration: 0.7, // seconds ! is shown before the shot fires — kept as-is, this is the fairness/reaction window
+			recoverDuration: 0.6, // seconds after firing before player-tracking resumes — shortened from 1.0 for a faster fire rate
 			recoverTurnRate: 4, // rad/sec — slow turn back toward the player during recovery
 			hitRadius: 24,
 			minSeparation: 64,
@@ -723,13 +724,13 @@ export const Config = Object.freeze({
 			chargeOrbLineWidth: 2,
 			chargeOrbGlowBlur: 6,
 			chargeOrbAlphaMin: 0.2, // alpha at t=0 while charging (ramps to 1)
-			lockedOrbRadius: 10, // full-charge orb size while locked/flashing
+			lockedOrbRadius: 10, // full-charge orb size while locked
 			lockedOrbLineWidth: 2.5,
 			lockedOrbGlowBlur: 8,
 			lockedBlinkSpeed: 6, // × π rad/sec — rapid blink signaling imminent fire
-			flashOrbGrowth: 14, // added radius as the charge orb releases into the laser
 
-			// "!" warning marker visual tuning (see SniperEnemy.renderExtras)
+			// "!" warning marker visual tuning (see SniperEnemy.renderExtras) —
+			// still marks the exact locked firing point, same as before.
 			warningRingRadius: 20,
 			warningRingLineWidth: 2,
 			warningRingAlphaMult: 0.6, // outer ring reads dimmer than the inner dot/label
@@ -745,6 +746,34 @@ export const Config = Object.freeze({
 				src: "assets/audio/explosion.mp3",
 				volume: 0.55,
 				poolSize: 4,
+			}),
+
+			/**
+			 * The shot itself, fired once `warningDuration` elapses (see
+			 * SniperEnemy.js/SniperBullets.js) — a straight-line (non-homing)
+			 * bullet aimed at wherever the player was the instant it locked.
+			 * Starts crawling at `startSpeed` for `accelDelay` seconds (the
+			 * dodge window a sharp-eyed player can actually use), then rockets
+			 * up to `maxSpeed` over `accelDuration` seconds via an ease-IN
+			 * curve (core/animation.js's easeInCubic — slow start, sudden brisk
+			 * finish, reads as "kicking into gear like a jet") and holds there
+			 * until impact or `maxLife` runs out. `halfLenMin/Max` stretch the
+			 * bullet's drawn length along with its current speed, so the
+			 * crawl-to-jet transition reads visually, not just in the numbers.
+			 */
+			bullet: Object.freeze({
+				startSpeed: 35, // vp/sec — super slow, clearly crawling
+				maxSpeed: 900, // vp/sec — bumped again from 700 for an even more dramatic jet kick
+				accelDelay: 0.35, // seconds spent at startSpeed before the jet kicks in
+				accelDuration: 0.25, // seconds to ramp from startSpeed to maxSpeed — shortened again from 0.3 so the kick lands even snappier
+				maxLife: 3.5, // seconds before self-destruct (safety net — it should always long since have hit or left the screen)
+				halfLenMin: 4, // vp — drawn half-length while crawling (reads as a small dot)
+				halfLenMax: 22, // vp — drawn half-length at full speed (reads as a streaking bolt)
+				color: "#BF5FFF", // matches Sniper hull — same "this came from the Sniper" read the old laser had
+				lineWidth: 3,
+				glowBlur: 10,
+				poolSize: 8,
+				damage: 25, // matches the old laser's damage — still the hardest single hit in the game, still earns it via a real telegraph (charge + warning + the slow crawl itself)
 			}),
 		}),
 
@@ -1137,22 +1166,6 @@ export const Config = Object.freeze({
 		glowBlur: 8,
 		poolSize: 32,
 		damage: 6, // player HP lost per hit — see Config.player.maxHealth
-	}),
-
-	/**
-	 * Sniper laser beam — an instant full-screen flash fired by the Sniper.
-	 * Rendered as a single glowing line segment that fades out in flashDuration
-	 * seconds. No projectile travels; the hit is instantaneous — SniperEnemy's
-	 * `laserBeam` getter exposes the live segment (only during 'flashing') for
-	 * WaveManager.checkPlayerHit to test the player's hitbox against.
-	 */
-	laser: Object.freeze({
-		color: "#BF5FFF", // matches Sniper hull
-		lineWidth: 3,
-		glowBlur: 12, // 20→12: blur cost ∝ radius², ~64% cheaper, still reads as a hot beam
-		flashDuration: 0.2, // seconds the beam remains visible
-		beamLength: 1200, // vp — drawn well past any edge so the beam always reaches off-screen
-		damage: 25, // player HP lost if caught in the beam — the hardest single hit in the game, balanced by its telegraph (SniperEnemy.laserBeam is only live during 'flashing')
 	}),
 
 	/**
