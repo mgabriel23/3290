@@ -1780,6 +1780,7 @@ export const Config = Object.freeze({
 	 */
 	boss: Object.freeze({
 		everyNLevels: 1,
+		roster: Object.freeze(["spiral", "scout1"]), // ordered — which boss spawns on the 1st/2nd/... boss-level encounter (level 8→roster[0], 16→roster[1], 24→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		scout1: Object.freeze({
@@ -1914,6 +1915,82 @@ export const Config = Object.freeze({
 				src: "assets/audio/explosion.mp3",
 				volume: 0.8,
 				poolSize: 3,
+			}),
+		}),
+
+		/**
+		 * Boss #2 — "Spiral". An original radial-turret/orb silhouette (see
+		 * SpiralBoss.js's SPIRAL_HULL_PTS — an N-pointed star/gear, not a
+		 * reskin of any existing enemy, unlike boss #1's giant Scout) that
+		 * continuously spins in place while firing a slow bullet on every
+		 * `fireInterval` tick, always aimed along whatever direction it
+		 * currently faces rather than at the player — because the fire angle
+		 * keeps rotating between shots, the individual straight-line bullets
+		 * fan out into a visible spiral as they travel outward, with no
+		 * curved-path math needed. After `fireDuration` seconds of that it
+		 * relocates to a new random spot (`repositionMarginX`/`YMin`/`YMax`)
+		 * and resumes — "occasionally moves to a different position to fire
+		 * again."
+		 */
+		spiral: Object.freeze({
+			name: "SPIRAL",
+			size: 55, // vp — outer spike-tip radius of the hull
+			spikeCount: 8, // symmetric points around the hull
+			innerRadiusRatio: 0.45, // core-ring radius as a fraction of `size`
+			health: 400,
+			healthPerLevel: 55,
+			color: "#BF5FFF", // electric violet — same accent Config.enemy.sniper already uses
+			fillColor: "#150826",
+			lineWidth: 3,
+			glowBlur: 18,
+			hitGlowBlur: 30,
+			hitRadius: 55, // vp — matches `size`, the hull's own outer radius
+
+			entrySpeed: 150,
+			// Initial rest height once entry finishes — later firing spots are
+			// re-rolled by _beginReposition within repositionYMin/Max below,
+			// this is only where it first settles.
+			restY: 290,
+
+			rotationSpeed: 1.1, // rad/sec — continuous spin; also drives each shot's fire angle
+			fireInterval: 0.12, // seconds between fire ticks — ~47.6 ticks per full rotation at this rotationSpeed, tight enough for each arm to read as one continuous spiral
+			// Bullets fired per tick, evenly spaced around the turret (e.g. 4 →
+			// one every 90°) — all four rotate together with the hull, so the
+			// pattern reads as 4 interleaved spiral arms rather than 1. See
+			// SpiralBoss._updateFiring.
+			fireDirections: 4,
+			fireDuration: 11, // seconds spent firing at one spot before relocating (~1.9 full rotations)
+			moveDuration: 1.3, // seconds to glide to the next firing spot — same easeOutCubic curve Enemy.js's own mid-fight repositioning uses
+			repositionMarginX: 80, // vp from each screen edge — keeps the hull's own radius from clipping off-screen
+			repositionYMin: 250, // vp — keeps the hull's topmost spike clear of the boss health bar above it
+			repositionYMax: 430,
+
+			// Pulsing core-ring glow at the center — stands in for an engine
+			// flame (a hovering orb has no thruster, unlike the ship-family
+			// bosses/enemies).
+			coreGlowLineWidth: 3,
+			coreGlowBlur: 14,
+			coreGlowPulseSpeed: 3, // rad/sec — breathing pulse
+
+			sparksPerEmit: 40,
+			points: 2500,
+			gold: 125,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.8,
+				poolSize: 3,
+			}),
+
+			// Dedicated slow-bullet pool — see SpiralBullets.js's own doc for
+			// why this isn't the shared EnemyBullets pool every Scout uses.
+			bullet: Object.freeze({
+				speed: 90, // vp/sec — deliberately slow
+				color: "#BF5FFF",
+				lineWidth: 4,
+				glowBlur: 8,
+				halfLen: 6,
+				poolSize: 240, // generous — slow bullets linger on screen far longer than a normal Scout's, and `fireDirections: 4` means 4 are spawned per tick, so far more are in flight at once
+				damage: 8,
 			}),
 		}),
 

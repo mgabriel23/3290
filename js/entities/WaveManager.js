@@ -41,13 +41,22 @@
  * — the constructor swaps in a synthetic one-group `_waveCfg` (`{ type:
  * 'boss', count: 1 }`) instead of reading `Config.waves.levels`, so the
  * existing spawn machinery (`_spawnNext`/`_groupForIdx`) builds a single
- * BossEnemy.js instance the same way it builds any other group. The boss
- * routes through the same onFire callbacks Scout/Rocketeer/Sniper already
- * use (see BossEnemy.js's own doc for its 3-phase attack cycle), renders
- * itself individually like Drifter/Bouncer (see `_renderIndividualEnemies`),
- * and gets its own health-bar UI via `renderBossHealthBar` — a separate
- * method GameplayScene calls from the fixed UI camera layer, not part of
- * this class's own `render()` (which runs inside the panned/shaking world layer).
+ * boss instance the same way it builds any other group. WHICH boss is read
+ * off `Config.boss.roster`, cycling once every boss has had a turn (level
+ * 8 → roster[0] "scout1", 16 → roster[1] "spiral", 24 → roster[0] again,
+ * ...) — see the constructor's `_bossKey`/`_bossCfg` lookup and the
+ * `BOSS_CLASSES` table above for the matching class construction. Every
+ * boss class shares one `update(dt, playerX, playerY, fire)` shape, where
+ * `fire` is a bag of every fire callback ANY boss might need (`_bossFire`,
+ * built once in the constructor) — each class reads only the ones it
+ * actually uses (see BossEnemy.js/SpiralBoss.js's own docs for their attack
+ * patterns). Every boss renders itself individually like Drifter/Bouncer
+ * (see `_renderIndividualEnemies`), and gets its own health-bar UI via
+ * `renderBossHealthBar` — a separate method GameplayScene calls from the
+ * fixed UI camera layer, not part of this class's own `render()` (which
+ * runs inside the panned/shaking world layer) — driven generically off
+ * whichever boss instance is alive (`.name`/`.color`/`.healthFrac`), not
+ * hardcoded to one boss type.
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
@@ -55,9 +64,11 @@ import { SniperEnemy } from './SniperEnemy.js';
 import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath, BODY_PTS as DRIFTER_BODY_PTS } from './DrifterEnemy.js';
 import { BouncerEnemy } from './BouncerEnemy.js';
 import { BossEnemy } from './BossEnemy.js';
+import { SpiralBoss } from './SpiralBoss.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
+import { SpiralBullets } from './SpiralBullets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { PowerUps } from './PowerUps.js';
@@ -67,6 +78,10 @@ import { AudioPool } from '../core/AudioPool.js';
 // guarantee a one-shot kill regardless of level scaling, without needing to
 // read any enemy type's own private health field directly.
 const SKILL_LETHAL_MULTIPLIER = 9999;
+
+// Which boss CLASS to construct for a given Config.boss.roster key — see
+// the constructor's boss-selection lookup and _spawnNext's 'boss' branch.
+const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss };
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -124,6 +139,19 @@ export class WaveManager {
     // (`_totalToSpawn`/`_groupForIdx`/`_spawnNext`) — see `_spawnNext`'s own
     // 'boss' branch for how that group actually gets built.
     this._isBossLevel = level % Config.boss.everyNLevels === 0;
+    // Which boss appears is read off Config.boss.roster, cycling once every
+    // boss has had a turn (1st boss-level encounter → roster[0], 2nd →
+    // roster[1], 3rd → roster[0] again, ...) — see BOSS_CLASSES above for
+    // the matching class lookup used in _spawnNext. `_bossCfg` falls back to
+    // scout1 on non-boss levels purely so `_bossParticles` below always has
+    // a valid (if never-emitted) color to construct with.
+    this._bossKey = null;
+    this._bossCfg = Config.boss.scout1;
+    if (this._isBossLevel) {
+      const bossEncounterNum = level / Config.boss.everyNLevels; // 1, 2, 3, ...
+      this._bossKey = Config.boss.roster[(bossEncounterNum - 1) % Config.boss.roster.length];
+      this._bossCfg = Config.boss[this._bossKey];
+    }
     this._waveCfg = this._isBossLevel
       ? { enemies: [{ type: 'boss', count: 1, spawnInterval: 0 }] }
       : levels[Math.min(level - 1, levels.length - 1)];
@@ -171,6 +199,7 @@ export class WaveManager {
     this._boss = null; // set by _spawnNext on a boss level — see renderBossHealthBar
     this._enemyBullets = new EnemyBullets();
     this._sniperBullets = new SniperBullets();
+    this._spiralBullets = new SpiralBullets();
     this._rockets      = new Rockets({
       onDetonate: (x, y) => {
         this._rocketeerParticles.emit(x, y);
@@ -197,7 +226,7 @@ export class WaveManager {
     this._diverParticles     = new Particles(Config.enemy.drifter.diver.color, Config.enemy.drifter.diver.sparksPerEmit);
     this._weaverParticles    = new Particles(Config.enemy.drifter.weaver.color, Config.enemy.drifter.weaver.sparksPerEmit);
     this._bouncerParticles   = new Particles(Config.enemy.bouncer.color, Config.enemy.bouncer.sparksPerEmit);
-    this._bossParticles      = new Particles(Config.boss.scout1.color, Config.boss.scout1.sparksPerEmit);
+    this._bossParticles      = new Particles(this._bossCfg.color, this._bossCfg.sparksPerEmit);
 
     this._powerUps = new PowerUps();
 
@@ -217,12 +246,24 @@ export class WaveManager {
     // SniperEnemy's onFire call omits it, so `SniperBullets.fire`'s own
     // default (1) applies and its shot is unaffected.
     this._fireSniperBullet     = (ox, oy, tx, ty, speedMult) => this._sniperBullets.fire(ox, oy, tx, ty, speedMult);
+    this._fireSpiralBullet     = (ox, oy, angle) => this._spiralBullets.fire(ox, oy, angle);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
     // Passed into Enemy.js's repositioning so it picks a fresh rest point
     // that's already clear of other enemies, instead of a blind random one
     // — see _findClearRestPoint's own doc for why picking clear beats only
     // reactively separating afterward.
     this._findClearRestPoint = (enemy) => this._findClearRestPointFor(enemy);
+
+    // Every fire callback a boss could possibly need, bundled as one object
+    // — see BossEnemy.update's doc for why a bag-of-callbacks beats
+    // positional args once more than one boss class (with different subsets
+    // of callbacks) shares the same generic update() call site below.
+    this._bossFire = {
+      fireBullet: this._fireBullet,
+      fireRocket: this._fireRocket,
+      fireSniperBullet: this._fireSniperBullet,
+      fireSpiralBullet: this._fireSpiralBullet,
+    };
 
     this._waveClear = false;
   }
@@ -249,6 +290,7 @@ export class WaveManager {
     this._drifterProjectiles.update(dt, playerX, playerY);
     this._enemyBullets.update(dt);
     this._sniperBullets.update(dt);
+    this._spiralBullets.update(dt);
     this._powerUps.update(dt);
 
     if (this._waveClear) return;
@@ -291,7 +333,7 @@ export class WaveManager {
         continue;
       }
       if (e.type === 'boss') {
-        e.update(dt, playerX, playerY, this._fireBullet, this._fireRocket, this._fireSniperBullet);
+        e.update(dt, playerX, playerY, this._bossFire);
         continue;
       }
       let cb;
@@ -334,6 +376,7 @@ export class WaveManager {
   _renderProjectiles(renderer) {
     this._enemyBullets.render(renderer);
     this._sniperBullets.render(renderer);
+    this._spiralBullets.render(renderer);
     this._rockets.render(renderer);
     this._drifterProjectiles.render(renderer);
   }
@@ -572,7 +615,7 @@ export class WaveManager {
         }
       } else if (enemy.type === 'boss') {
         this._bossParticles.emit(enemy.x, enemy.y);
-        this._playExplosionSfx(Config.boss.scout1.audio.volume);
+        this._playExplosionSfx(this._bossCfg.audio.volume);
         this._boss = null; // health bar disappears immediately rather than lingering through the death-flash
       } else {
         this._particles.emit(enemy.x, enemy.y);
@@ -615,7 +658,7 @@ export class WaveManager {
    */
   _rewardFor(enemy) {
     if (enemy.type === 'boss') {
-      return { points: Config.boss.scout1.points, gold: Config.boss.scout1.gold };
+      return { points: this._bossCfg.points, gold: this._bossCfg.gold };
     }
     if (enemy.type === 'drifter') {
       return { points: enemy._palette.points, gold: enemy._palette.gold };
@@ -662,6 +705,7 @@ export class WaveManager {
 
     if (this._enemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemyBullet.damage;
     if (this._sniperBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.sniper.bullet.damage;
+    if (this._spiralBullets.checkHit(x, y, hitRadius)) damage += Config.boss.spiral.bullet.damage;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
@@ -766,7 +810,8 @@ export class WaveManager {
       && !this._rockets.active
       && !this._drifterProjectiles.active
       && !this._enemyBullets.active
-      && !this._sniperBullets.active;
+      && !this._sniperBullets.active
+      && !this._spiralBullets.active;
   }
 
   // ---------------------------------------------------------------------------
@@ -856,8 +901,8 @@ export class WaveManager {
     const type  = group?.type ?? 'scout';
 
     if (type === 'boss') {
-      const cfg  = Config.boss.scout1;
-      const boss = new BossEnemy(this._healthBonus(cfg));
+      const BossClass = BOSS_CLASSES[this._bossKey];
+      const boss = new BossClass(this._healthBonus(this._bossCfg));
       this._enemies.push(boss);
       this._boss = boss;
       this._advanceSpawnIndex();

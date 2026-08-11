@@ -126,11 +126,19 @@ export class BossEnemy {
   /**
    * @param {number} dt
    * @param {number} playerX @param {number} playerY
-   * @param {(ox:number,oy:number,tx:number,ty:number)=>void} fireBullet  Scout-style aimed bullet (EnemyBullets)
-   * @param {(ox:number,oy:number,tx:number,ty:number,sizeMult?:number)=>void} fireRocket  Rocketeer-style homing rocket (Rockets) — the rocketeer phase passes its own `rocketSizeMult` as the 5th arg
-   * @param {(ox:number,oy:number,tx:number,ty:number,speedMult?:number)=>void} fireSniperBullet  Sniper-style charged bullet (SniperBullets) — the sniper phase passes its own `bulletSpeedMult` as the 5th arg
+   * @param {{
+   *   fireBullet: (ox:number,oy:number,tx:number,ty:number)=>void,
+   *   fireRocket: (ox:number,oy:number,tx:number,ty:number,sizeMult?:number)=>void,
+   *   fireSniperBullet: (ox:number,oy:number,tx:number,ty:number,speedMult?:number)=>void,
+   * }} fire  a small bag of every fire callback WaveManager can route a
+   *   boss through — passed as one object (not positional args) so every
+   *   boss class can share this exact `update` signature regardless of
+   *   which subset of callbacks it actually uses (see SpiralBoss.js, which
+   *   only ever reads `fire.fireSpiralBullet`). `fireRocket`'s
+   *   `sizeMult`/`fireSniperBullet`'s `speedMult` are this boss's own
+   *   `rocketSizeMult`/`bulletSpeedMult` tuning — see each phase's own doc.
    */
-  update(dt, playerX, playerY, fireBullet, fireRocket, fireSniperBullet) {
+  update(dt, playerX, playerY, fire) {
     const cfg = this._cfg;
     this._stateAge    += dt;
     this._enginePhase += dt * 6;
@@ -160,9 +168,9 @@ export class BossEnemy {
     // cycle loops back to phase 0, with no positional pop.
     if (this._phase !== 2) this._updateOrbit(dt);
 
-    if      (this._phase === 0) this._updateScoutPhase(dt, playerX, playerY, fireBullet);
-    else if (this._phase === 1) this._updateRocketeerPhase(dt, playerX, playerY, fireRocket);
-    else                        this._updateSniperPhase(dt, playerX, playerY, fireSniperBullet);
+    if      (this._phase === 0) this._updateScoutPhase(dt, playerX, playerY, fire.fireBullet);
+    else if (this._phase === 1) this._updateRocketeerPhase(dt, playerX, playerY, fire.fireRocket);
+    else                        this._updateSniperPhase(dt, playerX, playerY, fire.fireSniperBullet);
   }
 
   /**
