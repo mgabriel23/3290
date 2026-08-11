@@ -245,7 +245,7 @@ export class GameplayScene {
 
     this.renderer.setCameraOffset(0, 0);
     const playerDamage = Config.player.damage + (this._level - 1) * Config.player.damagePerLevel;
-    this.barrier.render(this.renderer, playerDamage);
+    this.barrier.render(this.renderer, playerDamage, this._level);
 
     this.renderer.setCameraOffset(worldOffsetX, shake.y);
     if (!this._isGameOver) this.player.render(this.renderer); // the ship is destroyed — see _triggerGameOver's explosion

@@ -1727,6 +1727,12 @@ export const Config = Object.freeze({
 		powerXRatio: 0.22, // fraction of virtual width — x position of the power readout
 		powerColor: "#4DEFFF",
 
+		// Permanent current-level readout, mirroring the power readout on the
+		// dome's right side (0.78 = 1 - powerXRatio, so the two sit symmetric
+		// around the centered SHIELD readout). Same font sizes/glow as both.
+		levelXRatio: 0.78,
+		levelColor: "#4DEFFF",
+
 		// Small pulsing "!" beside the SHIELD readout, only while low — offset
 		// to the right (powerXRatio's readout already occupies the left side,
 		// so the icon goes the other way to avoid crowding it). Same glowing-

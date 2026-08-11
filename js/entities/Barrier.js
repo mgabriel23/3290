@@ -10,7 +10,14 @@
  * depth, five upward structural struts, a small diamond emblem at the peak,
  * and short anchor posts at both edges. All secondary elements share one
  * strokePaths call so the whole barrier costs just two shadow-blur passes
- * per frame regardless of strut count.
+ * per frame regardless of strut count. The permanent SHIELD (health)
+ * readout sits centered at the dome's peak; PWR (player bullet damage) and
+ * LVL (current wave level) flank it symmetrically on the left/right — see
+ * `_renderPower`/`_renderLevel`. Both are optional `render(renderer, power,
+ * level)` params the Barrier doesn't own itself (GameplayScene supplies
+ * them each frame), same as `power` already worked before `level` existed;
+ * omitting either just skips that readout, which is how TutorialScene's
+ * inert preview Barrier shows neither.
  *
  * Below `Config.barrier.lowHealth.threshold`, the whole barrier (arc +
  * health readout) switches from its normal cyan to a pulsing warning red —
@@ -76,8 +83,11 @@ export class Barrier {
     if (this._pulseT >= Config.barrier.pulse.duration) this._pulseT = -1;
   }
 
-  /** @param {number} [power]  player bullet damage — shown inside the dome's left side when given */
-  render(renderer, power) {
+  /**
+   * @param {number} [power]  player bullet damage — shown inside the dome's left side when given
+   * @param {number} [level]  current wave level — shown inside the dome's right side when given
+   */
+  render(renderer, power, level) {
     const { lineWidth, glowBlur } = Config.barrier;
     this._applyPulse();
 
@@ -93,6 +103,7 @@ export class Barrier {
     });
     this._renderHealth(renderer);
     if (power !== undefined) this._renderPower(renderer, power);
+    if (level !== undefined) this._renderLevel(renderer, level);
   }
 
   /** True once health has dropped to (or below) the warning threshold — stays true all the way to 0, not just briefly on crossing it. */
@@ -168,18 +179,44 @@ export class Barrier {
     }
   }
 
-  /** Player bullet damage readout, mirroring _renderHealth's layout but offset toward the dome's left side. */
+  /**
+   * Player bullet damage readout, mirroring _renderHealth's layout but
+   * offset toward the dome's left side. Anchored to the arc's actual LOCAL
+   * surface at this x (via `_arcY`), not the shared `peakY` SHIELD uses —
+   * the dome is shallow but still curves noticeably lower away from center,
+   * so anchoring off-center text to the center's peak Y left it overlapping
+   * the arc's stroke out here instead of sitting cleanly under it.
+   */
   _renderPower(renderer, power) {
     const { baseY, arcHeight, healthLabelFont, healthValueFont, powerColor, healthGlowBlur, powerXRatio } =
       Config.barrier;
     const { width: vW } = Config.virtual;
-    const peakY = baseY - arcHeight;
     const x = vW * powerXRatio;
-    renderer.drawText('PWR', x, peakY + 26, {
+    const y = this._arcY(x, baseY, arcHeight);
+    renderer.drawText('PWR', x, y + 26, {
       font: healthLabelFont, color: powerColor, alpha: 0.5,
     });
-    renderer.drawText(power.toFixed(2), x, peakY + 52, {
+    renderer.drawText(power.toFixed(2), x, y + 52, {
       font: healthValueFont, color: powerColor, glowBlur: healthGlowBlur,
+    });
+  }
+
+  /**
+   * Current wave-level readout, mirroring _renderPower's layout but offset
+   * toward the dome's right side. Same local-arc anchoring as _renderPower
+   * — see its doc for why `peakY` alone isn't the right reference off-center.
+   */
+  _renderLevel(renderer, level) {
+    const { baseY, arcHeight, healthLabelFont, healthValueFont, levelColor, healthGlowBlur, levelXRatio } =
+      Config.barrier;
+    const { width: vW } = Config.virtual;
+    const x = vW * levelXRatio;
+    const y = this._arcY(x, baseY, arcHeight);
+    renderer.drawText('LVL', x, y + 26, {
+      font: healthLabelFont, color: levelColor, alpha: 0.5,
+    });
+    renderer.drawText(String(level), x, y + 52, {
+      font: healthValueFont, color: levelColor, glowBlur: healthGlowBlur,
     });
   }
 
