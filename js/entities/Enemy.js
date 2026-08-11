@@ -4,12 +4,21 @@
  *
  * Behaviour: enters from the top at speed, gliding diagonally to a random
  * resting position, then fires aimed shots at the player on a fixed reload
- * cycle, leading the shot by however much the player moved during the aim
- * window (`Config.enemy.<type>.leadFactor` — 0 for Rocketeer, whose rocket
- * already homes continuously after launch). After a reload, a
- * `repositionChance` roll may send it gliding to a fresh rest point
- * (`repositioning` state, eased with `core/animation.js`'s `easeOutCubic`)
- * instead of aiming again from the same spot — so it doesn't camp forever.
+ * cycle, leading each shot by however much the player has moved since
+ * `_aimStartX/Y` was sampled at the start of the cycle
+ * (`Config.enemy.<type>.leadFactor` — 0 for Rocketeer, whose rocket already
+ * homes continuously after launch). Each cycle can fire a BURST of multiple
+ * shots, `burstCount` rounds `burstInterval` seconds apart (both optional —
+ * absent/undefined means a single shot, e.g. Rocketeer's one rocket; Scout
+ * fires a 3-round burst) — every round re-runs the lead formula fresh
+ * against the player's position at the instant IT fires, not just once for
+ * the whole burst, so a fast burst still tracks the player across its short
+ * span instead of dumping every round on one now-stale point. `reloadTime`
+ * is the cooldown AFTER the whole burst, not between each round of it.
+ * After a reload, a `repositionChance` roll may send it gliding to a fresh
+ * rest point (`repositioning` state, eased with `core/animation.js`'s
+ * `easeOutCubic`) instead of aiming again from the same spot — so it
+ * doesn't camp forever.
  * The ship continuously rotates to keep its NOSE pointing AWAY from
  * the player (tail toward player) — giving a "looking upward" silhouette
  * even while tracking. One player bullet kills it; a particle burst from
@@ -76,10 +85,19 @@ export class Enemy {
     this._state    = 'entering';
     this._stateAge = 0;
 
-    // Lead-prediction aim: sampled at the moment 'aiming' begins, compared
-    // against the player's position at fire time — see the 'aiming' branch.
+    // Lead-prediction aim: `_aimStartX/Y` is sampled once, at the moment
+    // 'aiming' begins, and held fixed for the whole cycle — it's the
+    // baseline "how far has the player moved since I started tracking"
+    // measures from. Every shot (including each round of a burst — see
+    // Config.enemy.<type>'s burstCount/burstInterval, both optional/absent
+    // = a single shot, e.g. Rocketeer's one rocket) re-runs the lead
+    // formula fresh against the CURRENT player position at the instant it
+    // actually fires, rather than reusing one shot's target for the whole
+    // burst — otherwise a fast burst reads as freezing the player in place
+    // instead of tracking them.
     this._aimStartX = spawnX;
     this._aimStartY = 0;
+    this._burstShotsFired = 0;
 
     // Mid-fight repositioning target — see the 'repositioning' branch.
     this._repoStartX = restX;
@@ -124,19 +142,46 @@ export class Enemy {
         this._aimStartY = playerY;
       }
       if (this._stateAge >= cfg.aimPause) {
-        // Lead prediction: extrapolate however far the player moved during
-        // the aim window forward by `leadFactor` more of the same motion.
-        // leadFactor 0 (Rocketeer) reduces this to plain current-position
-        // aim — the rocket's own continuous homing makes leading the
-        // initial heading redundant.
+        // Lead prediction: extrapolate however far the player moved since
+        // `_aimStartX/Y` was sampled, forward by `leadFactor` more of the
+        // same motion. leadFactor 0 (Rocketeer) reduces this to plain
+        // current-position aim — the rocket's own continuous homing makes
+        // leading the initial heading redundant.
         const leadX = playerX + (playerX - this._aimStartX) * cfg.leadFactor;
         const leadY = playerY + (playerY - this._aimStartY) * cfg.leadFactor;
+        // The first round fires immediately, right here — same instant as
+        // before burst fire existed (byte-identical timing for anything
+        // with burstCount 1, e.g. Rocketeer). Additional rounds (if any)
+        // fire later from the 'firing' branch below, each re-aiming fresh
+        // rather than reusing this target — see this class's constructor doc.
         onFire(this.x, this.y, leadX, leadY);
+        this._burstShotsFired = 1;
         setState(this, 'firing');
       }
 
     } else if (this._state === 'firing') {
-      if (this._stateAge >= cfg.reloadTime) {
+      // Burst fire: `burstCount` shots (default 1 — e.g. Rocketeer's single
+      // rocket, already fired above), each `burstInterval` seconds apart.
+      // The reload countdown is measured from the moment 'firing' began
+      // (stateAge==0 right as the transition above ran) and only ends once
+      // the whole burst is done, so `reloadTime` still means "cooldown
+      // after this attack", not "cooldown after the first round of it".
+      const shotCount      = cfg.burstCount ?? 1;
+      const burstInterval  = cfg.burstInterval ?? 0;
+      if (this._burstShotsFired < shotCount && this._stateAge >= this._burstShotsFired * burstInterval) {
+        // Re-aim fresh against the player's CURRENT position for each
+        // round — reusing round 1's target for the whole burst would make
+        // a fast burst read as freezing the player in place instead of
+        // actually tracking them (`_aimStartX/Y` itself stays fixed, same
+        // baseline the first round used, only the "where are they now"
+        // side of the lead formula updates).
+        const leadX = playerX + (playerX - this._aimStartX) * cfg.leadFactor;
+        const leadY = playerY + (playerY - this._aimStartY) * cfg.leadFactor;
+        onFire(this.x, this.y, leadX, leadY);
+        this._burstShotsFired++;
+      }
+      const totalFiringDuration = (shotCount - 1) * burstInterval + cfg.reloadTime;
+      if (this._stateAge >= totalFiringDuration) {
         if (Math.random() < cfg.repositionChance) {
           this._repoStartX = this.x;
           this._repoStartY = this.y;

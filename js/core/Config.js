@@ -656,7 +656,13 @@ export const Config = Object.freeze({
 			restYMin: 0.08,
 			restYMax: 0.35,
 			aimPause: 0.5,
-			reloadTime: 2.2,
+			// Reload is the cooldown AFTER the whole 3-round burst below, not
+			// between each round of it — lengthened by +0.5s from the old
+			// single-shot cycle's 2.2s, so Scout's overall attack pace doesn't
+			// just get strictly harder now that a "shot" means 3 rounds.
+			reloadTime: 2.7,
+			burstCount: 3, // fires 3 rounds per cycle instead of 1 — a quick machine-gun-style burst at the same lead-predicted target
+			burstInterval: 0.12, // seconds between each round of the burst
 			hitRadius: 16,
 			minSeparation: 60,
 			repositionChance: 0.5, // odds a finished firing cycle sends it to a fresh rest point instead of aiming again in place
