@@ -36,12 +36,25 @@
  * currently on screen through the same `handleBulletHit` pipeline a real
  * bullet hit uses, so it's a real kill (reward, explosion, SFX and all),
  * not a separate mechanic.
+ *
+ * Every `Config.boss.everyNLevels`th level (8, 16, 24, ...) is a boss level
+ * — the constructor swaps in a synthetic one-group `_waveCfg` (`{ type:
+ * 'boss', count: 1 }`) instead of reading `Config.waves.levels`, so the
+ * existing spawn machinery (`_spawnNext`/`_groupForIdx`) builds a single
+ * BossEnemy.js instance the same way it builds any other group. The boss
+ * routes through the same onFire callbacks Scout/Rocketeer/Sniper already
+ * use (see BossEnemy.js's own doc for its 3-phase attack cycle), renders
+ * itself individually like Drifter/Bouncer (see `_renderIndividualEnemies`),
+ * and gets its own health-bar UI via `renderBossHealthBar` — a separate
+ * method GameplayScene calls from the fixed UI camera layer, not part of
+ * this class's own `render()` (which runs inside the panned/shaking world layer).
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
 import { SniperEnemy } from './SniperEnemy.js';
 import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath, BODY_PTS as DRIFTER_BODY_PTS } from './DrifterEnemy.js';
 import { BouncerEnemy } from './BouncerEnemy.js';
+import { BossEnemy } from './BossEnemy.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
@@ -102,7 +115,18 @@ export class WaveManager {
   constructor(level, barrier, hud, screenShake) {
     const levels = Config.waves.levels;
     this._level   = level;
-    this._waveCfg = levels[Math.min(level - 1, levels.length - 1)];
+    // A boss wave completely replaces the level's normal roster every
+    // Config.boss.everyNLevels levels (8, 16, 24, ...) — checked against the
+    // raw level number rather than read from `levels` (which only defines 10
+    // entries and caps at the last one forever), so boss levels keep
+    // recurring past level 10 too. This synthetic single-group config feeds
+    // the exact same spawn machinery every other level already uses
+    // (`_totalToSpawn`/`_groupForIdx`/`_spawnNext`) — see `_spawnNext`'s own
+    // 'boss' branch for how that group actually gets built.
+    this._isBossLevel = level % Config.boss.everyNLevels === 0;
+    this._waveCfg = this._isBossLevel
+      ? { enemies: [{ type: 'boss', count: 1, spawnInterval: 0 }] }
+      : levels[Math.min(level - 1, levels.length - 1)];
     this._hud = hud;
     this._barrier = barrier; // direct reference — needed by checkPowerUpPickup to heal it outside the onBarrierHit closure below
     this._barrierSurfaceY = (x) => barrier.surfaceY(x);
@@ -144,6 +168,7 @@ export class WaveManager {
     this._pendingPlayerDamage = 0;
 
     this._enemies      = [];
+    this._boss = null; // set by _spawnNext on a boss level — see renderBossHealthBar
     this._enemyBullets = new EnemyBullets();
     this._sniperBullets = new SniperBullets();
     this._rockets      = new Rockets({
@@ -172,6 +197,7 @@ export class WaveManager {
     this._diverParticles     = new Particles(Config.enemy.drifter.diver.color, Config.enemy.drifter.diver.sparksPerEmit);
     this._weaverParticles    = new Particles(Config.enemy.drifter.weaver.color, Config.enemy.drifter.weaver.sparksPerEmit);
     this._bouncerParticles   = new Particles(Config.enemy.bouncer.color, Config.enemy.bouncer.sparksPerEmit);
+    this._bossParticles      = new Particles(Config.boss.scout1.color, Config.boss.scout1.sparksPerEmit);
 
     this._powerUps = new PowerUps();
 
@@ -181,8 +207,16 @@ export class WaveManager {
 
     // Pre-bound fire callbacks — stored once, zero closures per frame.
     this._fireBullet           = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
-    this._fireRocket           = (ox, oy, tx, ty) => this._rockets.fire(ox, oy, tx, ty);
-    this._fireSniperBullet     = (ox, oy, tx, ty) => this._sniperBullets.fire(ox, oy, tx, ty);
+    // `sizeMult` is only ever passed by BossEnemy.js's rocketeer phase (see
+    // Config.boss.scout1.rocketeerPhase.rocketSizeMult) — a regular
+    // Rocketeer's onFire call omits it, so `Rockets.fire`'s own default (1)
+    // applies and its rocket's rendered size is unaffected.
+    this._fireRocket           = (ox, oy, tx, ty, sizeMult) => this._rockets.fire(ox, oy, tx, ty, sizeMult);
+    // `speedMult` is only ever passed by BossEnemy.js's sniper phase (see
+    // Config.boss.scout1.sniperPhase.bulletSpeedMult) — a regular
+    // SniperEnemy's onFire call omits it, so `SniperBullets.fire`'s own
+    // default (1) applies and its shot is unaffected.
+    this._fireSniperBullet     = (ox, oy, tx, ty, speedMult) => this._sniperBullets.fire(ox, oy, tx, ty, speedMult);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
     // Passed into Enemy.js's repositioning so it picks a fresh rest point
     // that's already clear of other enemies, instead of a blind random one
@@ -210,6 +244,7 @@ export class WaveManager {
     this._diverParticles.update(dt);
     this._weaverParticles.update(dt);
     this._bouncerParticles.update(dt);
+    this._bossParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
     this._drifterProjectiles.update(dt, playerX, playerY);
     this._enemyBullets.update(dt);
@@ -253,6 +288,10 @@ export class WaveManager {
         // _onDrifterBarrierHit above) — drifter/sweeper ignore these two
         // extra params entirely, same shape as Bouncer above.
         e.update(dt, playerX, playerY, this._fireDrifterProjectile, this._barrierSurfaceY, this._onDrifterBarrierHit);
+        continue;
+      }
+      if (e.type === 'boss') {
+        e.update(dt, playerX, playerY, this._fireBullet, this._fireRocket, this._fireSniperBullet);
         continue;
       }
       let cb;
@@ -303,7 +342,7 @@ export class WaveManager {
   _renderEngineFlames(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'drifter' || e.type === 'bouncer') continue;
+      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss') continue;
       e.renderFlame(renderer);
     }
   }
@@ -325,7 +364,7 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'bouncer') continue; // rendered individually below
+      if (e.type === 'bouncer' || e.type === 'boss') continue; // rendered individually below
       if (e.type === 'drifter') {
         if (!e._visible) continue;
         const isFlash = e._hitFlash > 0;
@@ -432,7 +471,7 @@ export class WaveManager {
   _renderEngineCores(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'drifter' || e.type === 'bouncer') continue;
+      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss') continue;
       e.renderCore(renderer);
     }
   }
@@ -449,7 +488,7 @@ export class WaveManager {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
       if (e.type === 'drifter' && e._visible) e.render(renderer);
-      else if (e.type === 'bouncer') e.render(renderer);
+      else if (e.type === 'bouncer' || e.type === 'boss') e.render(renderer);
     }
   }
 
@@ -463,6 +502,42 @@ export class WaveManager {
     this._diverParticles.render(renderer);
     this._bouncerParticles.render(renderer);
     this._weaverParticles.render(renderer);
+    this._bossParticles.render(renderer);
+  }
+
+  /**
+   * Boss health bar — top-center, wider than the player's own health bar,
+   * shown only while a boss is alive. A SEPARATE method, not part of
+   * `render()` above: `render()` is called by GameplayScene from inside the
+   * panned/shaking "world" camera offset, but this is UI chrome that should
+   * stay fixed like the HUD — GameplayScene calls this only after resetting
+   * the camera to (0, 0), the same fixed-layer treatment HUD/PlayerSkill get.
+   * @param {import('../core/Renderer.js').Renderer} renderer
+   */
+  renderBossHealthBar(renderer) {
+    if (!this._boss || !this._boss.alive) return;
+    const cfg  = Config.boss.healthBar;
+    const boss = this._boss;
+    const left  = cfg.x - cfg.width / 2;
+    const right = left + cfg.width;
+
+    renderer.drawText(boss.name, cfg.x, cfg.y - 14, {
+      font: cfg.nameFont, color: boss.color, glowBlur: cfg.nameGlowBlur, glowColor: boss.color,
+    });
+
+    renderer.fillStrokePaths([{
+      points: [[left, cfg.y], [right, cfg.y], [right, cfg.y + cfg.height], [left, cfg.y + cfg.height]],
+      closed: true,
+    }], { fillColor: cfg.trackColor, strokeColor: cfg.trackColor, lineWidth: 1 });
+
+    const frac = boss.healthFrac;
+    if (frac > 0) {
+      const fillRight = left + cfg.width * frac;
+      renderer.fillStrokePaths([{
+        points: [[left, cfg.y], [fillRight, cfg.y], [fillRight, cfg.y + cfg.height], [left, cfg.y + cfg.height]],
+        closed: true,
+      }], { fillColor: boss.color, strokeColor: boss.color, lineWidth: 1 });
+    }
   }
 
   /**
@@ -495,6 +570,10 @@ export class WaveManager {
         if (enemy._variant === 2) {
           for (const fragment of enemy.spawnFragments()) this._enemies.push(fragment);
         }
+      } else if (enemy.type === 'boss') {
+        this._bossParticles.emit(enemy.x, enemy.y);
+        this._playExplosionSfx(Config.boss.scout1.audio.volume);
+        this._boss = null; // health bar disappears immediately rather than lingering through the death-flash
       } else {
         this._particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
@@ -535,6 +614,9 @@ export class WaveManager {
    * not color), so it gets an explicit branch here instead.
    */
   _rewardFor(enemy) {
+    if (enemy.type === 'boss') {
+      return { points: Config.boss.scout1.points, gold: Config.boss.scout1.gold };
+    }
     if (enemy.type === 'drifter') {
       return { points: enemy._palette.points, gold: enemy._palette.gold };
     }
@@ -680,6 +762,7 @@ export class WaveManager {
       && !this._diverParticles.active
       && !this._weaverParticles.active
       && !this._bouncerParticles.active
+      && !this._bossParticles.active
       && !this._rockets.active
       && !this._drifterProjectiles.active
       && !this._enemyBullets.active
@@ -696,11 +779,11 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const a = this._enemies[i];
-      if (a._state === 'entering' || a._type === 'drifter' || a._type === 'bouncer') continue;
+      if (a._state === 'entering' || a._type === 'drifter' || a._type === 'bouncer' || a._type === 'boss') continue;
 
       for (let j = i + 1; j < this._enemies.length; j++) {
         const b = this._enemies[j];
-        if (b._state === 'entering' || b._type === 'drifter' || b._type === 'bouncer') continue;
+        if (b._state === 'entering' || b._type === 'drifter' || b._type === 'bouncer' || b._type === 'boss') continue;
 
         const minSep = Math.max(a._cfg.minSeparation, b._cfg.minSeparation);
         const ddx    = b.x - a.x;
@@ -758,7 +841,7 @@ export class WaveManager {
       let clear = true;
       for (let i = 0; i < this._enemies.length; i++) {
         const other = this._enemies[i];
-        if (other === enemy || other._state === 'entering' || other._type === 'drifter' || other._type === 'bouncer') continue;
+        if (other === enemy || other._state === 'entering' || other._type === 'drifter' || other._type === 'bouncer' || other._type === 'boss') continue;
         const sep = Math.max(minSeparation, other._cfg.minSeparation);
         const dx  = other.x - x, dy = other.y - y;
         if (dx * dx + dy * dy < sep * sep) { clear = false; break; }
@@ -771,6 +854,15 @@ export class WaveManager {
   _spawnNext() {
     const group = this._groupForIdx(this._spawnIdx);
     const type  = group?.type ?? 'scout';
+
+    if (type === 'boss') {
+      const cfg  = Config.boss.scout1;
+      const boss = new BossEnemy(this._healthBonus(cfg));
+      this._enemies.push(boss);
+      this._boss = boss;
+      this._advanceSpawnIndex();
+      return;
+    }
 
     if (type === 'bouncer' || type === 'splitter' || type === 'shielded') {
       // 'splitter'/'shielded' force variant 2/3 — used for testing that

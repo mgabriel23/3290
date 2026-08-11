@@ -22,6 +22,13 @@
  * line, when the homing algorithm steers, the trail bends through the real
  * arc taken). Both the trail and every rocket's body are each batched into
  * one draw call per frame regardless of rocket count.
+ *
+ * `fire`'s optional `sizeMult` scales only the rendered body silhouette
+ * (proximity/damage/trail are untouched) — this is what lets BossEnemy.js's
+ * rocketeer phase (Config.boss.scout1.rocketeerPhase.rocketSizeMult) fire a
+ * visually smaller rocket through this exact same shared pool, without
+ * touching Config.rocket itself and shrinking every regular Rocketeer's
+ * rocket too. Same pattern as SniperBullets.js's `speedMult`.
  */
 import { Config } from '../core/Config.js';
 import { directionalVelocity } from '../core/vectorMath.js';
@@ -63,6 +70,7 @@ export class Rockets {
     this._vx   = new Float32Array(MAX);
     this._vy   = new Float32Array(MAX);
     this._age  = new Float32Array(MAX);
+    this._sizeMult = new Float32Array(MAX); // per-rocket body-render scale — see fire()'s doc
     this._count = 0;
 
     // Position history ring buffers — flat layout: rocket i uses [i*TRAIL_HIST .. (i+1)*TRAIL_HIST)
@@ -96,8 +104,9 @@ export class Rockets {
    * Launch one rocket from `(ox, oy)` initially aimed at `(tx, ty)`.
    * @param {number} ox @param {number} oy  origin (rocketeer centre)
    * @param {number} tx @param {number} ty  initial target (player centre at fire time)
+   * @param {number} [sizeMult]  scales this rocket's rendered body silhouette — see class doc
    */
-  fire(ox, oy, tx, ty) {
+  fire(ox, oy, tx, ty, sizeMult = 1) {
     if (this._count >= MAX) return;
     const { speed } = Config.rocket;
     const [vx, vy] = directionalVelocity(ox, oy, tx, ty, speed);
@@ -108,6 +117,7 @@ export class Rockets {
     this._vx[i]   = vx;
     this._vy[i]   = vy;
     this._age[i]  = 0;
+    this._sizeMult[i] = sizeMult;
     this._hHead[i] = 0;
     this._hTick[i] = 0;
 
@@ -187,7 +197,7 @@ export class Rockets {
       if (w !== i) {
         this._x[w]    = this._x[i];    this._y[w]    = this._y[i];
         this._vx[w]   = this._vx[i];   this._vy[w]   = this._vy[i];
-        this._age[w]  = this._age[i];
+        this._age[w]  = this._age[i];  this._sizeMult[w] = this._sizeMult[i];
         this._hHead[w] = this._hHead[i];
         this._hTick[w] = this._hTick[i];
         this._hx.copyWithin(w * TRAIL_HIST, i * TRAIL_HIST, (i + 1) * TRAIL_HIST);
@@ -240,9 +250,10 @@ export class Rockets {
       const vx = this._vx[i], vy = this._vy[i];
       const spd = Math.sqrt(vx * vx + vy * vy) || 1;
       const cos = vx / spd, sin = vy / spd;
+      const m   = this._sizeMult[i];
       const bp  = this._bodyPool[i].points;
       for (let j = 0; j < BODY_LOCAL_PTS.length; j++) {
-        const lx = BODY_LOCAL_PTS[j][0], ly = BODY_LOCAL_PTS[j][1];
+        const lx = BODY_LOCAL_PTS[j][0] * m, ly = BODY_LOCAL_PTS[j][1] * m;
         bp[j][0] = this._x[i] + lx * cos - ly * sin;
         bp[j][1] = this._y[i] + lx * sin + ly * cos;
       }

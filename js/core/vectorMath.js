@@ -19,3 +19,18 @@ export function directionalVelocity(ox, oy, tx, ty, speed) {
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   return [(dx / len) * speed, (dy / len) * speed];
 }
+
+/**
+ * Rotate point (tx, ty) by `angle` radians around pivot (ox, oy) — used to
+ * fan a simultaneous salvo of projectiles out from a single aimed point
+ * (see BossEnemy.js's missile-swarm phase) without hand-deriving the
+ * rotation matrix at each call site.
+ * @returns {[number, number]}
+ */
+export function rotateAround(ox, oy, tx, ty, angle) {
+  const dx  = tx - ox;
+  const dy  = ty - oy;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [ox + dx * cos - dy * sin, oy + dx * sin + dy * cos];
+}

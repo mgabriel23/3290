@@ -308,6 +308,7 @@ export class GameplayScene {
 
     this.renderer.setCameraOffset(0, 0);
     this.hud.render(this.renderer, this.player.health, this._fireBoostTimer, this.player.invincibleTimer);
+    this._waveManager?.renderBossHealthBar(this.renderer);
     this._playerSkill.render(this.renderer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
@@ -334,8 +335,13 @@ export class GameplayScene {
    * factor (same visual smoothing at 30fps or 144fps, unlike a fixed
    * per-frame lerp fraction) — see class doc for why this needs to be
    * damped rather than recomputed fresh every frame.
+   *
+   * `Config.camera.enabled` is a kill-switch — see that config's own doc —
+   * pinning the camera to (0, 0) outright rather than easing toward a zero
+   * target, so flipping it off takes effect the same frame, not over a fade.
    */
   _updateCameraFollow(dt) {
+    if (!Config.camera.enabled) { this._cameraX = 0; return; }
     const { width: vW } = Config.virtual;
     const target = -(this.player.x - vW / 2) * Config.camera.followFactor;
     const rate = Config.camera.followSmoothing;
@@ -456,7 +462,10 @@ export class GameplayScene {
       if (this.bullets.checkHit(e.x, e.y, e.hitRadius)) {
         const killed = this._waveManager.handleBulletHit(e, damageMultiplier);
         if (killed) {
-          this._screenShake.trigger(Config.screenShake.killTrauma);
+          // Boss kills get a bigger shake than an ordinary kill — matches
+          // Config.gameOver.deathTrauma, the only other moment this strong.
+          const trauma = e.type === 'boss' ? Config.boss.killTrauma : Config.screenShake.killTrauma;
+          this._screenShake.trigger(trauma);
           this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);
         }
       }
@@ -553,6 +562,13 @@ export class GameplayScene {
     this.renderer.drawText(`LEVEL ${this._level}`, vW / 2, vH / 2 + jitter, {
       font, color, alpha, glowBlur,
     });
+
+    if (this._level % Config.boss.everyNLevels === 0) {
+      const b = Config.boss.intro;
+      this.renderer.drawText(b.text, vW / 2, vH / 2 + jitter + b.offsetY, {
+        font: b.font, color: b.color, alpha, glowBlur: b.glowBlur,
+      });
+    }
   }
 
   /** Ease the whole starfield in from transparent over `Config.starfield.fadeInDuration` — see class doc's "Entrance" note. */

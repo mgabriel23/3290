@@ -1760,6 +1760,195 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * Boss encounters — a single, much tougher enemy that completely
+	 * replaces the normal level roster every `everyNLevels` levels (8, 16,
+	 * 24, ...). Checked against the raw level number in WaveManager rather
+	 * than read from `waves.levels` above (which only defines 10 entries and
+	 * caps at the last one forever), so boss levels keep recurring past
+	 * level 10 too.
+	 *
+	 * `scout1` is the first boss ("Scout Prime") — a giant reskin of the
+	 * Scout hull (BossEnemy.js reuses SCOUT_HULL_PTS's exact authored
+	 * proportions, just at a much bigger `size`) whose attack cycles through
+	 * the three "ship-family" enemies it's built from: an aimed Scout-style
+	 * burst (`scoutPhase`), a Rocketeer-style homing-missile salvo
+	 * (`rocketeerPhase`), then a Sniper-style charge/lock/fire
+	 * (`sniperPhase`) — looping back to the first once all three have run.
+	 * Later boss encounters (level 16, 24, ...) reuse this same boss for
+	 * now, scaled up via `healthPerLevel` like every regular enemy — future
+	 * reiterations (a giant Rocketeer or Sniper build) are a later addition.
+	 */
+	boss: Object.freeze({
+		everyNLevels: 1,
+		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
+
+		scout1: Object.freeze({
+			name: "SCOUT PRIME", // boss health-bar label
+
+			size: 58, // vp — same authored hull proportions as Scout (Enemy.js's SCOUT_HULL_PTS), just ~2.6x Scout's 22 (trimmed down from an initial 70 — read as too large)
+			health: 450,
+			healthPerLevel: 60, // later boss encounters (level 16, 24, ...) scale up like every regular enemy's healthPerLevel
+			color: "#ff3b3b", // same danger-red as Config.player.lowHealth/Config.gameOver — a boss reads as the threat, not another squad member
+			fillColor: "#200808",
+			lineWidth: 3,
+			glowBlur: 18,
+			hitGlowBlur: 30,
+			engineCoreColor: "#ff5f00",
+			flameColor: "#ff3b3b",
+			flameHalfWidth: 9,
+
+			entrySpeed: 150, // vp/sec — slower than a regular Scout's 320, sells the weight of something this big
+			// Pushed down from an initial 190 — combined with `orbitAmplitudeY`
+			// below, the hull's own nose tip could swing up into the boss
+			// health bar (Config.boss.healthBar) at the top of its orbit; 245
+			// keeps the highest point of the loop clear of it with margin.
+			restY: 245, // vp — fixed rest height (not randomized, unlike regular enemies)
+			hitRadius: 46, // vp — big collision circle matching the huge hull, scaled down alongside `size`
+			// Idle flight path while fighting (phases 0/1 — frozen during phase
+			// 2, see BossEnemy.update): a figure-8/infinity loop laid on its
+			// side ("landscape" — wide left-right, shallow up-down), traced by
+			// the lemniscate-of-Gerono parametric form x=cos(t), y=sin(t)cos(t)
+			// — see BossEnemy._updateOrbit. `orbitAmplitudeX` is deliberately
+			// well above `orbitAmplitudeY` so the loop reads as flat/wide
+			// rather than a tall vertical 8.
+			orbitAmplitudeX: 140, // vp — horizontal reach
+			orbitAmplitudeY: 30, // vp — vertical reach — trimmed from 45 alongside the `restY` bump above, same reason
+			orbitSpeed: 0.4, // rad/sec — how fast it traces the full loop
+
+			// Phases 1 & 3 of the cycle (see class doc) — Scout-style aimed
+			// burst fire, mirroring Enemy.js's own aim→burst cycle at boss
+			// scale: more rounds per burst, repeated `volleys` times before
+			// the cycle moves on to the next phase.
+			scoutPhase: Object.freeze({
+				aimPause: 0.3,
+				burstCount: 10,
+				burstInterval: 0.15,
+				leadFactor: 1.0,
+				volleys: 3,
+				cooldown: 1, // between volleys
+			}),
+
+			// Phase 2 — Rocketeer-style missile swarm: `missileCount` homing
+			// rockets launched one after another, `missileInterval` seconds
+			// apart (NOT simultaneously — a readable stagger, not one instant
+			// wall of missiles), fanned across `spreadAngle` radians so they
+			// don't all launch on an identical initial heading (they still
+			// home in and converge on the player after launch, same as a
+			// regular Rocketeer's single rocket).
+			rocketeerPhase: Object.freeze({
+				aimPause: 0.8,
+				missileCount: 5,
+				missileInterval: 0.3, // seconds between each rocket's launch within a salvo — a bit more breathing room now that there are 5 of them
+				spreadAngle: 0.6, // radians, total fan width across the salvo
+				salvos: 2,
+				cooldown: 1.4, // between salvos
+				// Scales down the shared Rockets pool's rendered body silhouette
+				// ONLY for rockets launched from this phase (see Rockets.fire's
+				// optional `sizeMult` param) — a regular Rocketeer's own rocket
+				// is unaffected, since Config.rocket itself isn't touched.
+				// Cosmetic only — detonation proximity/damage stay the same.
+				rocketSizeMult: 0.75,
+			}),
+
+			// Phase 3 — Sniper-style charge/lock/fire, repeated `shots` times
+			// before looping back to phase 1. Same telegraph LANGUAGE as
+			// SniperEnemy (a nose orb that fills, then a locked "!" marker) —
+			// see BossEnemy.js's renderCore/renderExtras — just its own
+			// tuning, scaled for the giant hull, rather than reused directly
+			// off Config.enemy.sniper. The boss also holds perfectly still for
+			// this entire phase (see BossEnemy.update's sway-freeze) — a
+			// stationary aim to match the faster strike pace below.
+			sniperPhase: Object.freeze({
+				// Lengthened back up from an initial 1.0, then a too-fast 0.8 —
+				// a big ship snapping onto the player's position that quickly
+				// read as wrong for its scale; this is the "wind-up" before it
+				// locks on, not the gap between shots (see `recoverDuration`
+				// below, which stays fast — the strikes themselves are still
+				// quick once the fight is underway, only the LOCK itself is
+				// slower and more deliberate).
+				chargeWarmup: 1.4,
+				warningDuration: 0.7, // unchanged — this is the fairness/reaction window, not part of the "interval"
+				recoverDuration: 0.25, // shortened from 0.5 — faster back-to-back strikes
+				shots: 3,
+
+				// Multiplies the shared SniperBullets pool's `maxSpeed` ONLY for
+				// bullets fired from this phase (see SniperBullets.fire's optional
+				// `speedMult` param) — a regular SniperEnemy's own shot is
+				// unaffected, since Config.enemy.sniper.bullet itself isn't
+				// touched. The initial crawl (`startSpeed`) stays identical; only
+				// the boosted top speed the bullet ramps up to is faster, so the
+				// boss's version reads as "the same telegraph, a harder kick."
+				bulletSpeedMult: 1.6,
+
+				orbStartRadius: 5,
+				orbGrowth: 14,
+				orbLineWidth: 2.5,
+				orbGlowBlur: 10,
+				orbAlphaMin: 0.2,
+				lockedOrbRadius: 18,
+				lockedOrbLineWidth: 3,
+				lockedOrbGlowBlur: 12,
+				lockedBlinkSpeed: 6,
+
+				warningRingRadius: 26,
+				warningRingLineWidth: 2.5,
+				warningRingAlphaMult: 0.6,
+				warningDotRadius: 5,
+				warningDotLineWidth: 3.5,
+				warningDotGlowBlur: 8,
+				warningLabelOffset: 38,
+				warningLabelFont:
+					'400 32px "Audiowide", "Courier New", monospace',
+				warningLabelGlowBlur: 12,
+				warningFadeInSpeed: 6,
+				warningPulseSpeed: 4,
+			}),
+
+			sparksPerEmit: 40, // a much bigger death burst than any regular enemy (Config.particles.defaultSparksPerEmit is 14)
+			// Flat "boss-tier" reward — far above any regular enemy (the
+			// toughest, Shielded Bouncer, is 390/20) — reflecting a fight
+			// that runs tens of seconds rather than a handful of hits.
+			points: 2500,
+			gold: 125,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.8,
+				poolSize: 3,
+			}),
+		}),
+
+		// Boss health bar — top-center, wider/more prominent than the
+		// player's own health bar (Config.hud.health), positioned to clear
+		// that bar/label sitting right above it.
+		healthBar: Object.freeze({
+			x: 270,
+			// Pushed down from an initial 122 — that overlapped the player's
+			// own health bar/label right above it (Config.hud.health, bottom
+			// edge + label around y=105-110). 150 clears it with room; see
+			// Config.boss.scout1.restY's own comment for the matching fix on
+			// the boss's hull itself swinging up into this bar.
+			y: 150,
+			width: 320,
+			height: 12,
+			trackColor: "#1a2035",
+			labelColor: "#aab4d4",
+			nameFont: '400 15px "Audiowide", "Courier New", monospace',
+			nameGlowBlur: 6,
+		}),
+
+		// Extra subtitle shown under the "LEVEL N" indicator on a boss level,
+		// so the escalation reads clearly before the fight starts — see
+		// GameplayScene._renderLevelIntro.
+		intro: Object.freeze({
+			text: "BOSS INCOMING",
+			font: '400 20px "Audiowide", "Courier New", monospace',
+			color: "#ff3b3b",
+			glowBlur: 10,
+			offsetY: 56, // vp below the "LEVEL N" line
+		}),
+	}),
+
+	/**
 	 * Background music — two separate looping tracks that never overlap:
 	 *   - the prologue's own theme, started the instant the player swipes
 	 *     past the intro prompt (IntroScene's `onSwipeDetected` fires
@@ -1819,6 +2008,14 @@ export const Config = Object.freeze({
 	 * exposes is always void-colored, never a stale/leftover pixel strip.
 	 */
 	camera: Object.freeze({
+		// Kill-switch — temporarily false. A reported visual issue during the
+		// boss fight (enemy fire reading as slightly misaimed) was suspected
+		// to trace back to this pan, so it's off for now rather than removed
+		// outright — flip back to true once that's actually diagnosed. When
+		// false, GameplayScene._updateCameraFollow skips the pan entirely
+		// (camera pins to (0,0)) instead of just easing toward a zero target,
+		// so turning this off takes effect instantly, not over a fade.
+		enabled: false,
 		followFactor: 0.07, // fraction of the player's offset from horizontal center
 		// Convergence rate (1/sec) GameplayScene._updateCameraFollow uses to
 		// exponentially ease the pan toward its target instead of snapping to
