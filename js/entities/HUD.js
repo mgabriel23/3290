@@ -26,7 +26,11 @@
  * follows the same externally-owned-value pattern: `render`'s optional third
  * parameter is GameplayScene's `_fireBoostTimer` (seconds remaining, 0 =
  * inactive) — HUD itself has no opinion on when the boost starts or how long
- * it lasts, it just draws whatever's handed to it, same as `health`.
+ * it lasts, it just draws whatever's handed to it, same as `health`. A
+ * fourth parameter, `invincibleTimer` (Player's own `invincibleTimer`
+ * getter), drives a matching badge mirrored onto the LEFT-middle edge (see
+ * `_renderInvincibleIndicator`) so the two never overlap even when both
+ * buffs are active together.
  *
  * All bracket/bar geometry is pre-allocated once in the constructor so
  * `render` produces zero per-frame allocations regardless of update rate.
@@ -73,8 +77,10 @@ export class HUD {
    * @param {number} health  the player's current health — see class doc
    * @param {number} [fireBoostTimer]  seconds remaining on an active fireBoost
    *   PowerUp (0 or omitted = inactive, badge is skipped entirely) — see class doc
+   * @param {number} [invincibleTimer]  seconds remaining on an active invincible
+   *   PowerUp (0 or omitted = inactive, badge is skipped entirely) — see class doc
    */
-  render(renderer, health, fireBoostTimer = 0) {
+  render(renderer, health, fireBoostTimer = 0, invincibleTimer = 0) {
     const {
       margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur, bestFont,
       chromeColor, chromeLineWidth, chromeGlowBlur,
@@ -106,6 +112,7 @@ export class HUD {
 
     this._renderHealthBar(renderer, health);
     if (fireBoostTimer > 0) this._renderFireBoostIndicator(renderer, fireBoostTimer);
+    if (invincibleTimer > 0) this._renderInvincibleIndicator(renderer, invincibleTimer);
   }
 
   // ---------------------------------------------------------------------------
@@ -178,6 +185,31 @@ export class HUD {
     });
   }
 
+  /**
+   * Left-middle badge shown only while an 'invincible' PowerUp is running —
+   * mirrors `_renderFireBoostIndicator`'s shape exactly, reusing the same
+   * hexagon-ring icon language PowerUps.js and Player's own shield-bubble
+   * draw for this pickup, plus an "INVULN" label and a whole-seconds
+   * countdown. Named "INVULN" rather than "SHIELD" so it can't be confused
+   * with Barrier's own permanent SHIELD (health) readout at top-center.
+   */
+  _renderInvincibleIndicator(renderer, timer) {
+    const cfg  = Config.hud.invincible;
+    const pCfg = Config.powerUps.invincible;
+    const { x, y, radius, lineWidth, glowBlur, labelFont, valueFont } = cfg;
+
+    renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor: pCfg.fillColor });
+    renderer.strokeCircle(x, y, radius, { color: pCfg.color, lineWidth, glowBlur });
+    renderer.strokePaths([this._hexIconPath], { x, y, color: pCfg.color, lineWidth });
+
+    renderer.drawText('INVULN', x, y - radius - 12, {
+      font: labelFont, color: pCfg.color, alpha: 0.7,
+    });
+    renderer.drawText(`${Math.ceil(timer)}s`, x, y + radius + 16, {
+      font: valueFont, color: pCfg.color, glowBlur: 4,
+    });
+  }
+
   _initGeometry() {
     const { margin, bracketSize: leg, health: hCfg } = Config.hud;
     const { width: vW } = Config.virtual;
@@ -216,5 +248,16 @@ export class HUD {
       points: [[-d * 0.3, -d], [d * 0.35, -d * 0.1], [-d * 0.1, d * 0.15], [d * 0.3, d]],
       closed: false,
     }];
+
+    // Invincibility badge's hexagon-ring icon — same shape/scale ratio as
+    // PowerUps.js's own `_hexPath` for the pickup, just sized off this
+    // badge's own radius instead of Config.powerUps.radius.
+    const hexD = Config.hud.invincible.radius * 0.45;
+    const hexPts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 2;
+      hexPts.push([Math.cos(a) * hexD, Math.sin(a) * hexD]);
+    }
+    this._hexIconPath = { points: hexPts, closed: true };
   }
 }

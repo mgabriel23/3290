@@ -35,6 +35,17 @@
  * this for its own health); and HUD's health bar shows a pulsing "!" icon
  * for as long as the danger persists (independent of the capped blip —
  * the icon isn't capped, only the sound is).
+ *
+ * A separate, much longer immunity window comes from an 'invincible'
+ * PowerUp pickup (see Config.powerUps.invincible and
+ * WaveManager.checkPowerUpPickup): `activateInvincibility` sets
+ * `_invincibleTimer`, which `takeDamage` checks alongside the brief
+ * post-hit `_invulnTimer` — either one blocks a hit outright. While it's
+ * running, a pulsing ring bubble is drawn around the whole ship (see
+ * `_renderInvincibleBubble`) so the immunity reads as an obvious, deliberate
+ * state rather than the same quick post-hit blink. A repeat pickup
+ * refreshes `_invincibleTimer` back to the full duration rather than
+ * stacking with whatever's left of a previous one.
  */
 import { Config } from '../core/Config.js';
 import { easeOutCubic } from '../core/animation.js';
@@ -120,6 +131,7 @@ export class Player {
     this.health = Config.player.maxHealth;
     this._hitFlash    = 0; // seconds remaining in the white hit-flash
     this._invulnTimer = 0; // seconds remaining of post-hit grace, during which takeDamage is a no-op
+    this._invincibleTimer = 0; // seconds remaining of PowerUp-driven full damage immunity — see activateInvincibility
 
     // Low-health danger blip — see class doc.
     const { warningAudioSrc, warningVolume } = Config.player.lowHealth;
@@ -135,17 +147,31 @@ export class Player {
   /** Collision radius — used by WaveManager's enemy-attack↔player hit tests. */
   get hitRadius() { return Config.player.hitRadius; }
 
+  /** Seconds remaining on an active 'invincible' PowerUp, 0 if inactive — read by GameplayScene to feed HUD's indicator badge. */
+  get invincibleTimer() { return this._invincibleTimer; }
+
   /**
-   * Apply `amount` damage unless still within the post-hit grace window.
+   * Apply `amount` damage unless still within the post-hit grace window or
+   * an active 'invincible' PowerUp's immunity window (see class doc).
    * @param {number} amount
-   * @returns {boolean} true if the damage actually applied (false while invulnerable)
+   * @returns {boolean} true if the damage actually applied (false while invulnerable/invincible)
    */
   takeDamage(amount) {
-    if (this._invulnTimer > 0) return false;
+    if (this._invulnTimer > 0 || this._invincibleTimer > 0) return false;
     this.health = Math.max(0, this.health - amount);
     this._hitFlash    = Config.player.hitFlashDuration;
     this._invulnTimer = Config.player.invulnDuration;
     return true;
+  }
+
+  /**
+   * (Re)start a full damage-immunity window from an 'invincible' PowerUp
+   * pickup — a flat reset, so a repeat pickup refreshes the timer rather
+   * than stacking with whatever's left of a previous one. See class doc.
+   * @param {number} duration
+   */
+  activateInvincibility(duration) {
+    this._invincibleTimer = duration;
   }
 
   /**
@@ -174,6 +200,7 @@ export class Player {
     this._age += dt;
     if (this._hitFlash > 0) this._hitFlash -= dt;
     if (this._invulnTimer > 0) this._invulnTimer -= dt;
+    if (this._invincibleTimer > 0) this._invincibleTimer = Math.max(0, this._invincibleTimer - dt);
     this._updateLowHealthWarning(dt);
 
     const { entryDuration } = Config.player;
@@ -223,6 +250,8 @@ export class Player {
       ],
       { x: this.x, y: this.y, scale, color, lineWidth, glowBlur, alpha }
     );
+
+    if (this._invincibleTimer > 0) this._renderInvincibleBubble(renderer);
   }
 
   // --- Health/damage ----------------------------------------------------------
@@ -241,6 +270,20 @@ export class Player {
   /** Fast on/off blink while `_invulnTimer` is counting down, so the grace window reads as a deliberate state. */
   _invulnBlinkAlpha() {
     return Math.floor(this._invulnTimer * 20) % 2 === 0 ? 1 : 0.35;
+  }
+
+  /**
+   * Pulsing ring encasing the whole ship while an 'invincible' PowerUp is
+   * active — see class doc and Config.powerUps.invincible. Same breathing-
+   * alpha formula as the low-health pulse/PowerUps.js's own pickup icons,
+   * just slower/shallower so it reads as "protective," not "urgent."
+   */
+  _renderInvincibleBubble(renderer) {
+    const cfg = Config.powerUps.invincible;
+    const alpha = 1 - cfg.bubblePulseDepth * (0.5 + 0.5 * Math.sin(this._age * cfg.bubblePulseSpeed));
+    renderer.strokeCircle(this.x, this.y, cfg.bubbleRadius, {
+      color: cfg.color, lineWidth: cfg.bubbleLineWidth, glowBlur: cfg.bubbleGlowBlur, alpha,
+    });
   }
 
   /**

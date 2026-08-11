@@ -93,19 +93,27 @@
  * Game.js wires this to simply construct a brand-new GameplayScene, so
  * "restart" is just "start over clean" rather than resetting state in place.
  *
- * PowerUp pickups (health/shield restores, or a temporary fire-power/
- * fire-rate boost, dropped by a fraction of enemy kills — see
- * WaveManager.checkPowerUpPickup) are tested against the player right
- * alongside `_checkPlayerHit` each frame; a health pickup's total is applied
- * here via `player.heal()` (mirroring `takeDamage`), a shield pickup heals
- * the barrier directly inside WaveManager itself, and a fireBoost pickup
- * (re)starts `_fireBoostTimer`. While that timer is running, the derived
- * multiplier (`Config.powerUps.fireBoost.multiplier`) is threaded into both
+ * PowerUp pickups (health/shield restores, a temporary fire-power/fire-rate
+ * boost, or temporary full damage immunity, dropped by a fraction of enemy
+ * kills — see WaveManager.checkPowerUpPickup) are tested against the player
+ * right alongside `_checkPlayerHit` each frame; a health pickup's total is
+ * applied here via `player.heal()` (mirroring `takeDamage`), a shield
+ * pickup heals the barrier directly inside WaveManager itself, a fireBoost
+ * pickup (re)starts `_fireBoostTimer`, and an invincible pickup calls
+ * `player.activateInvincibility` directly (Player owns that timer and the
+ * takeDamage gate itself — see Player.js's own class doc). While
+ * `_fireBoostTimer` is running, the derived multiplier
+ * (`Config.powerUps.fireBoost.multiplier`) is threaded into both
  * `Bullets.update` (fire rate) and `_checkCollisions`/`handleBulletHit`
  * (per-hit damage) each frame, and into the barrier's PWR readout too, so
  * the number on screen stays truthful about the player's current damage.
  * HUD also draws a right-middle "active" badge (see HUD._renderFireBoostIndicator)
  * fed the same `_fireBoostTimer`, so the buff is never running invisibly.
+ * Invincibility gets both a pulsing bubble drawn directly around the ship
+ * (see Player._renderInvincibleBubble) AND a matching left-middle countdown
+ * badge (see HUD._renderInvincibleIndicator, fed `player.invincibleTimer` —
+ * Player owns that timer itself, not this scene) — mirrored onto the
+ * opposite edge from fireBoost's badge so the two can never overlap.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
@@ -237,6 +245,7 @@ export class GameplayScene {
       const pickup = this._waveManager.checkPowerUpPickup(this.player);
       if (pickup.playerHeal > 0) this.player.heal(pickup.playerHeal);
       if (pickup.fireBoost) this._fireBoostTimer = Config.powerUps.fireBoost.duration;
+      if (pickup.invincible) this.player.activateInvincibility(Config.powerUps.invincible.duration);
       if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
       // Wave cleared AND all death effects finished → begin the next level intro
@@ -287,7 +296,7 @@ export class GameplayScene {
     this._waveManager?.render(this.renderer);
 
     this.renderer.setCameraOffset(0, 0);
-    this.hud.render(this.renderer, this.player.health, this._fireBoostTimer);
+    this.hud.render(this.renderer, this.player.health, this._fireBoostTimer, this.player.invincibleTimer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
     // Codex, then playback controls — both must sit on top of everything else,

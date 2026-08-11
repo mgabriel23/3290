@@ -1218,20 +1218,23 @@ export const Config = Object.freeze({
 	/**
 	 * Enemy-kill drops — a flat chance any real player-caused kill (see
 	 * WaveManager.handleBulletHit/_maybeDropPowerUp) leaves behind a small
-	 * falling pickup the player flies through to collect. Three kinds exist:
-	 * a player-health restore, a barrier-health ("shield") restore, and a
-	 * temporary fire-power + fire-rate boost — see PowerUps.js and
-	 * WaveManager.checkPowerUpPickup. A Diver/Weaver clone destroyed by
-	 * reaching the barrier (not a real kill — see _onDrifterBarrierHit)
-	 * never rolls for a drop.
+	 * falling pickup the player flies through to collect. Four kinds exist:
+	 * a player-health restore, a barrier-health ("shield") restore, a
+	 * temporary fire-power + fire-rate boost, and a temporary full damage
+	 * immunity — see PowerUps.js and WaveManager.checkPowerUpPickup. A
+	 * Diver/Weaver clone destroyed by reaching the barrier (not a real kill
+	 * — see _onDrifterBarrierHit) never rolls for a drop.
 	 */
 	powerUps: Object.freeze({
 		dropChance: 0.12, // fraction of real kills that drop something
-		// Of the drops that DO happen, these two fractions are shield/fireBoost
-		// pickups — health gets whatever's left (~0.33, roughly an even 3-way
-		// split). See _maybeDropPowerUp's cumulative-threshold roll.
-		shieldDropWeight: 0.34,
-		fireBoostDropWeight: 0.33,
+		// Of the drops that DO happen, these three fractions are shield/
+		// fireBoost/invincible pickups — health gets whatever's left (~0.25).
+		// invincible is weighted lowest on purpose — full damage immunity is
+		// the single strongest effect of the four, so it's deliberately the
+		// rarest. See _maybeDropPowerUp's cumulative-threshold roll.
+		shieldDropWeight: 0.3,
+		fireBoostDropWeight: 0.3,
+		invincibleDropWeight: 0.15,
 		fallSpeed: 90, // vp/sec, straight down — same for every kind
 		maxLife: 6, // seconds an uncollected pickup survives before despawning
 		hitRadius: 16, // vp — collision radius against the player, added to Player.hitRadius
@@ -1274,6 +1277,24 @@ export const Config = Object.freeze({
 			fillColor: "#2a2005",
 			multiplier: 1.25, // +25% player bullet damage AND fire rate while active — flat, never compounds; a repeat pickup only refreshes `duration` below, it never stacks a second multiplier on top
 			duration: 25, // seconds
+		}),
+		// Pale ice-white — reads as "protective energy field," distinct from
+		// every enemy hue and the other three pickups. Icon: a small hexagon
+		// ring, echoing the bubble shape the effect actually draws around the
+		// ship (see Player._renderInvincibleBubble). Temporary, not an instant
+		// effect: while `Player._invincibleTimer` is running, takeDamage
+		// ignores every hit outright (see Player.activateInvincibility) — a
+		// repeat pickup REFRESHES that timer back to the full duration, same
+		// no-stacking rule as fireBoost.
+		invincible: Object.freeze({
+			color: "#E8F6FF",
+			fillColor: "#182430",
+			duration: 15, // seconds of full damage immunity
+			bubbleRadius: 30, // vp — encases the ship's ~32x40vp silhouette (Config.player width/height at scale 0.5)
+			bubbleLineWidth: 2,
+			bubbleGlowBlur: 14,
+			bubblePulseSpeed: 2.5, // rad/sec — gentle "protective" breathing, slower/shallower than the low-health warning pulse
+			bubblePulseDepth: 0.3,
 		}),
 	}),
 
@@ -1943,6 +1964,23 @@ export const Config = Object.freeze({
 		fireBoost: Object.freeze({
 			x: 500, // vp — right side, inset from the edge so the glow doesn't clip
 			y: 480, // vp — vertical center of the 960-tall virtual screen
+			radius: 16,
+			lineWidth: 2,
+			glowBlur: 10,
+			labelFont: '400 9px "Audiowide", "Courier New", monospace',
+			valueFont: '400 15px "Audiowide", "Courier New", monospace',
+		}),
+
+		/**
+		 * Invincibility active indicator — mirrors fireBoost's badge onto the
+		 * LEFT-middle edge of the screen (same y, x mirrored across center) so
+		 * the two never overlap even when both buffs happen to be running at
+		 * once. Same reasoning as fireBoost: reuses Config.powerUps.invincible's
+		 * own color/icon language rather than a new, unrelated one.
+		 */
+		invincible: Object.freeze({
+			x: 40, // vp — left side, mirrors fireBoost's x=500 (540 - 500 = 40)
+			y: 480,
 			radius: 16,
 			lineWidth: 2,
 			glowBlur: 10,

@@ -14,11 +14,14 @@
  * uncollected pickup is simply lost, not carried over — no special handling
  * needed here for that.
  *
- * A third kind, 'fireBoost', is a temporary buff rather than an instant
- * restore — this pool only spawns/falls/gets collected like the other two;
- * PowerUps.js itself has no notion of "temporary," it's PowerUps-agnostic
- * about what collecting one actually does. Its icon is a small lightning-
- * bolt zigzag, distinct from health's cross and shield's diamond.
+ * A third kind, 'fireBoost', and a fourth, 'invincible', are temporary
+ * buffs rather than an instant restore — this pool only spawns/falls/gets
+ * collected like the other two; PowerUps.js itself has no notion of
+ * "temporary," it's PowerUps-agnostic about what collecting one actually
+ * does. fireBoost's icon is a small lightning-bolt zigzag; invincible's is
+ * a small hexagon ring, echoing the bubble shape it actually draws around
+ * the player (see Player._renderInvincibleBubble) — both distinct from
+ * health's cross and shield's diamond.
  */
 import { Config } from '../core/Config.js';
 import { diamondPath } from '../core/shapes.js';
@@ -30,7 +33,7 @@ export class PowerUps {
     this._x     = new Float32Array(MAX);
     this._y     = new Float32Array(MAX);
     this._age   = new Float32Array(MAX);
-    this._type  = new Array(MAX).fill('health'); // 'health' | 'shield' | 'fireBoost'
+    this._type  = new Array(MAX).fill('health'); // 'health' | 'shield' | 'fireBoost' | 'invincible'
     this._count = 0;
 
     // Local-space icon paths, centered on the origin — repositioned onto
@@ -46,11 +49,18 @@ export class PowerUps {
       points: [[-d * 0.3, -d], [d * 0.35, -d * 0.1], [-d * 0.1, d * 0.15], [d * 0.3, d]],
       closed: false,
     }];
+    // A small hexagon ring — six points evenly spaced around the origin.
+    const hexPts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 2;
+      hexPts.push([Math.cos(a) * d, Math.sin(a) * d]);
+    }
+    this._hexPath = { points: hexPts, closed: true };
   }
 
   /**
    * @param {number} x @param {number} y
-   * @param {'health'|'shield'|'fireBoost'} type
+   * @param {'health'|'shield'|'fireBoost'|'invincible'} type
    */
   spawn(x, y, type) {
     if (this._count >= MAX) return;
@@ -90,7 +100,7 @@ export class PowerUps {
    * Callers loop this to collect several pickups overlapping the same frame
    * — see WaveManager.checkPowerUpPickup.
    * @param {number} px @param {number} py @param {number} radius
-   * @returns {'health'|'shield'|'fireBoost'|null}
+   * @returns {'health'|'shield'|'fireBoost'|'invincible'|null}
    */
   checkPickup(px, py, radius) {
     const r = Config.powerUps.hitRadius + radius;
@@ -114,10 +124,10 @@ export class PowerUps {
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
     if (this._count === 0) return;
-    const { radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, health, shield, fireBoost } = Config.powerUps;
+    const { radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, health, shield, fireBoost, invincible } = Config.powerUps;
     for (let i = 0; i < this._count; i++) {
       const type  = this._type[i];
-      const cfg   = type === 'shield' ? shield : type === 'fireBoost' ? fireBoost : health;
+      const cfg   = type === 'shield' ? shield : type === 'fireBoost' ? fireBoost : type === 'invincible' ? invincible : health;
       const x = this._x[i], y = this._y[i];
       const alpha = 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._age[i] * pulseSpeed));
 
@@ -128,6 +138,8 @@ export class PowerUps {
         renderer.strokePaths([this._diamondPath], { x, y, color: cfg.color, lineWidth, alpha });
       } else if (type === 'fireBoost') {
         renderer.strokePaths(this._boltPath, { x, y, color: cfg.color, lineWidth, alpha, lineCap: 'round' });
+      } else if (type === 'invincible') {
+        renderer.strokePaths([this._hexPath], { x, y, color: cfg.color, lineWidth, alpha });
       } else {
         renderer.strokePaths(this._crossPaths, { x, y, color: cfg.color, lineWidth, alpha });
       }
