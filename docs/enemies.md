@@ -19,14 +19,14 @@ Same hull silhouette (a 10-point wireframe fighter), entrance glide → park →
 
 ## Drifter family — `js/entities/DrifterEnemy.js`
 
-One shared alien tentacle-creature body (bell-shaped head, 4 trailing tentacles, pulsing eyes), spawned in conga-line formations that all share one precomputed path. Each clone independently lashes a slow tracking projectile at the player on its own timer. Never rests or tracks the player positionally — just flies its path and exits.
+One shared alien tentacle-creature body (bell-shaped head, 4 trailing tentacles, pulsing eyes), spawned in conga-line formations that all share one precomputed path. Each clone independently lashes a slow tracking projectile at the player on its own timer. Never rests or tracks the player positionally — just flies its path and exits. Exception: Diver and Weaver (the two variants whose paths dive low enough to reach it) deal `barrierDamage` to the barrier and are destroyed on contact if not killed first — a one-shot impact, unlike Bouncer's repeated bounces.
 
 | # | Name | Path variant | `type` | Color | Base HP (+/level) | Formation | Behavior |
 |---|------|:---:|--------|-------|-------------------|:---:|----------|
 | 4 | **Drifter** | 1 | `drifter` | Amber `#FFB020` | 3 (+1) | 8 | Diagonal entry from a top corner → one full loop-the-loop → continues diagonally off the far bottom corner. |
 | 5 | **Sweeper** | 2 | `sweeper` | Magenta `#ff3ec9` | 3 (+1) | 15 | Straight horizontal row sweeps, stepping down and reversing direction at each screen edge. |
-| 6 | **Diver** | 3 | `diver` | Neon green `#39ff14` | 3 (+1) | 5 | V-shaped wedge that drops straight down, accelerating (kinematic fall), always facing the player. |
-| 7 | **Weaver** | 4 | `weaver` | Electric violet `#BF5FFF` | 3 (+1) | 6 | Descends straight down the screen while swaying side-to-side in a sine wave. |
+| 6 | **Diver** | 3 | `diver` | Neon green `#39ff14` | 3 (+1) | 5 | V-shaped wedge that drops straight down, accelerating (kinematic fall), always facing the player. Damages the barrier (10) and is destroyed on impact if it reaches it. |
+| 7 | **Weaver** | 4 | `weaver` | Electric violet `#BF5FFF` | 3 (+1) | 6 | Descends straight down the screen while swaying side-to-side in a sine wave. Damages the barrier (10) and is destroyed on impact if it reaches it. |
 
 ## Bouncer family — `js/entities/BouncerEnemy.js`
 

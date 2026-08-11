@@ -16,6 +16,14 @@
  * source (enemy bullets, sniper bullets, rocket proximity, drifter orb
  * arrival, bouncer contact) tested against the player once per frame,
  * returning total damage for GameplayScene to apply.
+ *
+ * Barrier damage is separate from player damage: Bouncer clones chip it on
+ * every bounce (persistent threat, never exits on its own — see
+ * BouncerEnemy.js), while Diver/Weaver clones (the only Drifter-family
+ * variants that dive low enough to reach it) deal a one-shot hit and are
+ * destroyed the instant they reach its surface (see DrifterEnemy.update) —
+ * both routed through the same `_onBarrierHit(x, damage)` closure below,
+ * with each attack source supplying its own damage value.
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
@@ -69,7 +77,7 @@ const _weaverFlashHulls  = _mkDrifterPool();
 export class WaveManager {
   /**
    * @param {number} level  1-based. Values beyond the config array reuse the last entry.
-   * @param {import('./Barrier.js').Barrier} barrier  used by Bouncer clones to detect/damage the barrier on impact
+   * @param {import('./Barrier.js').Barrier} barrier  used by Bouncer clones (repeated bounces) and Diver/Weaver clones (one-shot dive-through impact) to detect/damage the barrier
    * @param {import('./HUD.js').HUD} hud  score/gold are awarded directly onto it on kill — see handleBulletHit/_rewardFor
    * @param {import('../core/ScreenShake.js').ScreenShake} screenShake  triggered on barrier impacts — see the onBarrierHit closure below; kill-triggered shake/hit-stop instead lives in GameplayScene, driven by handleBulletHit's return value
    */
@@ -79,10 +87,26 @@ export class WaveManager {
     this._waveCfg = levels[Math.min(level - 1, levels.length - 1)];
     this._hud = hud;
     this._barrierSurfaceY = (x) => barrier.surfaceY(x);
-    this._onBarrierHit    = (x) => {
-      barrier.takeDamage(Config.enemy.bouncer.barrierDamage);
+    // `damage` is explicit per-call, not hardcoded here, since multiple
+    // attack sources now share this same callback with their own values —
+    // Bouncer's per-bounce chip damage, Diver/Weaver's one-shot impact.
+    this._onBarrierHit = (x, damage) => {
+      barrier.takeDamage(damage);
       barrier.pulse(x);
       screenShake.trigger(Config.screenShake.barrierTrauma);
+    };
+    // Diver/Weaver's own barrier-impact callback — layers that same barrier
+    // damage/pulse/shake on top of the death explosion + SFX their own kind
+    // already gets from a player-bullet kill (see handleBulletHit's
+    // `_drifterVarietyAssets` use), since a barrier impact destroys the
+    // clone too (unlike Bouncer, which bounces off and stays alive, so it
+    // never gets an explosion here). No score/gold reward, on purpose — this
+    // is the player FAILING to intercept it, not a kill.
+    this._onDrifterBarrierHit = (x, y, damage, variant) => {
+      this._onBarrierHit(x, damage);
+      const { particles, audio } = this._drifterVarietyAssets(variant);
+      particles.emit(x, y);
+      this._playExplosionSfx(audio.volume);
     };
 
     // Player bullet damage scales with level — see Config.player.damage/damagePerLevel.
@@ -201,13 +225,20 @@ export class WaveManager {
         e.update(dt, this._barrierSurfaceY, this._onBarrierHit);
         continue;
       }
+      if (e.type === 'drifter') {
+        // Diver/Weaver clones dive straight through where the barrier sits
+        // and damage + explode on impact (see DrifterEnemy.update and
+        // _onDrifterBarrierHit above) — drifter/sweeper ignore these two
+        // extra params entirely, same shape as Bouncer above.
+        e.update(dt, playerX, playerY, this._fireDrifterProjectile, this._barrierSurfaceY, this._onDrifterBarrierHit);
+        continue;
+      }
       let cb;
       if      (e.type === 'rocketeer') cb = this._fireRocket;
       else if (e.type === 'sniper')    cb = this._fireSniperBullet;
-      else if (e.type === 'drifter')   cb = this._fireDrifterProjectile;
       else                             cb = this._fireBullet;
-      // Sniper/Drifter's update() signatures simply don't read this 5th
-      // arg — only Enemy.js (Scout/Rocketeer) uses it, for repositioning.
+      // Sniper's update() signature simply doesn't read this 5th arg — only
+      // Enemy.js (Scout/Rocketeer) uses it, for repositioning.
       e.update(dt, playerX, playerY, cb, this._findClearRestPoint);
     }
 

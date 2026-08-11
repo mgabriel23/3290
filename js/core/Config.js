@@ -993,6 +993,12 @@ export const Config = Object.freeze({
 				// Same EffortScore as base Drifter/Sweeper/Weaver — same hits-to-kill.
 				points: 180,
 				gold: 9,
+
+				// Diver dives straight down and reaches the barrier if not killed
+				// first — a one-shot impact (the clone is destroyed on contact,
+				// unlike Bouncer which bounces off and keeps threatening) — see
+				// DrifterEnemy.update and WaveManager's onBarrierHit wiring.
+				barrierDamage: 10,
 			}),
 
 			/**
@@ -1035,6 +1041,12 @@ export const Config = Object.freeze({
 				// Same EffortScore as base Drifter/Sweeper/Diver — same hits-to-kill.
 				points: 180,
 				gold: 9,
+
+				// Weaver descends all the way down like Diver and reaches the
+				// barrier if not killed first — same one-shot-impact treatment,
+				// same damage. See DrifterEnemy.update and WaveManager's
+				// onBarrierHit wiring.
+				barrierDamage: 10,
 			}),
 		}),
 

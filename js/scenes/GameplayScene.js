@@ -80,6 +80,10 @@
  * behind a "GAME OVER" overlay (`_isGameOver`) — the same mutually-
  * exclusive full-screen-overlay shape the codex/pause buttons already
  * establish, starfield keeps drifting underneath, everything else stops.
+ * The barrier reaching 0 health (from Bouncer bounces or a Diver/Weaver
+ * impact — see WaveManager's onBarrierHit wiring) triggers the exact same
+ * `_triggerGameOver` — Earth's shield failing ends the run just as surely
+ * as the ship itself being destroyed.
  * The overlay's own fade-in is deliberately delayed by
  * `Config.gameOver.explosionDelay` (see `_renderGameOver`) so the
  * explosion gets a clear beat to read before "GAME OVER" appears. A tap
@@ -206,6 +210,7 @@ export class GameplayScene {
       this._waveManager.update(effectiveDt, this.player.x, this.player.y);
       this._checkCollisions();
       this._checkPlayerHit();
+      if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
       // Wave cleared AND all death effects finished → begin the next level intro
       if (this._waveManager.isDone) {
@@ -413,7 +418,11 @@ export class GameplayScene {
    * `_renderGameOver`'s `explosionDelay` for why the overlay itself waits.
    * Also plays the separate game-over stinger and stops the gameplay bg
    * music outright (via `onMusicStop` — see constructor doc for why this
-   * scene can't just pause it directly).
+   * scene can't just pause it directly). Called both when the player's own
+   * health reaches 0 (`_checkPlayerHit`) and when the barrier's does (see
+   * the `update()` call site) — always explodes at the player's position
+   * either way, rather than needing a second visual for "the barrier failed
+   * instead."
    */
   _triggerGameOver() {
     this._isGameOver  = true;

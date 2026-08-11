@@ -148,7 +148,7 @@ export class BouncerEnemy {
   /**
    * @param {number} dt
    * @param {(x: number) => number} barrierSurfaceY  y of the barrier's arc surface at a given x
-   * @param {(x: number) => void} onBarrierHit  called once each time this clone bounces off the barrier, with the impact x
+   * @param {(x: number, damage: number) => void} onBarrierHit  called once each time this clone bounces off the barrier, with the impact x and damage dealt
    */
   update(dt, barrierSurfaceY, onBarrierHit) {
     // Shield flash and hit flash are independent timers — order between them
@@ -189,7 +189,7 @@ export class BouncerEnemy {
     if (this.y + r >= surfaceY && this.vy > 0) {
       this.y  = surfaceY - r;
       this.vy = -Math.abs(this.vy);
-      onBarrierHit(this.x);
+      onBarrierHit(this.x, cfg.barrierDamage);
     }
   }
 

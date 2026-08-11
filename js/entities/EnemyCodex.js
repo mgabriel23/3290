@@ -138,13 +138,13 @@ const ENTRIES = [
     color: Config.enemy.drifter.diver.color,
     hp: Config.enemy.drifter.health, hpPerLevel: Config.enemy.drifter.healthPerLevel,
     points: Config.enemy.drifter.diver.points, gold: Config.enemy.drifter.diver.gold,
-    description: 'A V-shaped wedge that drops straight down, accelerating as it falls, always facing the player.' },
+    description: 'A V-shaped wedge that drops straight down, accelerating as it falls. Reaches the barrier and damages it if not destroyed first.' },
 
   { buildOrder: 7, type: 'weaver', name: 'Weaver', family: 'Drifter family', kind: 'drifter',
     color: Config.enemy.drifter.weaver.color,
     hp: Config.enemy.drifter.health, hpPerLevel: Config.enemy.drifter.healthPerLevel,
     points: Config.enemy.drifter.weaver.points, gold: Config.enemy.drifter.weaver.gold,
-    description: 'Descends straight down the screen while swaying side-to-side in a sine wave.' },
+    description: 'Descends the screen while swaying side-to-side. Also reaches the barrier and damages it if not destroyed first.' },
 
   { buildOrder: 8, type: 'bouncer', name: 'Bouncer', family: 'Bouncer family', kind: 'bouncer',
     color: Config.enemy.bouncer.color,

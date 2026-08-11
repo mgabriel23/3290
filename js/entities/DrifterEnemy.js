@@ -17,6 +17,14 @@
  * `onFire` launches a slow projectile from the tentacle tip toward that
  * locked point — WaveManager routes this into a shared projectile pool
  * (DrifterProjectiles) which handles travel and the AOE burst on arrival.
+ *
+ * Barrier impact: variants #3 (Diver) and #4 (Weaver) dive straight down
+ * through where the barrier sits — if the player doesn't kill a clone
+ * before it reaches the surface, it deals `barrierDamage` to the barrier
+ * and is destroyed on contact (a one-shot hit, unlike Bouncer which bounces
+ * off and keeps threatening). Variants #1/#2's paths never reach that low,
+ * so they're unaffected — see the `update` doc and WaveManager's
+ * `onBarrierHit` wiring.
  */
 import { Config } from '../core/Config.js';
 import { applyHit, tickDeathState } from './EnemyCombat.js';
@@ -287,8 +295,10 @@ export class DrifterEnemy {
    * @param {number} playerX
    * @param {number} playerY
    * @param {(ox:number, oy:number, tx:number, ty:number) => void} onFire
+   * @param {(x: number) => number} barrierSurfaceY  y of the barrier's arc surface at a given x — only read by Diver/Weaver (variants #3/#4), the only paths that dive low enough to reach it
+   * @param {(x: number, y: number, damage: number, variant: number) => void} onBarrierHit  called once if a Diver/Weaver clone reaches the barrier, with the impact point, damage dealt, and this clone's variant (so WaveManager can trigger that variant's own explosion/SFX)
    */
-  update(dt, playerX, playerY, onFire) {
+  update(dt, playerX, playerY, onFire, barrierSurfaceY, onBarrierHit) {
     const cfg = this._cfg;
     this._age += dt;
     if (tickDeathState(this, dt)) return;
@@ -341,6 +351,20 @@ export class DrifterEnemy {
       return;
     }
     this._visible = true;
+
+    // ── Barrier impact (Diver/Weaver only) ────────────────────────────────────
+    // These two variants dive straight down through where the barrier sits;
+    // drifter/sweeper's paths never reach that low, so they're excluded.
+    // Unlike Bouncer (which bounces off and keeps threatening), the clone is
+    // destroyed the instant it reaches the surface — a one-shot impact.
+    if (this._variant === 3 || this._variant === 4) {
+      const surfaceY = barrierSurfaceY(x);
+      if (y + this.hitRadius >= surfaceY) {
+        onBarrierHit(x, y, this._palette.barrierDamage, this._variant);
+        this.alive = false;
+        return;
+      }
+    }
 
     // ── Tentacle-lash attack state machine ────────────────────────────────────
     const c = this._cosA, s = this._sinA;
