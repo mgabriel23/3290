@@ -1971,6 +1971,17 @@ export const Config = Object.freeze({
 		// the target UI element instead of covering it too, so it reads as lit
 		// up rather than sitting under the same flat dark overlay as everything else.
 		spotlightPadding: 16,
+		// A soft, pulsing glow traced along that same cutout boundary (see
+		// TutorialScene._renderSpotlightGlow) — layered UNDER the crisp corner
+		// brackets, so the lit window itself reads as glowing rather than just
+		// "the dim doesn't cover this part." Much bigger blur and a deeper,
+		// faster pulse than the brackets use, on purpose — this is meant to be
+		// the obviously-animated, eye-catching part of the highlight, not a
+		// steady/static frame.
+		spotlightGlowLineWidth: 3,
+		spotlightGlowBlur: 26,
+		spotlightGlowPulseSpeed: 3.2,
+		spotlightGlowPulseDepth: 0.5,
 		progressFont: '400 10px "Audiowide", "Courier New", monospace',
 		progressColor: "#4DEFFF",
 		blip: Object.freeze({

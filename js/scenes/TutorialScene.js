@@ -24,12 +24,15 @@
  * drawn around that UI element's bounding box, PLUS a spotlight cutout — the
  * dim overlay is punched out in a padded window around that same box (see
  * `_renderDimOverlay`) so the target reads as lit up rather than sitting
- * under the same flat dark veil as the rest of the screen. Both the bracket
- * and the cutout frame are built once in the constructor from static box
- * literals (only alpha animates per frame). Hints with no specific
- * on-screen target (the movement hint, which uses the orbiting hand demo
- * instead) simply carry `highlight: null` and fall back to a plain
- * full-screen dim.
+ * under the same flat dark veil as the rest of the screen. A second, much
+ * softer glow (`_renderSpotlightGlow`) is traced along that same cutout
+ * boundary, with a bigger blur and a deeper/faster pulse than the brackets
+ * use, so the spotlight itself reads as an obviously animated, glowing
+ * highlight rather than a static hole in the dim. All three (bracket, dim
+ * cutout, glow) are built once in the constructor from static box literals
+ * (only alpha animates per frame). Hints with no specific on-screen target
+ * (the movement hint, which uses the orbiting hand demo instead) simply
+ * carry `highlight: null` and fall back to a plain full-screen dim.
  */
 import { Config } from '../core/Config.js';
 import { Barrier } from '../entities/Barrier.js';
@@ -59,17 +62,24 @@ const CODEX_BTN = Config.codex.button;
 const MUTE_BTN = Config.playbackControls.muteButton;
 const PAUSE_BTN = Config.playbackControls.pauseButton;
 
-const SCORE_BOX = { left: HUD_MARGIN - 8, top: HUD_MARGIN - 8, right: HUD_MARGIN + 150, bottom: HUD_MARGIN + 72 };
-const GOLD_BOX  = { left: V_W - HUD_MARGIN - 150, top: HUD_MARGIN - 8, right: V_W - HUD_MARGIN + 8, bottom: HUD_MARGIN + 56 };
-// Symmetric padding on both sides of the bar's true center (HUD_HEALTH.x) —
-// wide enough to cover the low-health "!" icon (which only ever appears on
-// the left) without making the box itself lean off-center.
-const HEALTH_SIDE_PAD = HUD_HEALTH.iconOffsetX + 12;
+// Right/bottom edges sized to the panels' real worst-case text extent (a
+// 5-6 digit score/gold value plus the "BEST" line, in the wide Audiowide
+// display font) rather than a flat oversized guess — tight enough to read
+// as "framing this content" instead of "framing this general area", while
+// still leaving a visible few-px pad on every edge.
+const SCORE_BOX = { left: HUD_MARGIN - 6, top: HUD_MARGIN - 6, right: HUD_MARGIN + 110, bottom: HUD_MARGIN + 70 };
+const GOLD_BOX  = { left: V_W - HUD_MARGIN - 110, top: HUD_MARGIN - 6, right: V_W - HUD_MARGIN + 6, bottom: HUD_MARGIN + 54 };
+// Symmetric padding on both sides of the bar's true center (HUD_HEALTH.x).
+// No need to reserve extra room for the low-health "!" icon here — this
+// scene always renders the HUD preview at full health (see render()'s own
+// note), so that icon never actually appears; the pad is just breathing
+// room around the bar and its label.
+const HEALTH_PAD = 14;
 const HEALTH_BOX = {
-  left: HUD_HEALTH.x - HUD_HEALTH.width / 2 - HEALTH_SIDE_PAD,
-  top: HUD_HEALTH.y - 14,
-  right: HUD_HEALTH.x + HUD_HEALTH.width / 2 + HEALTH_SIDE_PAD,
-  bottom: HUD_HEALTH.y + HUD_HEALTH.height + 40,
+  left: HUD_HEALTH.x - HUD_HEALTH.width / 2 - HEALTH_PAD,
+  top: HUD_HEALTH.y - 8,
+  right: HUD_HEALTH.x + HUD_HEALTH.width / 2 + HEALTH_PAD,
+  bottom: HUD_HEALTH.y + HUD_HEALTH.height + 26,
 };
 const BARRIER_BOX = { left: V_W / 2 - 70, top: BARRIER_PEAK_Y + 16, right: V_W / 2 + 70, bottom: BARRIER_PEAK_Y + 66 };
 // A smaller outer pad than SCORE/GOLD/HEALTH use — the buttons themselves
@@ -219,6 +229,7 @@ export class TutorialScene {
     // Dimming overlay fades in over 0.3 s as hints begin — avoids a jarring pop
     this._renderDimOverlay(Math.min((this._age - hintStartDelay) / 0.3, 1) * overlayAlpha);
 
+    this._renderSpotlightGlow();
     this._renderHint();
     this._renderHighlight();
     this._renderControlsDemo();
@@ -336,6 +347,28 @@ export class TutorialScene {
   }
 
   /**
+   * Soft, pulsing glow traced along the spotlight cutout's own boundary —
+   * drawn between the dim veil and the crisp corner brackets, so the lit
+   * window itself visibly glows rather than just "the dim doesn't cover
+   * this part." Much bigger glowBlur and a deeper/faster pulse than the
+   * brackets use (see Config.tutorial's spotlightGlow* fields), on purpose —
+   * this is meant to be the obviously-animated part of the highlight.
+   */
+  _renderSpotlightGlow() {
+    const glow = this._hintSpotlightGlow[this._hintIndex];
+    if (!glow) return;
+
+    const { highlightColor, spotlightGlowLineWidth, spotlightGlowBlur, spotlightGlowPulseSpeed, spotlightGlowPulseDepth } = Config.tutorial;
+    const fadeIn = Math.min(this._hintAge / 0.5, 1);
+    const pulse = 1 - spotlightGlowPulseDepth * (0.5 + 0.5 * Math.sin(this._hintAge * spotlightGlowPulseSpeed));
+
+    this.renderer.strokePaths(glow, {
+      color: highlightColor, lineWidth: spotlightGlowLineWidth,
+      glowBlur: spotlightGlowBlur, glowColor: highlightColor, alpha: fadeIn * pulse,
+    });
+  }
+
+  /**
    * Pulsing 4-corner bracket frame around the current hint's target UI
    * element (null for hints with no specific on-screen target, e.g. the
    * movement hint). The box itself is static — pre-built in _initHints —
@@ -384,6 +417,7 @@ export class TutorialScene {
     this._hintFullLines = [];  // pre-joined strings — avoids slice+join allocations on fully-revealed lines
     this._hintHighlights = [];
     this._hintDimFrames = [];
+    this._hintSpotlightGlow = [];
     this._hintTapPromptY = [];
 
     for (const hint of HINTS) {
@@ -409,6 +443,7 @@ export class TutorialScene {
       if (!hint.highlight) {
         this._hintHighlights.push(null);
         this._hintDimFrames.push(null);
+        this._hintSpotlightGlow.push(null);
         continue;
       }
       const { left, top, right, bottom } = hint.highlight;
@@ -432,6 +467,9 @@ export class TutorialScene {
         rectPath(0, sTop, sLeft, sBottom),    // left of the window
         rectPath(sRight, sTop, V_W, sBottom), // right of the window
       ]);
+
+      // Glow ring traced along that exact cutout boundary — see _renderSpotlightGlow.
+      this._hintSpotlightGlow.push([rectPath(sLeft, sTop, sRight, sBottom)]);
     }
   }
 
