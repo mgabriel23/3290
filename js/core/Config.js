@@ -1649,6 +1649,13 @@ export const Config = Object.freeze({
 	 */
 	camera: Object.freeze({
 		followFactor: 0.07, // fraction of the player's offset from horizontal center
+		// Convergence rate (1/sec) GameplayScene._updateCameraFollow uses to
+		// exponentially ease the pan toward its target instead of snapping to
+		// it every frame — see that method's doc for why an unsmoothed pan
+		// made enemy attacks in flight (bullets/rockets/the sniper's laser
+		// telegraph) look like they were bending away from the player. Higher
+		// = snappier/closer to instant, lower = more trailing lag.
+		followSmoothing: 6,
 	}),
 
 	/**

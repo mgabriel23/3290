@@ -44,6 +44,22 @@
  * so the thing the player is defending reads as a stationary emplacement,
  * not something drifting with the ship.
  *
+ * The pan itself is exponentially smoothed (`_updateCameraFollow`, driven
+ * off `_cameraX`) rather than snapped straight to its target every frame.
+ * Every enemy attack's aim/homing math is pure world-space and entirely
+ * unaffected by the camera (enemies, bullets, rockets, and the player are
+ * all panned by the exact same offset each frame, so their positions
+ * relative to each other never change) — but a bullet, rocket, or the
+ * sniper's laser telegraph takes several frames to reach its target, and an
+ * unsmoothed pan recomputed fresh every frame from the player's current x
+ * jitters with every small wobble of player movement. Riding on top of that
+ * jitter, an in-flight attack's straight-line path visually read as bent or
+ * misaimed relative to the player — worst while the player kept moving,
+ * exactly when the pan was changing the most. Smoothing only the camera
+ * (not the player, which stays instant — Player.moveTo still snaps with no
+ * easing) removes that visual jitter without adding any lag to the ship's
+ * own controls.
+ *
  * No border/frame hides the pan's trailing edge — instead `render()` clears
  * the whole canvas at a FIXED (0, 0) transform, before the pan is applied
  * for the rest of the world layer. Renderer.clear's fill rect is sized to
@@ -105,6 +121,7 @@ export class GameplayScene {
     this._playback = new PlaybackControls();
     this._screenShake = new ScreenShake();
     this._hitStopTimer = 0; // seconds of gameplay-time freeze remaining — see update()'s effectiveDt
+    this._cameraX = 0; // smoothed camera-follow pan offset — see _updateCameraFollow
     this._age = 0; // seconds since this scene started — drives the starfield fade-in
     this._pointerDown = false;
 
@@ -148,6 +165,7 @@ export class GameplayScene {
     if (this._codex.isOpen || this._playback.isPaused) return; // frozen — nothing gameplay-related advances
 
     this._screenShake.update(dt);
+    this._updateCameraFollow(dt);
     this._hitStopTimer = Math.max(0, this._hitStopTimer - dt);
     const effectiveDt = this._hitStopTimer > 0 ? 0 : dt;
 
@@ -229,19 +247,26 @@ export class GameplayScene {
     if (this._isGameOver) this._renderGameOver();
   }
 
-  /**
-   * A small, direct fraction of the player's horizontal offset from
-   * center, in the opposite direction — panning the camera toward where
-   * the player is makes the world slide the other way, the same as
-   * turning your head right makes a room appear to slide left. No
-   * smoothing: the player's own movement is already instant (Player.moveTo
-   * snaps with no easing), so this stays consistent with that rather than
-   * introducing the only damped motion in the game.
-   */
+  /** The current smoothed camera-follow pan — see class doc and `_updateCameraFollow`. */
   _cameraFollowX() {
+    return this._cameraX;
+  }
+
+  /**
+   * Ease `_cameraX` toward a small, direct fraction of the player's
+   * horizontal offset from center, in the opposite direction — panning the
+   * camera toward where the player is makes the world slide the other way,
+   * the same as turning your head right makes a room appear to slide left.
+   * `1 - exp(-rate*dt)` is the standard frame-rate-independent convergence
+   * factor (same visual smoothing at 30fps or 144fps, unlike a fixed
+   * per-frame lerp fraction) — see class doc for why this needs to be
+   * damped rather than recomputed fresh every frame.
+   */
+  _updateCameraFollow(dt) {
     const { width: vW } = Config.virtual;
-    const offsetFromCenter = this.player.x - vW / 2;
-    return -offsetFromCenter * Config.camera.followFactor;
+    const target = -(this.player.x - vW / 2) * Config.camera.followFactor;
+    const rate = Config.camera.followSmoothing;
+    this._cameraX += (target - this._cameraX) * (1 - Math.exp(-rate * dt));
   }
 
   handlePointerDown(x, y) {
