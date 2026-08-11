@@ -1603,12 +1603,12 @@ export const Config = Object.freeze({
 	 *     synchronously from the real swipe gesture, still safely inside
 	 *     its user-gesture activation window — see Game._startPrologueMusic),
 	 *     and playing continuously through the ENTIRE prologue scene —
-	 *     cinematic and the title/PLAY card ("the main menu") alike — and
-	 *     straight through the tutorial too (which has no theme of its
-	 *     own), only stopping once actual gameplay begins.
+	 *     cinematic and the title/PLAY card ("the main menu") alike — right
+	 *     up until PLAY is actually tapped (Game._startTutorial, called once
+	 *     the title card's exit-fade finishes), rather than continuing to
+	 *     play underneath the tutorial that follows.
 	 *   - gameplay's theme, started once the tutorial's last hint is
-	 *     dismissed (Game._startGameplay) — the same place that stops the
-	 *     prologue's theme, so the two are never both playing at once.
+	 *     dismissed (Game._startGameplay).
 	 */
 	audio: Object.freeze({
 		prologueThemeSrc: "assets/audio/bg-prologue.mp3",

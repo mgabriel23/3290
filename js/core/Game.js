@@ -139,11 +139,15 @@ export class Game {
 
   /**
    * Swap the cinematic out for the tutorial once the player taps PLAY on
-   * the title card. The prologue's own music keeps playing straight
-   * through the tutorial too (it has no theme of its own) — it's only
-   * stopped once actual gameplay begins, in `_startGameplay`.
+   * the title card. The prologue's own music has been playing continuously
+   * since the intro swipe, straight through the cinematic AND the
+   * title/PLAY card ("the main menu") — this is where it finally stops,
+   * right as PLAY's tap actually lands (`onContinue` fires once the title
+   * card's exit-fade finishes — see PrologueScene._updateExitFade), so it
+   * doesn't keep playing underneath the entire tutorial too.
    */
   _startTutorial() {
+    this._prologueAudio?.pause();
     try {
       this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
     } catch (err) {
@@ -161,12 +165,6 @@ export class Game {
    * construction a clean run (full health, level 1, zero score).
    */
   _startGameplay() {
-    // The prologue's own music has been playing continuously since the
-    // intro swipe, straight through the cinematic, the title/PLAY card,
-    // and the tutorial — this is the one place it finally stops, right as
-    // gameplay's own separate theme (below) is about to take over. A
-    // harmless no-op on the restart path, where it's already stopped.
-    this._prologueAudio?.pause();
     try {
       // Start background music here — we're inside the user-gesture call chain
       // (last tutorial hint tap → onContinue → here), so audio.play() is permitted.
