@@ -3,9 +3,11 @@
  * The player's auto-firing energy bolt stream.
  *
  * Fires a new bolt at Config.bullet.fireRate once per second while the
- * player's ship is ready (entry animation complete). Each bolt moves
- * straight up at Config.bullet.speed and is culled when it exits the
- * top of the screen.
+ * player's ship is ready (entry animation complete), scaled by an optional
+ * fireRateMultiplier GameplayScene passes into `update` while a fireBoost
+ * PowerUp is active (see Config.powerUps.fireBoost) — 1 (no change) the
+ * rest of the time. Each bolt moves straight up at Config.bullet.speed and
+ * is culled when it exits the top of the screen.
  *
  * All bullet positions live in typed arrays for cache efficiency; all
  * path geometry is pre-allocated in a pool and mutated in place each
@@ -51,8 +53,11 @@ export class Bullets {
    * Advance all bullets by `dt` seconds and auto-fire if the player is ready.
    * @param {number} dt
    * @param {{ x: number, y: number, ready: boolean }} player
+   * @param {number} [fireRateMultiplier]  applied on top of Config.bullet.fireRate
+   *   — GameplayScene passes >1 while a fireBoost PowerUp is active (see
+   *   Config.powerUps.fireBoost), 1 otherwise.
    */
-  update(dt, player) {
+  update(dt, player, fireRateMultiplier = 1) {
     const { fireRate, speed, spawnOffsetY } = Config.bullet;
 
     // Only count down and fire once the ship has landed — prevents the
@@ -62,7 +67,7 @@ export class Bullets {
       this._cooldown -= dt;
       if (this._cooldown <= 0) {
         this._fire(player.x, player.y + spawnOffsetY);
-        this._cooldown += 1 / fireRate; // += preserves sub-frame accuracy
+        this._cooldown += 1 / (fireRate * fireRateMultiplier); // += preserves sub-frame accuracy
       }
     }
 

@@ -1218,16 +1218,21 @@ export const Config = Object.freeze({
 	/**
 	 * Enemy-kill drops — a flat chance any real player-caused kill (see
 	 * WaveManager.handleBulletHit/_maybeDropPowerUp) leaves behind a small
-	 * falling pickup the player flies through to collect. Only two kinds
-	 * exist: a player-health restore and a barrier-health ("shield") restore
-	 * — see PowerUps.js and WaveManager.checkPowerUpPickup. A Diver/Weaver
-	 * clone destroyed by reaching the barrier (not a real kill — see
-	 * _onDrifterBarrierHit) never rolls for a drop.
+	 * falling pickup the player flies through to collect. Three kinds exist:
+	 * a player-health restore, a barrier-health ("shield") restore, and a
+	 * temporary fire-power + fire-rate boost — see PowerUps.js and
+	 * WaveManager.checkPowerUpPickup. A Diver/Weaver clone destroyed by
+	 * reaching the barrier (not a real kill — see _onDrifterBarrierHit)
+	 * never rolls for a drop.
 	 */
 	powerUps: Object.freeze({
 		dropChance: 0.12, // fraction of real kills that drop something
-		shieldDropWeight: 0.5, // of the drops that DO happen, this fraction are shield pickups (the rest are health)
-		fallSpeed: 90, // vp/sec, straight down — same for both kinds
+		// Of the drops that DO happen, these two fractions are shield/fireBoost
+		// pickups — health gets whatever's left (~0.33, roughly an even 3-way
+		// split). See _maybeDropPowerUp's cumulative-threshold roll.
+		shieldDropWeight: 0.34,
+		fireBoostDropWeight: 0.33,
+		fallSpeed: 90, // vp/sec, straight down — same for every kind
 		maxLife: 6, // seconds an uncollected pickup survives before despawning
 		hitRadius: 16, // vp — collision radius against the player, added to Player.hitRadius
 		poolSize: 8,
@@ -1255,6 +1260,20 @@ export const Config = Object.freeze({
 			color: "#4DEFFF",
 			fillColor: "#0a2530",
 			healAmount: 20, // Barrier HP restored — see Config.barrier.maxHealth
+		}),
+		// Warm gold — reads as "energy/attack", distinct from every enemy hue
+		// and the other two pickups. Icon: a small lightning-bolt zigzag.
+		// Temporary, not an instant restore: boosts both player bullet damage
+		// (WaveManager._playerDamage) and Bullets' fire rate by the same
+		// `multiplier` for `duration` seconds — see GameplayScene's
+		// `_fireBoostTimer`. A repeat pickup while one is already running
+		// REFRESHES the timer back to the full duration rather than stacking
+		// (either additively or multiplicatively) with it.
+		fireBoost: Object.freeze({
+			color: "#FFD24D",
+			fillColor: "#2a2005",
+			multiplier: 1.25, // +25% player bullet damage AND fire rate while active — flat, never compounds; a repeat pickup only refreshes `duration` below, it never stacks a second multiplier on top
+			duration: 25, // seconds
 		}),
 	}),
 
@@ -1911,6 +1930,24 @@ export const Config = Object.freeze({
 			iconOffsetX: 12, // vp to the left of the bar's left edge
 			iconFont: '400 16px "Audiowide", "Courier New", monospace',
 			iconGlowBlur: 8,
+		}),
+
+		/**
+		 * Fire-boost active indicator — a small badge on the right-middle edge
+		 * of the screen, shown only while a fireBoost PowerUp is active (see
+		 * GameplayScene._fireBoostTimer). Deliberately reuses
+		 * Config.powerUps.fireBoost's own color and icon language (a lightning
+		 * bolt, matching PowerUps.js) so the badge reads as "the thing you just
+		 * picked up is still active," not a new, unrelated icon.
+		 */
+		fireBoost: Object.freeze({
+			x: 500, // vp — right side, inset from the edge so the glow doesn't clip
+			y: 480, // vp — vertical center of the 960-tall virtual screen
+			radius: 16,
+			lineWidth: 2,
+			glowBlur: 10,
+			labelFont: '400 9px "Audiowide", "Courier New", monospace',
+			valueFont: '400 15px "Audiowide", "Courier New", monospace',
 		}),
 	}),
 

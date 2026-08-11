@@ -93,11 +93,19 @@
  * Game.js wires this to simply construct a brand-new GameplayScene, so
  * "restart" is just "start over clean" rather than resetting state in place.
  *
- * PowerUp pickups (health/shield restores dropped by a fraction of enemy
- * kills — see WaveManager.checkPowerUpPickup) are tested against the player
- * right alongside `_checkPlayerHit` each frame; a health pickup's total is
- * applied here via `player.heal()` (mirroring `takeDamage`), while a shield
- * pickup heals the barrier directly inside WaveManager itself.
+ * PowerUp pickups (health/shield restores, or a temporary fire-power/
+ * fire-rate boost, dropped by a fraction of enemy kills — see
+ * WaveManager.checkPowerUpPickup) are tested against the player right
+ * alongside `_checkPlayerHit` each frame; a health pickup's total is applied
+ * here via `player.heal()` (mirroring `takeDamage`), a shield pickup heals
+ * the barrier directly inside WaveManager itself, and a fireBoost pickup
+ * (re)starts `_fireBoostTimer`. While that timer is running, the derived
+ * multiplier (`Config.powerUps.fireBoost.multiplier`) is threaded into both
+ * `Bullets.update` (fire rate) and `_checkCollisions`/`handleBulletHit`
+ * (per-hit damage) each frame, and into the barrier's PWR readout too, so
+ * the number on screen stays truthful about the player's current damage.
+ * HUD also draws a right-middle "active" badge (see HUD._renderFireBoostIndicator)
+ * fed the same `_fireBoostTimer`, so the buff is never running invisibly.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
@@ -144,6 +152,14 @@ export class GameplayScene {
     this._cameraX = 0; // smoothed camera-follow pan offset — see _updateCameraFollow
     this._age = 0; // seconds since this scene started — drives the starfield fade-in
     this._pointerDown = false;
+
+    // Temporary fire-power/fire-rate boost from a fireBoost PowerUp pickup
+    // (see Config.powerUps.fireBoost) — seconds remaining; 0 = inactive. A
+    // repeat pickup refreshes this back to the full duration rather than
+    // stacking. Ticks down in update() alongside _age/_levelAge (game time,
+    // paused during hit-stop), and its derived multiplier is applied to both
+    // Bullets' fire rate and WaveManager's per-hit damage each frame.
+    this._fireBoostTimer = 0;
 
     // Game-over overlay — see class doc's "Player damage" note.
     this._isGameOver  = false;
@@ -198,6 +214,7 @@ export class GameplayScene {
 
     this._age    += effectiveDt;
     this._levelAge += effectiveDt;
+    this._fireBoostTimer = Math.max(0, this._fireBoostTimer - effectiveDt);
 
     // Transition from intro → active once the indicator animation is done
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
@@ -212,12 +229,14 @@ export class GameplayScene {
 
     // Bullets and enemies are suppressed during the level intro.
     if (this._levelState === 'active') {
-      this.bullets.update(effectiveDt, this.player);
+      const fireBoostMultiplier = this._fireBoostTimer > 0 ? Config.powerUps.fireBoost.multiplier : 1;
+      this.bullets.update(effectiveDt, this.player, fireBoostMultiplier);
       this._waveManager.update(effectiveDt, this.player.x, this.player.y);
-      this._checkCollisions();
+      this._checkCollisions(fireBoostMultiplier);
       this._checkPlayerHit();
-      const heal = this._waveManager.checkPowerUpPickup(this.player);
-      if (heal > 0) this.player.heal(heal);
+      const pickup = this._waveManager.checkPowerUpPickup(this.player);
+      if (pickup.playerHeal > 0) this.player.heal(pickup.playerHeal);
+      if (pickup.fireBoost) this._fireBoostTimer = Config.powerUps.fireBoost.duration;
       if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
       // Wave cleared AND all death effects finished → begin the next level intro
@@ -257,7 +276,8 @@ export class GameplayScene {
     this._renderStarfield();
 
     this.renderer.setCameraOffset(0, 0);
-    const playerDamage = Config.player.damage + (this._level - 1) * Config.player.damagePerLevel;
+    const fireBoostMultiplier = this._fireBoostTimer > 0 ? Config.powerUps.fireBoost.multiplier : 1;
+    const playerDamage = (Config.player.damage + (this._level - 1) * Config.player.damagePerLevel) * fireBoostMultiplier;
     this.barrier.render(this.renderer, playerDamage, this._level);
 
     this.renderer.setCameraOffset(worldOffsetX, shake.y);
@@ -267,7 +287,7 @@ export class GameplayScene {
     this._waveManager?.render(this.renderer);
 
     this.renderer.setCameraOffset(0, 0);
-    this.hud.render(this.renderer, this.player.health);
+    this.hud.render(this.renderer, this.player.health, this._fireBoostTimer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
     // Codex, then playback controls — both must sit on top of everything else,
@@ -383,13 +403,14 @@ export class GameplayScene {
    * `Math.max` (not `+=`) on the timer means several kills in the same frame
    * extend the freeze to the configured duration rather than stacking it
    * into a longer one.
+   * @param {number} [damageMultiplier]  see update()'s fireBoostMultiplier
    */
-  _checkCollisions() {
+  _checkCollisions(damageMultiplier = 1) {
     const enemies = this._waveManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       if (this.bullets.checkHit(e.x, e.y, e.hitRadius)) {
-        const killed = this._waveManager.handleBulletHit(e);
+        const killed = this._waveManager.handleBulletHit(e, damageMultiplier);
         if (killed) {
           this._screenShake.trigger(Config.screenShake.killTrauma);
           this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);

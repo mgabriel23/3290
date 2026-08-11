@@ -25,9 +25,10 @@
  * both routed through the same `_onBarrierHit(x, damage)` closure below,
  * with each attack source supplying its own damage value.
  *
- * A flat chance on every real kill also drops a PowerUps pickup (health or
- * shield restore — see Config.powerUps, PowerUps.js, `_maybeDropPowerUp`,
- * and `checkPowerUpPickup`, the pickup-side mirror of `checkPlayerHit`).
+ * A flat chance on every real kill also drops a PowerUps pickup (health
+ * restore, shield restore, or a temporary fire-power/fire-rate boost — see
+ * Config.powerUps, PowerUps.js, `_maybeDropPowerUp`, and
+ * `checkPowerUpPickup`, the pickup-side mirror of `checkPlayerHit`).
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
@@ -454,10 +455,13 @@ export class WaveManager {
 
   /**
    * Called by GameplayScene when a player bullet hits an enemy.
+   * @param {number} [damageMultiplier]  applied on top of `_playerDamage` —
+   *   GameplayScene passes >1 while a fireBoost PowerUp is active (see
+   *   Config.powerUps.fireBoost), 1 otherwise.
    * @returns {boolean} true if this hit was fatal — GameplayScene uses this to trigger kill-feedback (screen shake, hit-stop)
    */
-  handleBulletHit(enemy) {
-    const killed = enemy.hit(this._playerDamage);
+  handleBulletHit(enemy, damageMultiplier = 1) {
+    const killed = enemy.hit(this._playerDamage * damageMultiplier);
     if (killed) {
       const reward = this._rewardFor(enemy);
       this._hud.score += reward.points;
@@ -494,10 +498,19 @@ export class WaveManager {
    * destroyed by reaching the barrier (routed through _onDrifterBarrierHit
    * instead, which never calls this) can't drop one — that's the player
    * failing to intercept it, not a kill worth rewarding.
+   *
+   * Type is a cumulative-threshold roll across the three kinds — shield
+   * first, then fireBoost, health taking whatever's left — not three
+   * independent rolls, so the three weights always sum to a clean 100%
+   * regardless of their individual values.
    */
   _maybeDropPowerUp(x, y) {
     if (Math.random() >= Config.powerUps.dropChance) return;
-    const type = Math.random() < Config.powerUps.shieldDropWeight ? 'shield' : 'health';
+    const { shieldDropWeight, fireBoostDropWeight } = Config.powerUps;
+    const roll = Math.random();
+    const type = roll < shieldDropWeight ? 'shield'
+      : roll < shieldDropWeight + fireBoostDropWeight ? 'fireBoost'
+      : 'health';
     this._powerUps.spawn(x, y, type);
   }
 
@@ -571,23 +584,30 @@ export class WaveManager {
    * Called once per frame by GameplayScene — every active PowerUps pickup
    * tested against `player`'s circle (see PowerUps.checkPickup). A shield
    * pickup heals the barrier directly (WaveManager already holds a
-   * `_barrier` reference for onBarrierHit); a health pickup can't be applied
-   * the same way — WaveManager never holds a `player` instance, only its x/y
-   * each frame — so the total is returned instead, for GameplayScene to
-   * apply via `player.heal()`, the same shape checkPlayerHit already uses
-   * for damage/`player.takeDamage()`. Loops so several pickups collected in
-   * the same frame are all applied, not just the first.
+   * `_barrier` reference for onBarrierHit). A health pickup, and a fireBoost
+   * pickup, can't be applied the same way — WaveManager never holds a
+   * `player` instance (only its x/y each frame) and doesn't own the
+   * fire-rate/damage-multiplier timer either (that spans both Bullets and
+   * this class — see GameplayScene's `_fireBoostTimer`) — so both are
+   * reported back in the returned object for GameplayScene to apply, the
+   * same shape checkPlayerHit already uses for damage/`player.takeDamage()`.
+   * Loops so several pickups collected in the same frame are all applied,
+   * not just the first.
    * @param {{ x: number, y: number, hitRadius: number }} player
-   * @returns {number} total player health to restore this frame (0 if none)
+   * @returns {{ playerHeal: number, fireBoost: boolean }} playerHeal — total
+   *   player health to restore this frame (0 if none); fireBoost — true if
+   *   at least one fireBoost pickup was collected this frame
    */
   checkPowerUpPickup(player) {
     let playerHeal = 0;
+    let fireBoost = false;
     let type;
     while ((type = this._powerUps.checkPickup(player.x, player.y, player.hitRadius))) {
       if (type === 'shield') this._barrier.heal(Config.powerUps.shield.healAmount);
+      else if (type === 'fireBoost') fireBoost = true;
       else playerHeal += Config.powerUps.health.healAmount;
     }
-    return playerHeal;
+    return { playerHeal, fireBoost };
   }
 
   /** Direct reference — GameplayScene runs the bullet↔enemy collision loop. */

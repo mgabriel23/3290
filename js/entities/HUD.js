@@ -22,6 +22,12 @@
  * one consistent warning cue. Needs `update(dt)` purely to drive that
  * pulse's clock (`_age`) — the score/gold panels have no such need.
  *
+ * A fire-boost badge (right-middle of the screen, see `_renderFireBoostIndicator`)
+ * follows the same externally-owned-value pattern: `render`'s optional third
+ * parameter is GameplayScene's `_fireBoostTimer` (seconds remaining, 0 =
+ * inactive) — HUD itself has no opinion on when the boost starts or how long
+ * it lasts, it just draws whatever's handed to it, same as `health`.
+ *
  * All bracket/bar geometry is pre-allocated once in the constructor so
  * `render` produces zero per-frame allocations regardless of update rate.
  */
@@ -65,8 +71,10 @@ export class HUD {
    * rendered before this call.
    * @param {import('../core/Renderer.js').Renderer} renderer
    * @param {number} health  the player's current health — see class doc
+   * @param {number} [fireBoostTimer]  seconds remaining on an active fireBoost
+   *   PowerUp (0 or omitted = inactive, badge is skipped entirely) — see class doc
    */
-  render(renderer, health) {
+  render(renderer, health, fireBoostTimer = 0) {
     const {
       margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur, bestFont,
       chromeColor, chromeLineWidth, chromeGlowBlur,
@@ -97,6 +105,7 @@ export class HUD {
     });
 
     this._renderHealthBar(renderer, health);
+    if (fireBoostTimer > 0) this._renderFireBoostIndicator(renderer, fireBoostTimer);
   }
 
   // ---------------------------------------------------------------------------
@@ -146,6 +155,29 @@ export class HUD {
     }
   }
 
+  /**
+   * Right-middle badge shown only while a fireBoost PowerUp is running —
+   * the same circle-backdrop + lightning-bolt icon language PowerUps.js
+   * itself draws for the pickup, so this reads as "that thing is still
+   * active," plus a "BOOST" label and a whole-seconds countdown.
+   */
+  _renderFireBoostIndicator(renderer, timer) {
+    const cfg  = Config.hud.fireBoost;
+    const pCfg = Config.powerUps.fireBoost;
+    const { x, y, radius, lineWidth, glowBlur, labelFont, valueFont } = cfg;
+
+    renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor: pCfg.fillColor });
+    renderer.strokeCircle(x, y, radius, { color: pCfg.color, lineWidth, glowBlur });
+    renderer.strokePaths(this._boltPath, { x, y, color: pCfg.color, lineWidth, lineCap: 'round' });
+
+    renderer.drawText('BOOST', x, y - radius - 12, {
+      font: labelFont, color: pCfg.color, alpha: 0.7,
+    });
+    renderer.drawText(`${Math.ceil(timer)}s`, x, y + radius + 16, {
+      font: valueFont, color: pCfg.color, glowBlur: 4,
+    });
+  }
+
   _initGeometry() {
     const { margin, bracketSize: leg, health: hCfg } = Config.hud;
     const { width: vW } = Config.virtual;
@@ -174,5 +206,15 @@ export class HUD {
     // Low-health warning icon — sits just left of the bar, vertically centered on it.
     this._healthIconX = this._healthLeft - hCfg.iconOffsetX;
     this._healthIconY = (top + bottom) / 2;
+
+    // Fire-boost badge's lightning-bolt icon — local-space points centered
+    // on the origin, same zigzag shape PowerUps.js draws on the pickup
+    // itself (see that file's own `_boltPath`), repositioned onto the badge
+    // via strokePaths' {x, y} transform at render time.
+    const d = Config.hud.fireBoost.radius * 0.5;
+    this._boltPath = [{
+      points: [[-d * 0.3, -d], [d * 0.35, -d * 0.1], [-d * 0.1, d * 0.15], [d * 0.3, d]],
+      closed: false,
+    }];
   }
 }
