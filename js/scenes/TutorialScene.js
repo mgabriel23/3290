@@ -2,11 +2,15 @@
  * TutorialScene.js
  * Tutorial overlay that plays once between the title screen and the player's
  * first gameplay session. The full gameplay backdrop — starfield, barrier
- * (with its permanent SHIELD health readout), and HUD — is visible behind a
- * dimming overlay, so every animated arrow points at the real UI element it
- * describes rather than a mock diagram.
+ * (with its permanent SHIELD health readout), HUD (score/gold/health), the
+ * Enemy Codex button, and the mute/pause buttons — is visible behind a
+ * dimming overlay, so every hint highlights the real UI element it
+ * describes rather than a mock diagram. Codex/PlaybackControls are
+ * constructed here purely as inert display chrome — their `_open`/`_paused`
+ * state never gets touched (this scene never forwards taps into them), so
+ * they only ever render their idle always-visible button, never an overlay.
  *
- * Five sequential hints advance on tap or swipe-up. The first tap/swipe
+ * Seven sequential hints advance on tap or swipe-up. The first tap/swipe
  * during a still-typing hint fast-forwards the typewriter to completion;
  * the second advances to the next hint. After the last hint `onContinue`
  * fires and GameplayScene takes over, which starts the normal player fly-in.
@@ -14,53 +18,117 @@
  * Typewriter reveal + blip pool: the same word-at-a-time pattern as
  * PrologueScene's briefing beat — see that file for the design rationale.
  *
- * Arrow geometry: all point arrays are pre-allocated once in the constructor
- * and mutated in place per frame (just the bobbing tip and arrowhead base),
- * so render produces zero per-frame allocations.
+ * Highlight geometry: each hint that targets a real piece of UI gets a
+ * pulsing 4-corner bracket frame (the same `cornerBracketPath` motif used
+ * throughout the game's chrome — HUD panels, title screen, Enemy Codex)
+ * drawn around that UI element's bounding box, PLUS a spotlight cutout — the
+ * dim overlay is punched out in a padded window around that same box (see
+ * `_renderDimOverlay`) so the target reads as lit up rather than sitting
+ * under the same flat dark veil as the rest of the screen. Both the bracket
+ * and the cutout frame are built once in the constructor from static box
+ * literals (only alpha animates per frame). Hints with no specific
+ * on-screen target (the movement hint, which uses the orbiting hand demo
+ * instead) simply carry `highlight: null` and fall back to a plain
+ * full-screen dim.
  */
 import { Config } from '../core/Config.js';
 import { Barrier } from '../entities/Barrier.js';
 import { HUD } from '../entities/HUD.js';
 import { Starfield } from '../entities/Starfield.js';
+import { EnemyCodex } from '../entities/EnemyCodex.js';
+import { PlaybackControls } from '../entities/PlaybackControls.js';
 import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { AudioPool } from '../core/AudioPool.js';
+import { cornerBracketPath } from '../core/shapes.js';
+
+/** A filled axis-aligned rectangle path, for the dim overlay's spotlight cutout frame. */
+function rectPath(x0, y0, x1, y1) {
+  return { points: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], closed: true };
+}
+
+// Highlight bounding boxes — each computed from the real Config values that
+// position the UI element being described, plus a small hand-authored
+// padding constant, so the bracket frame tracks the actual chrome instead of
+// a hand-guessed rectangle that could silently drift out of sync with it.
+// Padding is kept symmetric around each element's real anchor point/axis so
+// the bracket (and spotlight cutout) reads as centered on it.
+const { width: V_W, height: V_H } = Config.virtual;
+const { margin: HUD_MARGIN, health: HUD_HEALTH } = Config.hud;
+const BARRIER_PEAK_Y = Config.barrier.baseY - Config.barrier.arcHeight;
+const CODEX_BTN = Config.codex.button;
+const MUTE_BTN = Config.playbackControls.muteButton;
+const PAUSE_BTN = Config.playbackControls.pauseButton;
+
+const SCORE_BOX = { left: HUD_MARGIN - 8, top: HUD_MARGIN - 8, right: HUD_MARGIN + 150, bottom: HUD_MARGIN + 72 };
+const GOLD_BOX  = { left: V_W - HUD_MARGIN - 150, top: HUD_MARGIN - 8, right: V_W - HUD_MARGIN + 8, bottom: HUD_MARGIN + 56 };
+// Symmetric padding on both sides of the bar's true center (HUD_HEALTH.x) —
+// wide enough to cover the low-health "!" icon (which only ever appears on
+// the left) without making the box itself lean off-center.
+const HEALTH_SIDE_PAD = HUD_HEALTH.iconOffsetX + 12;
+const HEALTH_BOX = {
+  left: HUD_HEALTH.x - HUD_HEALTH.width / 2 - HEALTH_SIDE_PAD,
+  top: HUD_HEALTH.y - 14,
+  right: HUD_HEALTH.x + HUD_HEALTH.width / 2 + HEALTH_SIDE_PAD,
+  bottom: HUD_HEALTH.y + HUD_HEALTH.height + 40,
+};
+const BARRIER_BOX = { left: V_W / 2 - 70, top: BARRIER_PEAK_Y + 16, right: V_W / 2 + 70, bottom: BARRIER_PEAK_Y + 66 };
+const CODEX_BOX = {
+  left: CODEX_BTN.x - CODEX_BTN.radius - 6, top: CODEX_BTN.y - CODEX_BTN.radius - 6,
+  right: CODEX_BTN.x + CODEX_BTN.radius + 6, bottom: CODEX_BTN.y + CODEX_BTN.radius + 6,
+};
+const PLAYBACK_BOX = {
+  left: MUTE_BTN.x - MUTE_BTN.radius - 6, top: MUTE_BTN.y - MUTE_BTN.radius - 6,
+  right: PAUSE_BTN.x + PAUSE_BTN.radius + 6, bottom: PAUSE_BTN.y + PAUSE_BTN.radius + 6,
+};
 
 /**
  * Static hint definitions.
  *   text      — sentence to typewrite word by word
  *   textCY    — virtual y center of the text block (chosen so text never
- *               sits on top of the UI element the arrow is pointing at)
- *   arrowToX/Y — virtual coords the animated arrow points AT; null = no arrow
+ *               sits on top of the UI element being highlighted)
+ *   highlight — {left, top, right, bottom} box to frame with a pulsing
+ *               corner-bracket highlight; null = no highlight (e.g. the
+ *               movement hint, which uses the orbiting hand demo instead)
  */
 const HINTS = [
   {
     text: 'Destroy enemies to earn SCORE. It increases with each kill.',
-    textCY: 620,
-    arrowToX: 70,  arrowToY: 55,   // score panel, top-left
+    textCY: 420,
+    highlight: SCORE_BOX,
   },
   {
-    text: 'Enemies drop GOLD when defeated. Fly through it to collect.',
-    textCY: 620,
-    arrowToX: 468, arrowToY: 55,   // gold panel, top-right
+    text: 'Defeating enemies earns GOLD too — it\'s credited automatically, no need to collect it.',
+    textCY: 420,
+    highlight: GOLD_BOX,
+  },
+  {
+    text: 'This is your ship\'s HEALTH. Taking hits drains it — watch for the red pulse and warning beep when it\'s critical.',
+    textCY: 420,
+    highlight: HEALTH_BOX,
   },
   {
     text: 'The barrier shields Earth. Protect it — if its HEALTH reaches zero, the game is over.',
     textCY: 380,
-    arrowToX: 270, arrowToY: 922,  // barrier SHIELD health readout (peakY + 52)
+    highlight: BARRIER_BOX,
   },
   {
     text: 'Drag to steer your ship. It follows your finger anywhere on screen.',
     textCY: 480,
-    arrowToX: null, arrowToY: null, // orbiting hand demo used instead — see _renderControlsDemo
+    highlight: null, // orbiting hand demo used instead — see _renderControlsDemo
   },
   {
-    text: 'Defeated enemies sometimes drop POWERUPS. Fly through them to gain a temporary edge.',
-    textCY: 480,
-    arrowToX: null, arrowToY: null, // general tip — no specific UI target
+    text: 'Tap this icon anytime to open the Enemy Codex — a quick reference for every enemy you\'ll face.',
+    textCY: 420,
+    highlight: CODEX_BOX,
+  },
+  {
+    text: 'These icons pause the action or mute the sound — handy whenever you need a breather.',
+    textCY: 420,
+    highlight: PLAYBACK_BOX,
   },
 ];
 
-// Controls-demo constants — the orbiting hand icon shown on hint 4
+// Controls-demo constants — the orbiting hand icon shown on the movement hint (index 4)
 const DEMO_CX     = 270;  // virtual x — center of the orbit (screen center)
 const DEMO_CY     = 660;  // virtual y — below the hint text, above the barrier
 const DEMO_RADIUS = 32;   // virtual px orbit radius
@@ -78,10 +146,12 @@ export class TutorialScene {
     this._starfield = new Starfield();
     this._barrier = new Barrier();
     this._hud = new HUD();
+    this._codex = new EnemyCodex();
+    this._playback = new PlaybackControls();
 
     this._age = 0;       // seconds since scene start — drives starfield fade-in
     this._hintIndex = 0;
-    this._hintAge = 0;   // seconds on the current hint — drives arrow bob + tap blink
+    this._hintAge = 0;   // seconds on the current hint — drives highlight pulse + tap blink
     this._revealedWordCount = 0;
     this._tapReady = false; // true once the current hint's typewriter is fully revealed
     // Set right before firing onContinue (see _advance) and checked first in
@@ -95,14 +165,16 @@ export class TutorialScene {
     this._blipPool = new AudioPool(Config.tutorial.blip.src, 8, Config.tutorial.blip.volume);
     this._blipTimer = 0;
 
-    this._initHints();         // wraps text + pre-allocates arrow geometry
-    this._initControlsDemo(); // pre-allocates hand icon + orbit path for hint 4
+    this._initHints();        // wraps text + pre-allocates highlight bracket geometry
+    this._initControlsDemo(); // pre-allocates hand icon + orbit path for the movement hint
   }
 
   update(dt) {
     if (this._done) return; // onContinue has already fired — see the constructor's _done doc
     this._age += dt;
     this._starfield.update(dt);
+    this._codex.update(dt);
+    this._playback.update(dt);
     // Don't advance hint state during the intro delay — hints haven't appeared yet.
     // _hintAge only starts counting once hints are actually visible so its fade-in
     // and blink timings stay relative to when the first hint is shown, not scene start.
@@ -117,7 +189,7 @@ export class TutorialScene {
     const { fadeInDuration, hintStartDelay, overlayAlpha } = Config.tutorial;
 
     renderer.clear(Config.colors.void);
-    // Gameplay backdrop — real elements so arrows point at the actual UI.
+    // Gameplay backdrop — real elements so highlights frame the actual UI.
     // Stars fade in alongside the black veil so the reveal feels like one motion.
     const starAlpha = Math.min(this._age / fadeInDuration, 1);
     this._starfield.render(renderer, starAlpha);
@@ -126,6 +198,10 @@ export class TutorialScene {
     // real gameplay chrome the hints point at, so it shows a nominal full
     // health bar rather than an undefined/NaN one.
     this._hud.render(renderer, Config.player.maxHealth);
+    // Codex/PlaybackControls only ever render their idle button here — see
+    // the class doc for why their overlay/pause state is never touched.
+    this._codex.render(renderer);
+    this._playback.render(renderer);
 
     // Fade in from black — covers the cut from PrologueScene's black fade-out
     if (this._age < fadeInDuration) {
@@ -137,10 +213,10 @@ export class TutorialScene {
     if (this._age < hintStartDelay) return;
 
     // Dimming overlay fades in over 0.3 s as hints begin — avoids a jarring pop
-    renderer.clear(Config.colors.void, Math.min((this._age - hintStartDelay) / 0.3, 1) * overlayAlpha);
+    this._renderDimOverlay(Math.min((this._age - hintStartDelay) / 0.3, 1) * overlayAlpha);
 
     this._renderHint();
-    this._renderArrow();
+    this._renderHighlight();
     this._renderControlsDemo();
     this._renderTapPrompt();
   }
@@ -214,7 +290,7 @@ export class TutorialScene {
     const revealed = Math.floor(this._revealedWordCount);
     const fadeIn = Math.min(this._hintAge / 0.3, 1);
 
-    // Progress indicator (e.g. "2 / 5") above the text block
+    // Progress indicator (e.g. "2 / 7") above the text block
     this.renderer.drawText(`${idx + 1} / ${HINTS.length}`, vW / 2, topLineY - 24, {
       font: progressFont, color: progressColor, alpha: fadeIn * 0.45,
     });
@@ -235,33 +311,42 @@ export class TutorialScene {
     }
   }
 
-  _renderArrow() {
-    const arrowData = this._hintArrows[this._hintIndex];
-    if (!arrowData) return;
+  /**
+   * Dim veil behind the hint text. When the current hint highlights a
+   * specific UI element, the dim is punched out around it — four rectangles
+   * covering everything EXCEPT a padded spotlight window around the
+   * highlight box (pre-built in _initHints) — so that element renders at
+   * full brightness instead of sitting under the same flat dark overlay as
+   * the rest of the screen. Hints with no highlight (the movement hint)
+   * fall back to the original full-screen dim.
+   */
+  _renderDimOverlay(alpha) {
+    const frame = this._hintDimFrames[this._hintIndex];
+    if (!frame) {
+      this.renderer.clear(Config.colors.void, alpha);
+      return;
+    }
+    this.renderer.fillStrokePaths(frame, {
+      fillColor: Config.colors.void, strokeColor: Config.colors.void, lineWidth: 1, alpha, singleStroke: true,
+    });
+  }
 
-    const { arrowColor, arrowGlowBlur } = Config.tutorial;
+  /**
+   * Pulsing 4-corner bracket frame around the current hint's target UI
+   * element (null for hints with no specific on-screen target, e.g. the
+   * movement hint). The box itself is static — pre-built in _initHints —
+   * only the fade-in and breathing-pulse alpha change per frame.
+   */
+  _renderHighlight() {
+    const brackets = this._hintHighlights[this._hintIndex];
+    if (!brackets) return;
+
+    const { highlightColor, highlightGlowBlur, highlightLineWidth, highlightPulseSpeed, highlightPulseDepth } = Config.tutorial;
     const fadeIn = Math.min(this._hintAge / 0.5, 1);
+    const pulse = 1 - highlightPulseDepth * (0.5 + 0.5 * Math.sin(this._hintAge * highlightPulseSpeed));
 
-    const { nx, ny, staticToX, staticToY } = arrowData;
-
-    // Arrowhead geometry: tip at the static target position — no animation
-    const HEAD = 12; // half-width of arrowhead base
-    const NECK = 18; // shaft length from tip to arrowhead base
-    const px = -ny, py = nx; // perpendicular axis
-    const baseMidX = staticToX - nx * NECK;
-    const baseMidY = staticToY - ny * NECK;
-
-    // Mutate pre-allocated point arrays in place — zero allocation per frame
-    const sp = arrowData.shaftPoints;
-    sp[1][0] = baseMidX; sp[1][1] = baseMidY;
-
-    const hp = arrowData.headPoints;
-    hp[0][0] = staticToX;                   hp[0][1] = staticToY;
-    hp[1][0] = baseMidX + px * HEAD;        hp[1][1] = baseMidY + py * HEAD;
-    hp[2][0] = baseMidX - px * HEAD;        hp[2][1] = baseMidY - py * HEAD;
-
-    this.renderer.strokePaths(arrowData.paths, {
-      color: arrowColor, lineWidth: 3, glowBlur: arrowGlowBlur, alpha: fadeIn,
+    this.renderer.strokePaths(brackets, {
+      color: highlightColor, lineWidth: highlightLineWidth, glowBlur: highlightGlowBlur, alpha: fadeIn * pulse,
     });
   }
 
@@ -281,19 +366,20 @@ export class TutorialScene {
   /**
    * For each hint: greedy word-wrap the text into lines (same technique as
    * PrologueScene._wrapBriefing), compute per-line word offsets for the
-   * typewriter, and pre-allocate the arrow path arrays with mutable point
-   * slots so _renderArrow can update them in place.
+   * typewriter, and pre-build both the highlight bracket paths (four corner
+   * ticks around the target's static bounding box) and the dim-overlay's
+   * spotlight cutout frame (four rectangles surrounding a padded version of
+   * that same box — see _renderDimOverlay).
    */
   _initHints() {
-    const { textFont, lineHeight, textMaxWidth } = Config.tutorial;
-    const { width: vW } = Config.virtual;
-    const textCX = vW / 2; // 270
+    const { textFont, lineHeight, textMaxWidth, highlightCornerSize, spotlightPadding } = Config.tutorial;
 
     this._hintLineWords = [];
     this._hintLineWordOffsets = [];
     this._hintTotalWords = [];
     this._hintFullLines = [];  // pre-joined strings — avoids slice+join allocations on fully-revealed lines
-    this._hintArrows = [];
+    this._hintHighlights = [];
+    this._hintDimFrames = [];
     this._hintTapPromptY = [];
 
     for (const hint of HINTS) {
@@ -311,70 +397,42 @@ export class TutorialScene {
       // completely revealed so the hot path skips slice() + join() allocations.
       this._hintFullLines.push(lineWordArrays.map(lw => lw.join(' ')));
 
-      // Text bounding box half-height — needed for both arrow-free and arrow hints
+      // Text bounding box half-height — the TAP prompt sits just below it
       const lineCount = lineWordArrays.length;
       const textHalfH = ((lineCount - 1) * lineHeight) / 2 + 16;
+      this._hintTapPromptY.push(hint.textCY + textHalfH + lineHeight + 22);
 
-      // No arrow for this hint — TAP prompt goes one line below the text box
-      if (hint.arrowToX == null) {
-        this._hintArrows.push(null);
-        this._hintTapPromptY.push(hint.textCY + textHalfH + lineHeight + 22);
+      if (!hint.highlight) {
+        this._hintHighlights.push(null);
+        this._hintDimFrames.push(null);
         continue;
       }
+      const { left, top, right, bottom } = hint.highlight;
+      this._hintHighlights.push([
+        cornerBracketPath(left, top, 1, 1, highlightCornerSize),
+        cornerBracketPath(right, top, -1, 1, highlightCornerSize),
+        cornerBracketPath(right, bottom, -1, -1, highlightCornerSize),
+        cornerBracketPath(left, bottom, 1, -1, highlightCornerSize),
+      ]);
 
-      const textHalfW = textMaxWidth / 2;
-
-      // Unit vector from text center toward arrow target
-      const dx = hint.arrowToX - textCX;
-      const dy = hint.arrowToY - hint.textCY;
-      const dist = Math.hypot(dx, dy);
-      const nx = dx / dist;
-      const ny = dy / dist;
-
-      // Exit point of the direction ray on the text bounding box
-      const tExit = Math.min(
-        Math.abs(nx) > 1e-6 ? textHalfW / Math.abs(nx) : Infinity,
-        Math.abs(ny) > 1e-6 ? textHalfH / Math.abs(ny) : Infinity,
-      );
-
-      // Larger gap so arrows read as clearly separate from the hint text
-      const gap = ny > 0.5 ? tExit + 75 : tExit + 35;
-      const fromX = textCX + nx * gap;
-      const fromY = hint.textCY + ny * gap;
-
-      // Cap shaft at SHAFT_MAX so arrows stay short and don't crowd the target chrome
-      const SHAFT_MAX = 160; // virtual px
-      const distToTarget = Math.hypot(hint.arrowToX - fromX, hint.arrowToY - fromY);
-      const shaftLen = Math.min(distToTarget - 18, SHAFT_MAX);
-      const staticToX = fromX + nx * shaftLen;
-      const staticToY = fromY + ny * shaftLen;
-
-      // TAP prompt: for downward arrows fits in the gap between text and shaft;
-      // for upward/diagonal arrows sits one line-height below the last text line
-      this._hintTapPromptY.push(
-        ny > 0.5
-          ? hint.textCY + textHalfH + lineHeight * 0.5 + 8
-          : hint.textCY + textHalfH + lineHeight + 22,
-      );
-
-      // Pre-allocate mutable point slots — updated in _renderArrow each frame
-      const shaftPoints = [[fromX, fromY], [0, 0]];
-      const headPoints  = [[0, 0], [0, 0], [0, 0]];
-
-      this._hintArrows.push({
-        nx, ny,
-        staticToX, staticToY,
-        shaftPoints, headPoints,
-        paths: [
-          { points: shaftPoints, closed: false },
-          { points: headPoints,  closed: true  },
-        ],
-      });
+      // Spotlight cutout: the highlight box padded outward, clamped to the
+      // screen, then the dim overlay's complement — four rects tiling
+      // everything OUTSIDE that padded window with no gaps/overlaps.
+      const sLeft   = Math.max(0, left - spotlightPadding);
+      const sTop    = Math.max(0, top - spotlightPadding);
+      const sRight  = Math.min(V_W, right + spotlightPadding);
+      const sBottom = Math.min(V_H, bottom + spotlightPadding);
+      this._hintDimFrames.push([
+        rectPath(0, 0, V_W, sTop),            // above the window
+        rectPath(0, sBottom, V_W, V_H),       // below the window
+        rectPath(0, sTop, sLeft, sBottom),    // left of the window
+        rectPath(sRight, sTop, V_W, sBottom), // right of the window
+      ]);
     }
   }
 
   /**
-   * Pre-allocate the hand-icon geometry for the controls hint (index 3).
+   * Pre-allocate the hand-icon geometry for the controls hint (index 4).
    * The finger body is authored at local (0,0) facing upward; strokePaths
    * rotates it each frame via its `rotation` parameter so no point mutation
    * is needed — only x/y change. The orbit circle is fully static.
@@ -400,17 +458,17 @@ export class TutorialScene {
     this._orbitPath = [{ points: orbitPoints, closed: false }];
   }
 
-  /** Orbiting hand icon — only drawn on hint index 3 (controls hint). */
+  /** Orbiting hand icon — only drawn on the movement hint (index 4). */
   _renderControlsDemo() {
-    if (this._hintIndex !== 3) return;
+    if (this._hintIndex !== 4) return;
 
-    const { arrowColor, arrowGlowBlur } = Config.tutorial;
+    const { highlightColor, highlightGlowBlur } = Config.tutorial;
     const fadeIn = Math.min(this._hintAge / 0.5, 1);
     const angle  = this._hintAge * DEMO_SPEED;
 
     // Dim orbit ring — gives the circular drag path context
     this.renderer.strokePaths(this._orbitPath, {
-      color: arrowColor, lineWidth: 1, glowBlur: 0, alpha: fadeIn * 0.3,
+      color: highlightColor, lineWidth: 1, glowBlur: 0, alpha: fadeIn * 0.3,
     });
 
     // Finger icon orbiting the ring, rotated tangent to the direction of motion
@@ -418,7 +476,7 @@ export class TutorialScene {
       x: DEMO_CX + Math.cos(angle) * DEMO_RADIUS,
       y: DEMO_CY + Math.sin(angle) * DEMO_RADIUS,
       rotation: angle + Math.PI / 2, // tangent to orbit so finger "points" where it's going
-      color: arrowColor, lineWidth: 2, glowBlur: arrowGlowBlur, alpha: fadeIn,
+      color: highlightColor, lineWidth: 2, glowBlur: highlightGlowBlur, alpha: fadeIn,
     });
   }
 }

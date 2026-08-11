@@ -1909,8 +1909,21 @@ export const Config = Object.freeze({
 		tapFont: '400 10px "Audiowide", "Courier New", monospace',
 		tapColor: "#4DEFFF",
 		overlayAlpha: 0.6, // how much the gameplay backdrop dims behind the hint text
-		arrowColor: "#4DEFFF",
-		arrowGlowBlur: 8, // reduced from 10 — tutorial arrows are short so a smaller halo still reads clearly
+		// Shared accent color for both the highlight brackets (a pulsing 4-corner
+		// frame drawn around the real UI element each hint describes — see
+		// TutorialScene._renderHighlight) and the orbiting hand-icon demo on the
+		// movement hint — one consistent tutorial accent, not two configs.
+		highlightColor: "#4DEFFF",
+		highlightGlowBlur: 8, // reduced from 10 — tutorial highlights are compact so a smaller halo still reads clearly
+		highlightLineWidth: 2,
+		highlightCornerSize: 14, // virtual px — leg length of each corner-bracket tick, same motif as HUD/codex chrome
+		highlightPulseSpeed: 2.6, // rad/sec — breathing pulse so the bracket frame reads as "live," not static chrome
+		highlightPulseDepth: 0.4,
+		// How far the spotlight "cutout" extends beyond the highlight box (see
+		// TutorialScene._renderDimOverlay) — the dim veil is punched out around
+		// the target UI element instead of covering it too, so it reads as lit
+		// up rather than sitting under the same flat dark overlay as everything else.
+		spotlightPadding: 16,
 		progressFont: '400 10px "Audiowide", "Courier New", monospace',
 		progressColor: "#4DEFFF",
 		blip: Object.freeze({
