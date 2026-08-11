@@ -158,6 +158,23 @@ export const Config = Object.freeze({
 		font: '400 72px "Audiowide", "Courier New", monospace',
 		color: "#4DEFFF",
 		glowBlur: 16, // wider halo than normal UI — makes the text feel heavy and threatening; kept at 16 (47% cheaper than 22 per blur cost ∝ radius²)
+		// Plays once each time a "LEVEL N" indicator appears — see
+		// GameplayScene's constructor (level 1) and its wave-cleared
+		// transition (every level after that).
+		audioSrc: "assets/audio/level.m4a",
+		audioVolume: 0.6,
+
+		// Gameplay bg-music ducking while the indicator (and its sound) is on
+		// screen, so the level sound reads clearly over the music instead of
+		// fighting it — see GameplayScene._updateMusicDuck. `duckFactor` is a
+		// multiplier on Config.audio.themeVolume, not an absolute volume.
+		// Attack (duck in) and release (duck out) use different rates on
+		// purpose: the release is deliberately much faster than the attack —
+		// the music should snap back close to instantly the moment the
+		// indicator hides, not linger ducked or fade back up slowly.
+		duckFactor: 0.35,
+		duckInRate: 8, // 1/sec convergence rate — see GameplayScene._updateCameraFollow's doc for what this shape means
+		duckOutRate: 14,
 	}),
 
 	/**

@@ -106,12 +106,19 @@ import { WaveManager } from '../entities/WaveManager.js';
 export class GameplayScene {
   /**
    * @param {import('../core/Renderer.js').Renderer} renderer
-   * @param {{ onGameOver?: () => void }} [callbacks]  called once, on the
-   *   restart tap after the player's health reaches 0 — see class doc.
+   * @param {{ onGameOver?: () => void, onMusicDuck?: (multiplier: number) => void }} [callbacks]
+   *   `onGameOver` called once, on the restart tap after the player's health
+   *   reaches 0 — see class doc. `onMusicDuck` called every frame with a
+   *   0-1 multiplier for the gameplay bg music's volume — GameplayScene
+   *   doesn't own that Audio element (Game.js does, since it persists
+   *   across restarts), so ducking it during the level indicator has to be
+   *   relayed out through this callback rather than touched directly — see
+   *   `_updateMusicDuck`.
    */
-  constructor(renderer, { onGameOver } = {}) {
+  constructor(renderer, { onGameOver, onMusicDuck } = {}) {
     this.renderer = renderer;
     this._onGameOver = onGameOver;
+    this._onMusicDuck = onMusicDuck;
     this.starfield = new Starfield();
     this.barrier = new Barrier();
     this.player = new Player();
@@ -138,6 +145,12 @@ export class GameplayScene {
     this._level      = 1;
     this._levelState = 'intro';
     this._levelAge   = 0; // seconds spent in the current level state
+    // Plays once per "LEVEL N" indicator — right here for level 1 (the scene
+    // always starts in 'intro'), and again at the wave-cleared transition in
+    // update() for every level after that.
+    this._levelAudio = new AudioPool(Config.level.audioSrc, 4, Config.level.audioVolume);
+    this._levelAudio.play();
+    this._musicDuck = 1; // 0-1 bg-music volume multiplier — see _updateMusicDuck
 
     /** @type {WaveManager|null} created when a level's active phase begins */
     this._waveManager = null;
@@ -181,6 +194,7 @@ export class GameplayScene {
     this.barrier.update(effectiveDt);
     this.player.update(effectiveDt);
     this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
+    this._updateMusicDuck(effectiveDt);
 
     // Bullets and enemies are suppressed during the level intro.
     if (this._levelState === 'active') {
@@ -195,6 +209,7 @@ export class GameplayScene {
         this._levelState  = 'intro';
         this._levelAge    = 0;
         this._waveManager = null;
+        this._levelAudio.play();
       }
     }
   }
@@ -267,6 +282,25 @@ export class GameplayScene {
     const target = -(this.player.x - vW / 2) * Config.camera.followFactor;
     const rate = Config.camera.followSmoothing;
     this._cameraX += (target - this._cameraX) * (1 - Math.exp(-rate * dt));
+  }
+
+  /**
+   * Ease `_musicDuck` (a 0-1 bg-music volume multiplier) toward
+   * `Config.level.duckFactor` while the level indicator is on screen, or
+   * back to 1 once it isn't — same frame-rate-independent exponential
+   * convergence as `_updateCameraFollow`, but with a much faster release
+   * rate (`duckOutRate` > `duckInRate`) so the music snaps back close to
+   * instantly the moment the indicator hides rather than fading back up
+   * slowly. Relayed out through `onMusicDuck` every frame since Game.js —
+   * not this scene — owns the actual bg-music Audio element (see
+   * constructor doc).
+   */
+  _updateMusicDuck(dt) {
+    const { duckFactor, duckInRate, duckOutRate } = Config.level;
+    const target = this._levelState === 'intro' ? duckFactor : 1;
+    const rate = target < this._musicDuck ? duckInRate : duckOutRate;
+    this._musicDuck += (target - this._musicDuck) * (1 - Math.exp(-rate * dt));
+    this._onMusicDuck?.(this._musicDuck);
   }
 
   handlePointerDown(x, y) {
@@ -395,6 +429,13 @@ export class GameplayScene {
    *
    * A micro y-tremor (±1.5 vp, very fast sine) runs throughout the hold
    * to add a physical instability on top of the alpha flicker.
+   *
+   * `_levelAudio` plays once per indicator, not from here — it fires the
+   * instant `_levelState` becomes 'intro' (constructor for level 1, the
+   * wave-cleared transition in `update()` for every level after), not on
+   * every render() call this method makes while the indicator is on screen.
+   * The gameplay bg music also ducks under that same window — see
+   * `_updateMusicDuck` — so the level sound reads clearly over it.
    */
   _renderLevelIntro() {
     const { introDuration, fadeInDuration, fadeOutDuration, font, color, glowBlur } = Config.level;

@@ -182,7 +182,16 @@ export class Game {
         onMutedChange((muted) => { this._themeAudio.muted = muted; });
         this._themeAudio.play().catch(() => {});
       }
-      this.scene = new GameplayScene(this.renderer, { onGameOver: () => this._startGameplay() });
+      this.scene = new GameplayScene(this.renderer, {
+        onGameOver: () => this._startGameplay(),
+        // GameplayScene ducks this multiplier during each level's indicator
+        // (see its own _updateMusicDuck) but doesn't own _themeAudio itself
+        // — it persists across restarts, so Game.js has to be the one that
+        // actually touches its `.volume`.
+        onMusicDuck: (multiplier) => {
+          if (this._themeAudio) this._themeAudio.volume = Config.audio.themeVolume * multiplier;
+        },
+      });
     } catch (err) {
       console.error('Failed to start gameplay:', err);
       this._showFatalError(err);
