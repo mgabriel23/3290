@@ -348,7 +348,12 @@ export const Config = Object.freeze({
 		yearCard: Object.freeze({
 			text: "EARTH — YEAR 3290",
 			font: '400 28px "Audiowide", "Courier New", monospace',
-			textColor: "#aab4d4",
+			// Matches Config.prologue.title.textColor — the "header" line of the
+			// cinematic reads in the same neon cyan as the title card's "3290"
+			// later on, tying the two together visually. Color only, deliberately
+			// no glow here (unlike the title card) — this stays a smaller, calmer
+			// beat, not a second title moment.
+			textColor: "#4DEFFF",
 			charsPerSecond: 12, // letter by letter — slower than the briefing for dramatic weight
 			holdDuration: 2.8, // seconds the finished year card lingers before the next beat starts — a little extra room for the subtitle to be read
 			fadeOutDuration: 0.8,
@@ -510,13 +515,17 @@ export const Config = Object.freeze({
 		 */
 		skip: Object.freeze({
 			label: "SKIP ▶▶",
-			font: '400 13px "Audiowide", "Courier New", monospace',
+			// Bigger + more opaque + a touch of glow than the original quiet
+			// 13px/0.65-alpha/no-glow treatment — this is a real tappable
+			// control, not a passive label, and was easy to miss at the old size.
+			font: '400 17px "Audiowide", "Courier New", monospace',
 			color: "#aab4d4",
-			alpha: 0.65,
+			alpha: 0.85,
+			glowBlur: 6,
 			marginX: 24, // virtual px from the right edge to the text anchor
 			marginY: 28, // virtual px from the top edge to the text anchor
-			hitWidth: 100, // generous tap target — wider than the text itself
-			hitHeight: 40,
+			hitWidth: 116, // generous tap target — wider than the text itself; scaled up alongside the bigger font
+			hitHeight: 46,
 			fadeOutDuration: 0.5, // seconds for the quick dissolve into the title card once tapped
 		}),
 

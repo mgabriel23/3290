@@ -504,9 +504,9 @@ export class PrologueScene {
   }
 
   _renderSkipButton() {
-    const { label, font, color, alpha, marginX, marginY } = Config.prologue.skip;
+    const { label, font, color, alpha, glowBlur, marginX, marginY } = Config.prologue.skip;
     const { width: vW } = Config.virtual;
-    this.renderer.drawText(label, vW - marginX, marginY, { font, color, align: 'right', alpha });
+    this.renderer.drawText(label, vW - marginX, marginY, { font, color, align: 'right', alpha, glowBlur, glowColor: color });
   }
 
   /**
