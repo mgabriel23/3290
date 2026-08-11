@@ -30,6 +30,12 @@
  * temporary full damage immunity — see Config.powerUps, PowerUps.js,
  * `_maybeDropPowerUp`, and `checkPowerUpPickup`, the pickup-side mirror of
  * `checkPlayerHit`).
+ *
+ * `triggerSkillBomb` is the player's special-skill button (see
+ * PlayerSkill.js and Config.playerSkill) — instantly kills every enemy
+ * currently on screen through the same `handleBulletHit` pipeline a real
+ * bullet hit uses, so it's a real kill (reward, explosion, SFX and all),
+ * not a separate mechanic.
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
@@ -43,6 +49,11 @@ import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { PowerUps } from './PowerUps.js';
 import { AudioPool } from '../core/AudioPool.js';
+
+// Arbitrarily large multiplier on _playerDamage used by triggerSkillBomb to
+// guarantee a one-shot kill regardless of level scaling, without needing to
+// read any enemy type's own private health field directly.
+const SKILL_LETHAL_MULTIPLIER = 9999;
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -613,6 +624,44 @@ export class WaveManager {
       else playerHeal += Config.powerUps.health.healAmount;
     }
     return { playerHeal, fireBoost, invincible };
+  }
+
+  /**
+   * The player's special skill: instantly kills every enemy currently on
+   * screen, reusing the exact same kill pipeline a bullet hit uses
+   * (handleBulletHit — reward, explosion, SFX, Splitter fragments, PowerUp
+   * drop roll, all included for free). "On screen" is a plain bounds check
+   * against Config.virtual — an enemy still off-screen (mid entry-glide, or
+   * a Drifter clone that hasn't reached the play area yet, see
+   * DrifterEnemy's own `_visible`) is untouched, and so are any already-
+   * fired enemy projectiles (this clears enemies, not bullets).
+   *
+   * `damage` is an arbitrarily large multiplier on `_playerDamage` rather
+   * than reading each enemy's own health field directly — every enemy type
+   * already exposes a uniform `.hit(damage)` (handleBulletHit calls it the
+   * same way for all four families), so this needs no per-type knowledge of
+   * private health-field names to guarantee a one-shot kill regardless of
+   * level scaling.
+   *
+   * The enemy list length is snapshotted before the loop — a killed
+   * Splitter pushes 3 fresh fragments onto `_enemies` mid-loop (see
+   * handleBulletHit), and those are deliberately left for the player to
+   * mop up afterward rather than recursively bombed in the same pass.
+   * @returns {number} how many enemies were actually killed, so
+   *   GameplayScene can skip the cooldown/shake entirely if the screen was
+   *   already empty
+   */
+  triggerSkillBomb() {
+    const { width: vW, height: vH } = Config.virtual;
+    const n = this._enemies.length;
+    let killCount = 0;
+    for (let i = 0; i < n; i++) {
+      const e = this._enemies[i];
+      if (!e.alive) continue;
+      if (e.x < 0 || e.x > vW || e.y < 0 || e.y > vH) continue; // only what's actually on screen
+      if (this.handleBulletHit(e, SKILL_LETHAL_MULTIPLIER)) killCount++;
+    }
+    return killCount;
   }
 
   /** Direct reference — GameplayScene runs the bullet↔enemy collision loop. */

@@ -114,6 +114,14 @@
  * badge (see HUD._renderInvincibleIndicator, fed `player.invincibleTimer` —
  * Player owns that timer itself, not this scene) — mirrored onto the
  * opposite edge from fireBoost's badge so the two can never overlap.
+ *
+ * The player's one special skill (see PlayerSkill.js/Config.playerSkill), a
+ * screen-clearing bomb button bottom-right above the barrier, is routed
+ * through `handleTap` the same way the mute/pause/codex buttons already
+ * are. `_useSkill` calls `WaveManager.triggerSkillBomb` (a real kill per
+ * enemy — same reward/explosion/SFX pipeline `_checkCollisions` uses) and
+ * only actually starts PlayerSkill's 85s cooldown if it killed something,
+ * so tapping it at an empty screen doesn't waste the recharge for nothing.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
@@ -126,6 +134,7 @@ import { HUD } from '../entities/HUD.js';
 import { Particles } from '../entities/Particles.js';
 import { Player } from '../entities/Player.js';
 import { PlaybackControls } from '../entities/PlaybackControls.js';
+import { PlayerSkill } from '../entities/PlayerSkill.js';
 import { Starfield } from '../entities/Starfield.js';
 import { WaveManager } from '../entities/WaveManager.js';
 
@@ -155,6 +164,7 @@ export class GameplayScene {
     this.hud = new HUD();
     this._codex = new EnemyCodex();
     this._playback = new PlaybackControls();
+    this._playerSkill = new PlayerSkill();
     this._screenShake = new ScreenShake();
     this._hitStopTimer = 0; // seconds of gameplay-time freeze remaining — see update()'s effectiveDt
     this._cameraX = 0; // smoothed camera-follow pan offset — see _updateCameraFollow
@@ -233,6 +243,7 @@ export class GameplayScene {
     this.barrier.update(effectiveDt);
     this.player.update(effectiveDt);
     this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
+    this._playerSkill.update(effectiveDt);
     this._updateMusicDuck(effectiveDt);
 
     // Bullets and enemies are suppressed during the level intro.
@@ -297,6 +308,7 @@ export class GameplayScene {
 
     this.renderer.setCameraOffset(0, 0);
     this.hud.render(this.renderer, this.player.health, this._fireBoostTimer, this.player.invincibleTimer);
+    this._playerSkill.render(this.renderer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
     // Codex, then playback controls — both must sit on top of everything else,
@@ -353,12 +365,13 @@ export class GameplayScene {
     if (this._isGameOver) return; // the ship is gone — nothing left to drag around
     // Both TapInput and DragInput fire on the same physical tap (pointerdown
     // fires before the tap is recognized) — without these guards, the tap
-    // that opens an overlay or toggles mute would first snap the ship to
-    // that button's position.
+    // that opens an overlay, toggles mute, or fires the skill would first
+    // snap the ship to that button's position.
     if (this._codex.isOpen || this._codex.isInsideButton(x, y)) return;
     if (this._playback.isPaused
       || this._playback.isInsideMuteButton(x, y)
       || this._playback.isInsidePauseButton(x, y)) return;
+    if (this._levelState === 'active' && this._playerSkill.isInsideButton(x, y)) return;
     this._pointerDown = true;
     this.player.moveTo(x, y);
   }
@@ -381,8 +394,11 @@ export class GameplayScene {
    * restart. Otherwise: mute always wins next — it never opens an overlay,
    * so it's always safe to toggle. Pause and the Codex are mutually
    * exclusive full-screen overlays: opening either is ignored while the
-   * other is already open, so their dimming layers can never stack. Any
-   * remaining tap routes to whichever overlay (if any) is currently open.
+   * other is already open, so their dimming layers can never stack. If the
+   * Codex is open its own tap handling takes over entirely; otherwise, if
+   * paused, nothing further below responds (a paused game shouldn't fire
+   * the skill). Last: the skill button, but only during 'active' state —
+   * see `_useSkill`.
    */
   handleTap(x, y) {
     if (this._isGameOver) {
@@ -401,7 +417,26 @@ export class GameplayScene {
       if (!this._playback.isPaused) this._codex.handleTap(x, y);
       return;
     }
-    if (this._codex.isOpen) this._codex.handleTap(x, y);
+    if (this._codex.isOpen) { this._codex.handleTap(x, y); return; }
+    if (this._playback.isPaused) return;
+    if (this._levelState === 'active' && this._playerSkill.isInsideButton(x, y)) {
+      this._useSkill();
+    }
+  }
+
+  /**
+   * Fire the special-skill bomb (see PlayerSkill.js/Config.playerSkill and
+   * WaveManager.triggerSkillBomb) — only actually starts the cooldown and
+   * triggers feedback if it killed at least one enemy, so tapping it at an
+   * empty screen doesn't waste the full 85s recharge for nothing.
+   */
+  _useSkill() {
+    if (!this._playerSkill.ready) return;
+    const killCount = this._waveManager.triggerSkillBomb();
+    if (killCount === 0) return;
+    this._playerSkill.use();
+    this._screenShake.trigger(Config.playerSkill.useTrauma);
+    this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);
   }
 
   /**

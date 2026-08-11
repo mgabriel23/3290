@@ -2137,6 +2137,49 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * The player's single special skill: a screen-clearing bomb. Tap the
+	 * button — bottom-right, just above the barrier's dome — to instantly
+	 * kill every enemy currently on screen through the exact same kill
+	 * pipeline a bullet hit uses (reward, explosion, SFX, even a Splitter's
+	 * fragments/a PowerUp drop roll — see WaveManager.triggerSkillBomb).
+	 * Enemies still off-screen (mid entry-glide, or a Drifter clone that
+	 * hasn't reached the play area yet) are untouched, and so are any
+	 * already-fired enemy projectiles — this clears enemies, not bullets.
+	 * PlayerSkill.js owns just the button/cooldown itself (mirrors
+	 * PlaybackControls' buttons); GameplayScene decides what happens when
+	 * it's actually tapped.
+	 *
+	 * x/y placed against Config.barrier's geometry (baseY 940, arcHeight 70):
+	 * the dome's local surface height at x=490 is ≈915vp, so y=860 (with
+	 * radius 26) sits comfortably clear above it, and clear of the LVL
+	 * readout (~x=421) and the right anchor post (x=540).
+	 */
+	playerSkill: Object.freeze({
+		cooldown: 85, // seconds before it can be used again — see PlayerSkill.use()
+		x: 490,
+		y: 860,
+		radius: 26,
+		glyph: "💥",
+		font: '400 24px "Audiowide", "Courier New", monospace',
+		// Warm red-orange — reads as "offensive/dangerous action", distinct
+		// from every other UI accent (cyan HUD chrome, gold fireBoost,
+		// ice-white invincible).
+		color: "#FF5C3D",
+		lineWidth: 2,
+		glowBlur: 12,
+		pulseSpeed: 2.2, // rad/sec — idle "ready" breathing pulse while off cooldown
+		pulseDepth: 0.25,
+
+		// Dim, inert look while recharging — no pulse, just a static ring and
+		// a whole-seconds countdown (same countdown-text convention as the
+		// fireBoost/invincible HUD badges).
+		cooldownColor: "#5a4038",
+		cooldownFont: '400 18px "Audiowide", "Courier New", monospace',
+
+		useTrauma: 0.45, // screen-shake magnitude on activation — well above an ordinary kill's (Config.screenShake.killTrauma 0.18) but below the death explosion's (Config.gameOver.deathTrauma 0.6); one shake for the whole bomb rather than per-enemy
+	}),
+
+	/**
 	 * Tutorial overlay. Plays once between the title screen and the first
 	 * gameplay session — the full gameplay backdrop (starfield, barrier, HUD)
 	 * is visible behind a dim overlay so every hint arrow points at the real
