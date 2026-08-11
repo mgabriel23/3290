@@ -34,9 +34,9 @@ Wireframe-only hexagon (no fill), drops from the top and bounces indefinitely of
 
 | # | Name | `type` | Color | Radius | Base HP (+/level) | Behavior |
 |---|------|--------|-------|:---:|-------------------|----------|
-| 8 | **Bouncer** | `bouncer` | Amber `#FFB020` | 20vp | 3 (+1) | The baseline — bounces forever, no special ability. |
-| 9 | **Splitter** | `splitter` | Amber (same) | 40vp (~2×) | 12 (~4×) | Larger and tankier; on death breaks into 3 small `fragment` clones that kick outward. |
-| 10 | **Shielded** | `shielded` | Amber core + ice-blue `#6FE0FF` shield ring | 32vp shield / 20vp core | 3 (+1) core | An outer shield ring (spins with the core) absorbs 2 hits — and sets the bounce/collision radius while up — before the core takes damage like a normal Bouncer. |
+| 8 | **Bouncer** | `bouncer` | Amber `#FFB020` | 20vp | 4 (+1.2) | The baseline — bounces forever, no special ability. |
+| 9 | **Splitter** | `splitter` | Amber (same) | 40vp (~2×) | 14 (~3.5×, +1.8/level) | Larger and tankier; on death breaks into 3 small `fragment` clones that kick outward. |
+| 10 | **Shielded** | `shielded` | Amber core + ice-blue `#6FE0FF` shield ring | 32vp shield / 20vp core | 4 (+1.8) core | An outer shield ring (spins with the core) absorbs 2 hits — and sets the bounce/collision radius while up — before the core takes damage like a normal Bouncer. |
 | — | *Fragment* | `'fragment'` (runtime-only, not a level `type`) | Amber | 12vp | 1 | Spawned only by a Splitter's death — not directly placeable in a level's enemy list. |
 
 ## Shared combat plumbing
