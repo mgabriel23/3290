@@ -387,7 +387,6 @@ export const Config = Object.freeze({
 			positions: Object.freeze([
 				Object.freeze({ xRatio: 0.24, yRatio: 0.13 }),
 				Object.freeze({ xRatio: 0.8, yRatio: 0.26 }),
-				Object.freeze({ xRatio: 0.48, yRatio: 0.46 }),
 			]),
 
 			/**
