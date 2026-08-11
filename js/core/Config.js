@@ -217,6 +217,14 @@ export const Config = Object.freeze({
 		explosionAudioSrc: "assets/audio/explosion.mp3",
 		explosionVolume: 0.7,
 		deathTrauma: 0.6, // screen-shake trauma for the death explosion itself — stronger than Config.screenShake.playerHitTrauma's ordinary hit
+
+		// A separate "game over" stinger, distinct from the explosion SFX
+		// above — both play together the instant death triggers (see
+		// GameplayScene._triggerGameOver). The gameplay bg music is stopped
+		// (paused, not just ducked) at that same moment — see Game.js's
+		// onMusicStop wiring — and resumes on restart.
+		audioSrc: "assets/audio/gameover.mp3",
+		audioVolume: 0.7,
 	}),
 
 	/**

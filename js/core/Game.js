@@ -160,15 +160,19 @@ export class Game {
    * Swap the tutorial out for the gameplay scene once all hints are
    * dismissed. Also reused verbatim as the "restart" path: GameplayScene's
    * `onGameOver` callback below is this same method, so a post-death tap
-   * just calls this again — the `_themeAudio` guard already anticipated
-   * being called more than once, and a fresh `GameplayScene` is by
-   * construction a clean run (full health, level 1, zero score).
+   * just calls this again — a fresh `GameplayScene` is by construction a
+   * clean run (full health, level 1, zero score).
+   *
+   * `_themeAudio` construction is guarded (only ever built once), but
+   * `.play()` runs every time this method does, not just the first —
+   * restarting must actually RESUME the music, since GameplayScene's
+   * `onMusicStop` callback (see its own doc) pauses it outright the instant
+   * the player dies. We're inside the user-gesture call chain either way
+   * (first launch: last tutorial hint tap → onContinue → here; restart: the
+   * restart tap → onGameOver → here), so audio.play() is permitted both times.
    */
   _startGameplay() {
     try {
-      // Start background music here — we're inside the user-gesture call chain
-      // (last tutorial hint tap → onContinue → here), so audio.play() is permitted.
-      // The guard prevents a second play if _startGameplay is somehow called again.
       if (!this._themeAudio) {
         const { themeSrc, themeVolume, themeLoop } = Config.audio;
         this._themeAudio = new Audio(themeSrc);
@@ -180,8 +184,8 @@ export class Game {
         // Game directly — so this subscription is how a live toggle actually
         // reaches the already-playing element's `.muted` property.
         onMutedChange((muted) => { this._themeAudio.muted = muted; });
-        this._themeAudio.play().catch(() => {});
       }
+      this._themeAudio.play().catch(() => {});
       this.scene = new GameplayScene(this.renderer, {
         onGameOver: () => this._startGameplay(),
         // GameplayScene ducks this multiplier during each level's indicator
@@ -191,6 +195,10 @@ export class Game {
         onMusicDuck: (multiplier) => {
           if (this._themeAudio) this._themeAudio.volume = Config.audio.themeVolume * multiplier;
         },
+        // Hard stop (not a duck) the instant death triggers — see
+        // GameplayScene._triggerGameOver. Resumed above on the next
+        // _startGameplay() call, whether that's a fresh launch or a restart.
+        onMusicStop: () => { this._themeAudio?.pause(); },
       });
     } catch (err) {
       console.error('Failed to start gameplay:', err);

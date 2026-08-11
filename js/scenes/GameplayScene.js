@@ -106,19 +106,22 @@ import { WaveManager } from '../entities/WaveManager.js';
 export class GameplayScene {
   /**
    * @param {import('../core/Renderer.js').Renderer} renderer
-   * @param {{ onGameOver?: () => void, onMusicDuck?: (multiplier: number) => void }} [callbacks]
+   * @param {{ onGameOver?: () => void, onMusicDuck?: (multiplier: number) => void, onMusicStop?: () => void }} [callbacks]
    *   `onGameOver` called once, on the restart tap after the player's health
    *   reaches 0 — see class doc. `onMusicDuck` called every frame with a
    *   0-1 multiplier for the gameplay bg music's volume — GameplayScene
    *   doesn't own that Audio element (Game.js does, since it persists
    *   across restarts), so ducking it during the level indicator has to be
    *   relayed out through this callback rather than touched directly — see
-   *   `_updateMusicDuck`.
+   *   `_updateMusicDuck`. `onMusicStop` called once, the instant death
+   *   triggers (`_triggerGameOver`) — same ownership reasoning, but this one
+   *   is a hard stop (Game.js pauses the Audio element outright), not a duck.
    */
-  constructor(renderer, { onGameOver, onMusicDuck } = {}) {
+  constructor(renderer, { onGameOver, onMusicDuck, onMusicStop } = {}) {
     this.renderer = renderer;
     this._onGameOver = onGameOver;
     this._onMusicDuck = onMusicDuck;
+    this._onMusicStop = onMusicStop;
     this.starfield = new Starfield();
     this.barrier = new Barrier();
     this.player = new Player();
@@ -137,6 +140,7 @@ export class GameplayScene {
     this._gameOverAge = 0; // seconds since death — drives the explosion delay, overlay fade-in, and the restart-tap debounce
     this._playerParticles = new Particles(Config.gameOver.explosionColor, Config.gameOver.explosionSparksPerEmit);
     this._deathExplosionAudio = new AudioPool(Config.gameOver.explosionAudioSrc, 4, Config.gameOver.explosionVolume);
+    this._gameOverAudio = new AudioPool(Config.gameOver.audioSrc, 4, Config.gameOver.audioVolume);
 
     // Level / wave state -------------------------------------------------------
     // 'intro'  — level indicator is on screen; bullets are suppressed
@@ -407,12 +411,17 @@ export class GameplayScene {
    * skips from now on), freeze gameplay for good, and start the countdown
    * to the "GAME OVER" overlay's fade-in — see class doc and
    * `_renderGameOver`'s `explosionDelay` for why the overlay itself waits.
+   * Also plays the separate game-over stinger and stops the gameplay bg
+   * music outright (via `onMusicStop` — see constructor doc for why this
+   * scene can't just pause it directly).
    */
   _triggerGameOver() {
     this._isGameOver  = true;
     this._gameOverAge = 0;
     this._playerParticles.emit(this.player.x, this.player.y);
     this._deathExplosionAudio.play();
+    this._gameOverAudio.play();
+    this._onMusicStop?.();
     this._screenShake.trigger(Config.gameOver.deathTrauma);
     this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.playerHitDuration);
   }
