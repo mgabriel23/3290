@@ -1161,17 +1161,33 @@ export const Config = Object.freeze({
 	 * they get close enough (proximity) or when their fuel runs out (timer).
 	 */
 	rocket: Object.freeze({
-		speed: 190, // vp/sec — slow and relentless
+		speed: 260, // vp/sec — bumped from a "slow and relentless" 190 for a punchier, more threatening flight
 		turnRate: 2.2, // radians/sec — how fast it steers (≈126°/s)
 		maxLife: 4.5, // seconds before self-destruct
 		proximityRadius: 38, // vp — detonate when this close to player
 		fadeStart: 3.5, // seconds — alpha begins fading toward self-destruct
 		color: "#FFB020", // matches Rocketeer hull
 		lineWidth: 2.5,
-		halfLen: 13,
+		halfLen: 13, // half the rocket BODY silhouette's nose-to-tail length (see Rockets._buildBodyPts) — previously unused, the rocket used to be rendered as ONLY its motion trail
 		glowBlur: 10,
 		poolSize: 16,
 		damage: 15, // player HP lost on a proximity detonation — hard to dodge (homing), so priced above enemyBullet
+
+		// Small nose-to-fins dart silhouette drawn at the rocket's leading
+		// tip, oriented along its current velocity — see Rockets.render. Added
+		// because the motion trail alone read as a laser line, not a rocket in
+		// flight. Filled + stroked, same dark-fill/neon-outline language every
+		// enemy hull already uses; fillColor deliberately matches
+		// Config.enemy.rocketeer.fillColor (same family, same craft).
+		bodyHalfWidth: 5, // vp — half the fin-to-fin span at its widest point
+		bodyFillColor: "#1a1000",
+
+		// Motion-trail length, in stored position samples — see Rockets.js.
+		// Shortened from an original 8 (a ~0.32s/83vp streak at the current
+		// speed) so the trail reads as a short exhaust wake behind the body,
+		// not a long laser-like line trailing off it.
+		trailHistory: 4,
+		trailStep: 0.04, // seconds between recorded positions (~2.4 frames at 60fps)
 	}),
 
 	/**

@@ -14,19 +14,38 @@
  * unlike a timeout detonation — which WaveManager.checkPlayerHit reads to
  * apply `Config.rocket.damage`.
  *
- * Visual: a motion-trail polyline drawn through the rocket's recent position
- * history. When flying straight the trail is a straight line; when the homing
- * algorithm steers, the trail bends through the actual arc taken — no fake
- * sine wave, just the real flight path rendered as a glowing thread.
- * All trails are batched into one strokePaths call per frame.
+ * Visual: a small nose-to-fins dart silhouette (see BODY_LOCAL_PTS) is drawn
+ * at the rocket's current position, rotated to face its current travel
+ * direction — this is what actually reads as "a rocket," rather than the
+ * motion-trail polyline alone (still drawn behind it, through the rocket's
+ * recent position history — when flying straight the trail is a straight
+ * line, when the homing algorithm steers, the trail bends through the real
+ * arc taken). Both the trail and every rocket's body are each batched into
+ * one draw call per frame regardless of rocket count.
  */
 import { Config } from '../core/Config.js';
 import { directionalVelocity } from '../core/vectorMath.js';
 
 const MAX          = Config.rocket.poolSize;
-const TRAIL_HIST   = 8;    // stored history positions per rocket
+const TRAIL_HIST   = Config.rocket.trailHistory; // stored history positions per rocket
 const TRAIL_PTS    = TRAIL_HIST + 1; // polyline points = history + current tip
-const TRAIL_STEP   = 0.04; // seconds between recorded positions (~2.4 frames at 60fps)
+const TRAIL_STEP   = Config.rocket.trailStep; // seconds between recorded positions
+
+// Local-space dart silhouette, nose pointing toward +X ("forward") — rotated
+// to each rocket's current travel direction in render(). Nose tip, tapered
+// shoulders, fins flared out near the tail, then a slight tail notch (engine
+// nozzle indent) — reads as a small missile in flight, not a bare capsule.
+const { halfLen: ROCKET_LEN, bodyHalfWidth: ROCKET_HW } = Config.rocket;
+const BODY_LOCAL_PTS = [
+  [ ROCKET_LEN,          0],
+  [ ROCKET_LEN * 0.25,   ROCKET_HW * 0.5],
+  [-ROCKET_LEN * 0.55,   ROCKET_HW],
+  [-ROCKET_LEN * 0.85,   ROCKET_HW * 0.35],
+  [-ROCKET_LEN,          0],
+  [-ROCKET_LEN * 0.85,  -ROCKET_HW * 0.35],
+  [-ROCKET_LEN * 0.55,  -ROCKET_HW],
+  [ ROCKET_LEN * 0.25,  -ROCKET_HW * 0.5],
+];
 
 export class Rockets {
   /**
@@ -58,9 +77,19 @@ export class Rockets {
       closed: false,
     }));
 
-    const { color, lineWidth, glowBlur } = Config.rocket;
-    // Mutable style object — alpha is overwritten each render, no per-frame allocation
+    // Pre-allocated rocket-body path pool — one dart silhouette per slot,
+    // world-space points rewritten (rotated + translated) each frame in render().
+    this._bodyPool = Array.from({ length: MAX }, () => ({
+      points: BODY_LOCAL_PTS.map(() => [0, 0]),
+      closed: true,
+    }));
+
+    const { color, lineWidth, glowBlur, bodyFillColor } = Config.rocket;
+    // Mutable style objects — alpha is overwritten each render, no per-frame allocation
     this._style = { color, lineWidth, glowBlur, lineCap: 'round', singleStroke: true, alpha: 1 };
+    this._bodyStyle = {
+      fillColor: bodyFillColor, strokeColor: color, lineWidth, glowColor: color, glowBlur, singleStroke: true, alpha: 1,
+    };
   }
 
   /**
@@ -202,6 +231,24 @@ export class Rockets {
 
     this._style.alpha = batchAlpha;
     renderer.strokePaths(this._pool, this._style, this._count);
+
+    // Body silhouette on top of the trail — rotated to face each rocket's
+    // current travel direction. `(cos, sin)` derived straight from the
+    // (already-normalized-speed) velocity vector, same no-atan2 trick
+    // update()'s own homing math uses, rather than an extra trig call.
+    for (let i = 0; i < this._count; i++) {
+      const vx = this._vx[i], vy = this._vy[i];
+      const spd = Math.sqrt(vx * vx + vy * vy) || 1;
+      const cos = vx / spd, sin = vy / spd;
+      const bp  = this._bodyPool[i].points;
+      for (let j = 0; j < BODY_LOCAL_PTS.length; j++) {
+        const lx = BODY_LOCAL_PTS[j][0], ly = BODY_LOCAL_PTS[j][1];
+        bp[j][0] = this._x[i] + lx * cos - ly * sin;
+        bp[j][1] = this._y[i] + lx * sin + ly * cos;
+      }
+    }
+    this._bodyStyle.alpha = batchAlpha; // same end-of-life fade as the trail
+    renderer.fillStrokePaths(this._bodyPool, this._bodyStyle, this._count);
   }
 
   /** True while any rocket is still in flight — used by WaveManager.isDone. */
