@@ -149,6 +149,17 @@ export class Player {
   }
 
   /**
+   * Restore `amount` health, clamped at Config.player.maxHealth. Used by a
+   * health PowerUp pickup (see WaveManager.checkPowerUpPickup) — no
+   * flash/feedback beyond the number itself rising, unlike takeDamage's
+   * hit-flash.
+   * @param {number} amount
+   */
+  heal(amount) {
+    this.health = Math.min(Config.player.maxHealth, this.health + amount);
+  }
+
+  /**
    * Move the ship to (x, y) in virtual coordinates, clamped to the play area.
    * Silently ignored while the entry animation is still running.
    */

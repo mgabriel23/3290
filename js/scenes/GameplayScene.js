@@ -92,6 +92,12 @@
  * convention every other scene already uses for its own `onContinue`) —
  * Game.js wires this to simply construct a brand-new GameplayScene, so
  * "restart" is just "start over clean" rather than resetting state in place.
+ *
+ * PowerUp pickups (health/shield restores dropped by a fraction of enemy
+ * kills — see WaveManager.checkPowerUpPickup) are tested against the player
+ * right alongside `_checkPlayerHit` each frame; a health pickup's total is
+ * applied here via `player.heal()` (mirroring `takeDamage`), while a shield
+ * pickup heals the barrier directly inside WaveManager itself.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
@@ -210,6 +216,8 @@ export class GameplayScene {
       this._waveManager.update(effectiveDt, this.player.x, this.player.y);
       this._checkCollisions();
       this._checkPlayerHit();
+      const heal = this._waveManager.checkPowerUpPickup(this.player);
+      if (heal > 0) this.player.heal(heal);
       if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
       // Wave cleared AND all death effects finished → begin the next level intro

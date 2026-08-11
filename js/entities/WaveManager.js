@@ -24,6 +24,10 @@
  * destroyed the instant they reach its surface (see DrifterEnemy.update) —
  * both routed through the same `_onBarrierHit(x, damage)` closure below,
  * with each attack source supplying its own damage value.
+ *
+ * A flat chance on every real kill also drops a PowerUps pickup (health or
+ * shield restore — see Config.powerUps, PowerUps.js, `_maybeDropPowerUp`,
+ * and `checkPowerUpPickup`, the pickup-side mirror of `checkPlayerHit`).
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
@@ -35,6 +39,7 @@ import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
+import { PowerUps } from './PowerUps.js';
 import { AudioPool } from '../core/AudioPool.js';
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
@@ -86,6 +91,7 @@ export class WaveManager {
     this._level   = level;
     this._waveCfg = levels[Math.min(level - 1, levels.length - 1)];
     this._hud = hud;
+    this._barrier = barrier; // direct reference — needed by checkPowerUpPickup to heal it outside the onBarrierHit closure below
     this._barrierSurfaceY = (x) => barrier.surfaceY(x);
     // `damage` is explicit per-call, not hardcoded here, since multiple
     // attack sources now share this same callback with their own values —
@@ -154,6 +160,8 @@ export class WaveManager {
     this._weaverParticles    = new Particles(Config.enemy.drifter.weaver.color, Config.enemy.drifter.weaver.sparksPerEmit);
     this._bouncerParticles   = new Particles(Config.enemy.bouncer.color, Config.enemy.bouncer.sparksPerEmit);
 
+    this._powerUps = new PowerUps();
+
     // Same audio file across all enemy types; volume set per-play (see
     // _playExplosionSfx) since it varies by which type died.
     this._sfxPool = new AudioPool(Config.enemy.scout.audio.src, Config.enemy.scout.audio.poolSize);
@@ -193,6 +201,7 @@ export class WaveManager {
     this._drifterProjectiles.update(dt, playerX, playerY);
     this._enemyBullets.update(dt);
     this._sniperBullets.update(dt);
+    this._powerUps.update(dt);
 
     if (this._waveClear) return;
 
@@ -266,6 +275,7 @@ export class WaveManager {
     this._renderSniperExtras(renderer);
     this._renderIndividualEnemies(renderer);
     this._renderExplosions(renderer);
+    this._powerUps.render(renderer);
   }
 
   /** Projectile pools — enemy bullets, sniper bullets, homing rockets, drifter orbs. */
@@ -473,8 +483,22 @@ export class WaveManager {
         this._particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
       }
+      this._maybeDropPowerUp(enemy.x, enemy.y);
     }
     return killed;
+  }
+
+  /**
+   * Flat-chance PowerUp drop on a real kill — see Config.powerUps. Only
+   * called from handleBulletHit's `killed` branch, so a Diver/Weaver clone
+   * destroyed by reaching the barrier (routed through _onDrifterBarrierHit
+   * instead, which never calls this) can't drop one — that's the player
+   * failing to intercept it, not a kill worth rewarding.
+   */
+  _maybeDropPowerUp(x, y) {
+    if (Math.random() >= Config.powerUps.dropChance) return;
+    const type = Math.random() < Config.powerUps.shieldDropWeight ? 'shield' : 'health';
+    this._powerUps.spawn(x, y, type);
   }
 
   /**
@@ -541,6 +565,29 @@ export class WaveManager {
     }
 
     return damage;
+  }
+
+  /**
+   * Called once per frame by GameplayScene — every active PowerUps pickup
+   * tested against `player`'s circle (see PowerUps.checkPickup). A shield
+   * pickup heals the barrier directly (WaveManager already holds a
+   * `_barrier` reference for onBarrierHit); a health pickup can't be applied
+   * the same way — WaveManager never holds a `player` instance, only its x/y
+   * each frame — so the total is returned instead, for GameplayScene to
+   * apply via `player.heal()`, the same shape checkPlayerHit already uses
+   * for damage/`player.takeDamage()`. Loops so several pickups collected in
+   * the same frame are all applied, not just the first.
+   * @param {{ x: number, y: number, hitRadius: number }} player
+   * @returns {number} total player health to restore this frame (0 if none)
+   */
+  checkPowerUpPickup(player) {
+    let playerHeal = 0;
+    let type;
+    while ((type = this._powerUps.checkPickup(player.x, player.y, player.hitRadius))) {
+      if (type === 'shield') this._barrier.heal(Config.powerUps.shield.healAmount);
+      else playerHeal += Config.powerUps.health.healAmount;
+    }
+    return playerHeal;
   }
 
   /** Direct reference — GameplayScene runs the bullet↔enemy collision loop. */

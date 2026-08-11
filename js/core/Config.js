@@ -1216,6 +1216,49 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * Enemy-kill drops — a flat chance any real player-caused kill (see
+	 * WaveManager.handleBulletHit/_maybeDropPowerUp) leaves behind a small
+	 * falling pickup the player flies through to collect. Only two kinds
+	 * exist: a player-health restore and a barrier-health ("shield") restore
+	 * — see PowerUps.js and WaveManager.checkPowerUpPickup. A Diver/Weaver
+	 * clone destroyed by reaching the barrier (not a real kill — see
+	 * _onDrifterBarrierHit) never rolls for a drop.
+	 */
+	powerUps: Object.freeze({
+		dropChance: 0.12, // fraction of real kills that drop something
+		shieldDropWeight: 0.5, // of the drops that DO happen, this fraction are shield pickups (the rest are health)
+		fallSpeed: 90, // vp/sec, straight down — same for both kinds
+		maxLife: 6, // seconds an uncollected pickup survives before despawning
+		hitRadius: 16, // vp — collision radius against the player, added to Player.hitRadius
+		poolSize: 8,
+
+		radius: 14, // vp — outer circle size
+		lineWidth: 2,
+		glowBlur: 10,
+		pulseSpeed: 3.0, // rad/sec — gentle "alive" breathing alpha, distinct from the low-health warning pulses (faster/deeper elsewhere)
+		pulseDepth: 0.25,
+
+		// Soft green — deliberately distinct from Diver's neon green
+		// (#39ff14) and every other enemy hue, so a pickup never reads as
+		// another threat. Icon: a "+" cross, the universal health-restore glyph.
+		health: Object.freeze({
+			color: "#4DFF8A",
+			fillColor: "#0a2a16",
+			healAmount: 25, // player HP restored — see Config.player.maxHealth
+		}),
+		// Same cyan as Barrier/its SHIELD readout on purpose — this pickup
+		// visually reads as "the barrier's own color" at a glance. Icon: the
+		// same diamond emblem Barrier draws at its own peak (see
+		// core/shapes.js's diamondPath) — a deliberate echo of "this restores
+		// THAT".
+		shield: Object.freeze({
+			color: "#4DEFFF",
+			fillColor: "#0a2530",
+			healAmount: 20, // Barrier HP restored — see Config.barrier.maxHealth
+		}),
+	}),
+
+	/**
 	 * Enemy-death explosion effect (see entities/Particles.js): two
 	 * concentric shockwave rings plus a radial spark burst. One `Particles`
 	 * pool exists per enemy family/variant so each can tune its own
@@ -1754,6 +1797,7 @@ export const Config = Object.freeze({
 	 * visual detail and is read once at construction time (see Barrier.js).
 	 */
 	barrier: Object.freeze({
+		maxHealth: 100, // barrier HP — see Barrier.js's takeDamage/heal
 		color: "#4DEFFF",
 		lineWidth: 2,
 		glowBlur: 10, // reduced from 12 — blur cost ∝ radius², so 10 vs 12 is ~31% cheaper

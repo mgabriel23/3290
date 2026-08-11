@@ -40,7 +40,7 @@ import { AudioPool } from '../core/AudioPool.js';
 
 export class Barrier {
   constructor() {
-    this.health = 100; // 0–100; written by gameplay systems, read by this render method
+    this.health = Config.barrier.maxHealth; // 0–maxHealth; written by gameplay systems, read by this render method
     this._pulseX = 0;
     this._pulseT = -1; // -1 = no ripple in progress
     this._age = 0; // seconds — drives the low-health warning pulse only
@@ -66,6 +66,15 @@ export class Barrier {
   /** Apply damage from a bounce/impact, clamped at 0. */
   takeDamage(amount) {
     this.health = Math.max(0, this.health - amount);
+  }
+
+  /**
+   * Restore `amount` health, clamped at Config.barrier.maxHealth. Used by a
+   * shield PowerUp pickup (see WaveManager.checkPowerUpPickup).
+   * @param {number} amount
+   */
+  heal(amount) {
+    this.health = Math.min(Config.barrier.maxHealth, this.health + amount);
   }
 
   /** Trigger a spring-ripple deformation centered on horizontal position `x`. */
