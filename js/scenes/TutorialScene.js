@@ -72,13 +72,17 @@ const HEALTH_BOX = {
   bottom: HUD_HEALTH.y + HUD_HEALTH.height + 40,
 };
 const BARRIER_BOX = { left: V_W / 2 - 70, top: BARRIER_PEAK_Y + 16, right: V_W / 2 + 70, bottom: BARRIER_PEAK_Y + 66 };
+// A smaller outer pad than SCORE/GOLD/HEALTH use — the buttons themselves
+// are already large (radius 28vp, see Config.playbackControls' comment), so
+// less extra room is needed for the bracket to read clearly, and it keeps
+// this box from creeping into the SCORE/GOLD panels' own estimated bounds.
 const CODEX_BOX = {
-  left: CODEX_BTN.x - CODEX_BTN.radius - 6, top: CODEX_BTN.y - CODEX_BTN.radius - 6,
-  right: CODEX_BTN.x + CODEX_BTN.radius + 6, bottom: CODEX_BTN.y + CODEX_BTN.radius + 6,
+  left: CODEX_BTN.x - CODEX_BTN.radius - 3, top: CODEX_BTN.y - CODEX_BTN.radius - 3,
+  right: CODEX_BTN.x + CODEX_BTN.radius + 3, bottom: CODEX_BTN.y + CODEX_BTN.radius + 3,
 };
 const PLAYBACK_BOX = {
-  left: MUTE_BTN.x - MUTE_BTN.radius - 6, top: MUTE_BTN.y - MUTE_BTN.radius - 6,
-  right: PAUSE_BTN.x + PAUSE_BTN.radius + 6, bottom: PAUSE_BTN.y + PAUSE_BTN.radius + 6,
+  left: MUTE_BTN.x - MUTE_BTN.radius - 3, top: MUTE_BTN.y - MUTE_BTN.radius - 3,
+  right: PAUSE_BTN.x + PAUSE_BTN.radius + 3, bottom: PAUSE_BTN.y + PAUSE_BTN.radius + 3,
 };
 
 /**

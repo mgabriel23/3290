@@ -105,7 +105,7 @@ export class Player {
     const halfH = (Config.player.height / 2) * scale; // 20 virtual px
     this._minX = halfW + 4;                            // clear left edge
     this._maxX = vW - halfW - 4;                       // clear right edge
-    this._minY = 80;                                   // below HUD value text (~y 64)
+    this._minY = 132;                                   // below HUD health bar label (~y 106) — see Config.hud.health's comment
     this._maxY = Config.barrier.baseY - Config.barrier.arcHeight - halfH - 10; // above barrier arc
 
     // Pre-allocated flame triangle — only the tip's y-value changes each

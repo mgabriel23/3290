@@ -1742,17 +1742,18 @@ export const Config = Object.freeze({
 
 		/**
 		 * Player health bar — centered under the mute/codex/pause button row
-		 * (those sit at y=34, radius ≤16 — see Config.codex.button/
-		 * Config.playback.muteButton/pauseButton), clear of the SCORE/GOLD
-		 * corner panels since it's centered rather than edge-anchored. Low
-		 * health reuses Config.player.lowHealth's color/threshold so the bar
-		 * and the ship's own hull pulse read as one consistent warning cue.
+		 * (those sit at y=48, radius 25 — see Config.codex.button/
+		 * Config.playbackControls.muteButton/pauseButton), clear of the
+		 * SCORE/GOLD corner panels since it's centered rather than
+		 * edge-anchored. Low health reuses Config.player.lowHealth's
+		 * color/threshold so the bar and the ship's own hull pulse read as
+		 * one consistent warning cue.
 		 */
 		health: Object.freeze({
 			x: 270, // vp — screen-center, matches the button row above it
-			y: 58, // vp — just under the button row
+			y: 83, // vp — clears the button row's bottom edge (73) by a 10vp gap
 			width: 140,
-			height: 8,
+			height: 10, // a little thicker than the original 8 — reads more clearly at a glance
 			trackColor: "#1a2035", // dim background showing the "empty" portion
 			color: "#4DEFFF", // normal (non-low-health) fill color
 			labelFont: '400 9px "Audiowide", "Courier New", monospace',
@@ -1776,14 +1777,17 @@ export const Config = Object.freeze({
 	 * the game's UI (HUD, title screen, tutorial).
 	 */
 	codex: Object.freeze({
+		// Sized/spaced against real device CSS px, not just virtual px — see
+		// Config.playbackControls' own comment for the full accessibility
+		// rationale (this button shares that same row and target size).
 		button: Object.freeze({
 			x: 270,
-			y: 34,
-			radius: 16, // virtual px — the empty top-center gap between the HUD's score/gold panels
+			y: 48,
+			radius: 25, // virtual px — the empty top-center gap between the HUD's score/gold panels
 			color: "#4DEFFF",
-			lineWidth: 1.5,
-			glowBlur: 6,
-			font: '400 16px "Audiowide", "Courier New", monospace',
+			lineWidth: 2,
+			glowBlur: 7,
+			font: '400 23px "Audiowide", "Courier New", monospace',
 			pulseSpeed: 2.0, // rad/sec — same breathing shape as the title screen's PLAY button
 			pulseDepth: 0.3,
 		}),
@@ -1857,27 +1861,47 @@ export const Config = Object.freeze({
 	 * tappable no matter what else is open. Pause freezes gameplay and dims
 	 * the screen — same technique as the Enemy Codex's overlay, and
 	 * mutually exclusive with it so only one full-screen overlay is ever up.
+	 *
+	 * Sizing/spacing: this row (mute/codex/pause) was originally radius
+	 * 14-16vp — comfortably tappable on the virtual canvas, but virtual px
+	 * aren't device px. At the game's typical scale (virtual width 540
+	 * mapped onto a real phone's full CSS width, ~360-414px), a 14-16vp
+	 * radius rendered as roughly a 19-23 CSS px diameter touch target —
+	 * well under both the WCAG 2.5.8 AA minimum (24x24 CSS px) and nowhere
+	 * near the WCAG 2.5.5 / Material Design AAA guidance (44x44 CSS px).
+	 * All three buttons are now a uniform 25vp radius (50vp diameter),
+	 * which lands in the ~33-37 CSS px range across common phone widths —
+	 * comfortably clear of the AA floor (an earlier 28vp pass pushed closer
+	 * to the 44 CSS px AAA target but read as too large on-device — dialed
+	 * back a little per feedback) — with a 14vp gap between adjacent
+	 * buttons (WCAG 2.5.8 also credits spacing between undersized targets,
+	 * so the gap matters as much as the size). Uniform sizing across the
+	 * row is deliberate too — consistent target sizes in a control cluster
+	 * reduce mis-taps versus mixed sizes. centerY=48 keeps the row's top
+	 * edge close to Config.hud.margin (20), lining it up visually with the
+	 * SCORE/GOLD panels beside it; see Config.hud.health's own comment for
+	 * how the row below it was shifted to keep clearing this button row.
 	 */
 	playbackControls: Object.freeze({
 		muteButton: Object.freeze({
-			x: 216,
-			y: 34,
-			radius: 14,
+			x: 206,
+			y: 48,
+			radius: 25,
 			color: "#4DEFFF",
-			lineWidth: 1.5,
-			glowBlur: 6,
-			font: '400 13px "Audiowide", "Courier New", monospace',
+			lineWidth: 2,
+			glowBlur: 7,
+			font: '400 20px "Audiowide", "Courier New", monospace',
 			pulseSpeed: 2.0,
 			pulseDepth: 0.3,
 		}),
 		pauseButton: Object.freeze({
-			x: 324,
-			y: 34,
-			radius: 14,
+			x: 334,
+			y: 48,
+			radius: 25,
 			color: "#4DEFFF",
-			lineWidth: 1.5,
-			glowBlur: 6,
-			font: '400 13px "Audiowide", "Courier New", monospace',
+			lineWidth: 2,
+			glowBlur: 7,
+			font: '400 20px "Audiowide", "Courier New", monospace',
 			pulseSpeed: 2.0,
 			pulseDepth: 0.3,
 		}),
