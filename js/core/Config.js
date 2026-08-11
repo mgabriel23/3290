@@ -1780,7 +1780,7 @@ export const Config = Object.freeze({
 	 */
 	boss: Object.freeze({
 		everyNLevels: 1,
-		roster: Object.freeze(["spiral", "scout1"]), // ordered — which boss spawns on the 1st/2nd/... boss-level encounter (level 8→roster[0], 16→roster[1], 24→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
+		roster: Object.freeze(["bouncerPrimal", "scout1", "spiral"]), // ordered — which boss spawns on the 1st/2nd/3rd/... boss-level encounter (level 8→roster[0], 16→roster[1], 24→roster[2], 32→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		scout1: Object.freeze({
@@ -1991,6 +1991,90 @@ export const Config = Object.freeze({
 				halfLen: 6,
 				poolSize: 240, // generous — slow bullets linger on screen far longer than a normal Scout's, and `fireDirections: 4` means 4 are spawned per tick, so far more are in flight at once
 				damage: 8,
+			}),
+		}),
+
+		/**
+		 * Boss #3 — "Bouncer Primal". A giant reskin of the Splitter Bouncer
+		 * variant (BouncerPrimalBoss.js reuses BouncerEnemy.js's own exported
+		 * `stepBouncePhysics` — the exact same gravity/wall/top/barrier-bounce
+		 * physics every regular Bouncer already runs, just at this boss's own
+		 * much bigger radius/gravity/speed/barrier-damage numbers) rather than
+		 * a stationary/orbiting ship like Boss #1/#2 — it drops in and bounces
+		 * around the whole arena for the entire fight.
+		 *
+		 * A player-bullet hit has a `summonChance` chance (once
+		 * `summonCooldown` has elapsed — the chance roll on top of the
+		 * cooldown trims what was originally "every eligible hit," which
+		 * spawned a crowd within seconds) to provoke a fresh regular Bouncer
+		 * summon (`summonHealthMin`-`summonHealthMax`) — and that summon's
+		 * own rolled health is ALSO deducted from THIS boss's health on top
+		 * of the bullet's own damage, so provoking a summon is itself a real
+		 * source of damage, not just a distraction. Independently, every hit
+		 * also has a `powerUpDropChance` chance to drop a PowerUp — higher
+		 * than the flat kill-time chance every other enemy uses, since a
+		 * fight this long deserves steadier loot. See BouncerPrimalBoss.hit/
+		 * drainSummons/drainPowerUpDrops and WaveManager.handleBulletHit's
+		 * unconditional (not just on-kill) drain of both queues.
+		 *
+		 * No top-of-screen health bar for this one (`hideHealthBar` on the
+		 * class — see WaveManager.renderBossHealthBar's check) — instead its
+		 * remaining health is drawn directly on the hull as a big compact
+		 * number (see BouncerPrimalBoss.render's `_formatHealth`), same
+		 * "number on the hull" language every regular Bouncer already uses
+		 * for its own (much smaller) health, just abbreviated for a "super
+		 * tanky" number that'd otherwise be too long to read at a glance.
+		 */
+		bouncerPrimal: Object.freeze({
+			name: "BOUNCER PRIMAL",
+			radius: 65, // vp — well above even Splitter's 40; the biggest hull of any Bouncer variant
+			sides: 6, // hexagon — same family silhouette as every Bouncer variant
+			health: 12000,
+			healthPerLevel: 1800,
+			color: "#FFB020", // same amber as the whole Bouncer/Splitter family — the giant-reskin lineage, same idea as Boss #1 reusing Scout's magenta
+			lineWidth: 3,
+			glowBlur: 10,
+			hitGlowBlur: 20,
+			flashDuration: 0.1,
+
+			// Physics — see BouncerEnemy.js's exported stepBouncePhysics. Spin
+			// and speed are both slower than a regular Bouncer's own (0.04
+			// rad/sec per vp/sec, 80-160 vp/sec) — a hull this size reads as
+			// heavier when it turns and moves more deliberately.
+			gravity: 300,
+			spinFactor: 0.02,
+			speedMin: 60,
+			speedMax: 120,
+			barrierDamage: 15, // per bounce off the barrier — well above a regular Bouncer's 5
+			contactDamage: 20, // player HP lost on contact — well above a regular Bouncer's 10
+
+			summonHealthMin: 15,
+			summonHealthMax: 35,
+			summonCooldown: 0.35, // seconds — minimum gap between summons regardless of how fast it's being hit
+			// Trimmed down from "every eligible hit" (too many, too fast) to
+			// 0.55, then down again to 0.45 — still too many summons at 0.55
+			// alongside the cooldown above.
+			summonChance: 0.25,
+
+			// Higher than the flat Config.powerUps.dropChance (0.12) every
+			// other enemy's KILL rolls against — a fight this long deserves
+			// steadier loot along the way, not just one roll at the end. See
+			// BouncerPrimalBoss.hit/WaveManager.handleBulletHit's drain.
+			// Trimmed down a little from an initial 0.2.
+			powerUpDropChance: 0.15,
+
+			numberFont: '400 22px "Audiowide", "Courier New", monospace',
+			numberColor: "#ffffff",
+
+			sparksPerEmit: 45,
+			// Highest flat reward of any boss so far — this is by far the
+			// longest, tankiest fight (see the class doc above).
+			points: 4000,
+			gold: 200,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.85,
+				poolSize: 3,
 			}),
 		}),
 

@@ -23,9 +23,64 @@
  *                             it behaves like a normal Bouncer.
  *   'fragment'              — small low-health clone spawned by a
  *                             splitter's death; otherwise behaves identically.
+ *
+ * `stepBouncePhysics` (gravity/spin/wall/top/barrier-bounce) is exported so
+ * BouncerPrimalBoss.js's giant reskin (see that file) can drive the exact
+ * same physics at its own much larger radius/gravity/speed, rather than
+ * duplicating this math — same "small shared function" shape EnemyCombat.js
+ * already uses for the ship-family enemies, just scoped to this family instead.
  */
 import { Config } from '../core/Config.js';
 import { tickDeathState } from './EnemyCombat.js';
+
+/**
+ * Gravity/spin/wall/top/barrier-bounce physics step — mutates `enemy.x/y/vx/vy/_angle`
+ * in place. Parameterized (not read from Config.enemy.bouncer directly) so
+ * BouncerPrimalBoss.js can drive it with its own much bigger radius/gravity/
+ * speed/barrier-damage numbers.
+ * @param {{x:number,y:number,vx:number,vy:number,_angle:number}} enemy
+ * @param {number} dt
+ * @param {number} r  bounce/collision radius
+ * @param {(x: number) => number} barrierSurfaceY
+ * @param {(x: number, damage: number) => void} onBarrierHit
+ * @param {number} barrierDamage  dealt to the barrier each time this bounces off it
+ * @param {number} spinFactor  rad/sec of spin per vp/sec of horizontal velocity
+ * @param {number} gravity  vp/sec^2
+ */
+export function stepBouncePhysics(enemy, dt, r, barrierSurfaceY, onBarrierHit, barrierDamage, spinFactor, gravity) {
+  const { width: vW } = Config.virtual;
+
+  // Spin proportional to horizontal velocity — reverses naturally on wall bounce.
+  enemy._angle += enemy.vx * spinFactor * dt;
+
+  enemy.vy += gravity * dt;
+  enemy.x  += enemy.vx * dt;
+  enemy.y  += enemy.vy * dt;
+
+  // Bounce off left and right walls.
+  if (enemy.x <= r) {
+    enemy.x  = r;
+    enemy.vx = Math.abs(enemy.vx);
+  } else if (enemy.x >= vW - r) {
+    enemy.x  = vW - r;
+    enemy.vx = -Math.abs(enemy.vx);
+  }
+
+  // Bounce off the top — only when moving upward, so it doesn't get
+  // trapped right at spawn while still falling in.
+  if (enemy.y <= r && enemy.vy < 0) {
+    enemy.y  = r;
+    enemy.vy = Math.abs(enemy.vy);
+  }
+
+  // Bounce off the barrier's dome — only when falling onto it.
+  const surfaceY = barrierSurfaceY(enemy.x);
+  if (enemy.y + r >= surfaceY && enemy.vy > 0) {
+    enemy.y  = surfaceY - r;
+    enemy.vy = -Math.abs(enemy.vy);
+    onBarrierHit(enemy.x, barrierDamage);
+  }
+}
 
 /** Per-variant radius/health — everything else (gravity, spin, etc.) is shared. */
 function _variantStats(variant) {
@@ -43,7 +98,8 @@ export class BouncerEnemy {
    * @param {number} [opts.y]   spawn y — defaults to just above the top edge
    * @param {number} [opts.vx]  initial horizontal velocity — defaults to a random value
    * @param {number} [opts.vy]  initial vertical velocity — defaults to 0
-   * @param {number} [opts.healthBonus]  added to the variant's base health — used by WaveManager to scale health by level
+   * @param {number} [opts.health]  overrides the variant's base health outright (before `healthBonus`) — used by BouncerPrimalBoss.js to set a summoned clone's health to its own rolled value rather than the variant's normal base
+   * @param {number} [opts.healthBonus]  added to the (possibly overridden) base health — used by WaveManager to scale health by level
    */
   constructor(opts = {}) {
     const cfg     = Config.enemy.bouncer;
@@ -61,7 +117,7 @@ export class BouncerEnemy {
     this.vy = opts.vy ?? 0;
     this._angle = Math.random() * Math.PI * 2;
 
-    this._health   = stats.health + (opts.healthBonus ?? 0);
+    this._health   = (opts.health ?? stats.health) + (opts.healthBonus ?? 0);
     this._hitFlash = 0;
     this._dying    = false;
     this.alive     = true;
@@ -158,39 +214,7 @@ export class BouncerEnemy {
     if (tickDeathState(this, dt)) return;
 
     const cfg = Config.enemy.bouncer;
-    const { width: vW } = Config.virtual;
-    const r = this._activeRadius();
-
-    // Spin proportional to horizontal velocity — reverses naturally on wall bounce.
-    this._angle += this.vx * cfg.spinFactor * dt;
-
-    this.vy += cfg.gravity * dt;
-    this.x  += this.vx * dt;
-    this.y  += this.vy * dt;
-
-    // Bounce off left and right walls.
-    if (this.x <= r) {
-      this.x  = r;
-      this.vx = Math.abs(this.vx);
-    } else if (this.x >= vW - r) {
-      this.x  = vW - r;
-      this.vx = -Math.abs(this.vx);
-    }
-
-    // Bounce off the top — only when moving upward, so it doesn't get
-    // trapped right at spawn while still falling in.
-    if (this.y <= r && this.vy < 0) {
-      this.y  = r;
-      this.vy = Math.abs(this.vy);
-    }
-
-    // Bounce off the barrier's dome — only when falling onto it.
-    const surfaceY = barrierSurfaceY(this.x);
-    if (this.y + r >= surfaceY && this.vy > 0) {
-      this.y  = surfaceY - r;
-      this.vy = -Math.abs(this.vy);
-      onBarrierHit(this.x, cfg.barrierDamage);
-    }
+    stepBouncePhysics(this, dt, this._activeRadius(), barrierSurfaceY, onBarrierHit, cfg.barrierDamage, cfg.spinFactor, cfg.gravity);
   }
 
   render(renderer) {

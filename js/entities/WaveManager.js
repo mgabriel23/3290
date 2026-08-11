@@ -43,20 +43,26 @@
  * existing spawn machinery (`_spawnNext`/`_groupForIdx`) builds a single
  * boss instance the same way it builds any other group. WHICH boss is read
  * off `Config.boss.roster`, cycling once every boss has had a turn (level
- * 8 → roster[0] "scout1", 16 → roster[1] "spiral", 24 → roster[0] again,
- * ...) — see the constructor's `_bossKey`/`_bossCfg` lookup and the
- * `BOSS_CLASSES` table above for the matching class construction. Every
- * boss class shares one `update(dt, playerX, playerY, fire)` shape, where
- * `fire` is a bag of every fire callback ANY boss might need (`_bossFire`,
- * built once in the constructor) — each class reads only the ones it
- * actually uses (see BossEnemy.js/SpiralBoss.js's own docs for their attack
- * patterns). Every boss renders itself individually like Drifter/Bouncer
- * (see `_renderIndividualEnemies`), and gets its own health-bar UI via
- * `renderBossHealthBar` — a separate method GameplayScene calls from the
- * fixed UI camera layer, not part of this class's own `render()` (which
+ * 8 → roster[0] "scout1", 16 → roster[1] "spiral", 24 → roster[2]
+ * "bouncerPrimal", 32 → roster[0] again, ...) — see the constructor's
+ * `_bossKey`/`_bossCfg` lookup and the `BOSS_CLASSES` table above for the
+ * matching class construction. Every boss class shares one
+ * `update(dt, playerX, playerY, ctx)` shape, where `ctx` is a bag of every
+ * callback ANY boss might need — fire callbacks for the ship-family bosses
+ * (`fireBullet`/`fireRocket`/`fireSniperBullet`/`fireSpiralBullet`) AND
+ * `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal
+ * (`_bossContext`, built once in the constructor) — each class reads only
+ * the ones it actually uses (see BossEnemy.js/SpiralBoss.js/
+ * BouncerPrimalBoss.js's own docs for their attack patterns). Every boss
+ * renders itself individually like Drifter/Bouncer (see
+ * `_renderIndividualEnemies`), and gets its own boss-tier UI treatment —
+ * `renderBossHealthBar`, a separate method GameplayScene calls from the
+ * fixed UI camera layer (not part of this class's own `render()`, which
  * runs inside the panned/shaking world layer) — driven generically off
  * whichever boss instance is alive (`.name`/`.color`/`.healthFrac`), not
- * hardcoded to one boss type.
+ * hardcoded to one boss type, and skipped outright for a boss that opts out
+ * via `.hideHealthBar` (Bouncer Primal draws its own health as a number on
+ * its hull instead — see that class's doc for why).
  */
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
@@ -65,6 +71,7 @@ import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, cr
 import { BouncerEnemy } from './BouncerEnemy.js';
 import { BossEnemy } from './BossEnemy.js';
 import { SpiralBoss } from './SpiralBoss.js';
+import { BouncerPrimalBoss } from './BouncerPrimalBoss.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
@@ -81,7 +88,7 @@ const SKILL_LETHAL_MULTIPLIER = 9999;
 
 // Which boss CLASS to construct for a given Config.boss.roster key — see
 // the constructor's boss-selection lookup and _spawnNext's 'boss' branch.
-const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss };
+const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss };
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -254,15 +261,20 @@ export class WaveManager {
     // reactively separating afterward.
     this._findClearRestPoint = (enemy) => this._findClearRestPointFor(enemy);
 
-    // Every fire callback a boss could possibly need, bundled as one object
-    // — see BossEnemy.update's doc for why a bag-of-callbacks beats
-    // positional args once more than one boss class (with different subsets
-    // of callbacks) shares the same generic update() call site below.
-    this._bossFire = {
+    // Every callback a boss could possibly need, bundled as one object — see
+    // BossEnemy.update's doc for why a bag-of-callbacks beats positional
+    // args once more than one boss class (with different subsets of
+    // callbacks) shares the same generic update() call site below.
+    // barrierSurfaceY/onBarrierHit are the same closures a regular Bouncer
+    // gets (see the 'bouncer' branch just below) — Bouncer Primal is the
+    // only boss that currently reads them, but every boss receives the full bag.
+    this._bossContext = {
       fireBullet: this._fireBullet,
       fireRocket: this._fireRocket,
       fireSniperBullet: this._fireSniperBullet,
       fireSpiralBullet: this._fireSpiralBullet,
+      barrierSurfaceY: this._barrierSurfaceY,
+      onBarrierHit: this._onBarrierHit,
     };
 
     this._waveClear = false;
@@ -333,7 +345,7 @@ export class WaveManager {
         continue;
       }
       if (e.type === 'boss') {
-        e.update(dt, playerX, playerY, this._bossFire);
+        e.update(dt, playerX, playerY, this._bossContext);
         continue;
       }
       let cb;
@@ -558,7 +570,7 @@ export class WaveManager {
    * @param {import('../core/Renderer.js').Renderer} renderer
    */
   renderBossHealthBar(renderer) {
-    if (!this._boss || !this._boss.alive) return;
+    if (!this._boss || !this._boss.alive || this._boss.hideHealthBar) return;
     const cfg  = Config.boss.healthBar;
     const boss = this._boss;
     const left  = cfg.x - cfg.width / 2;
@@ -592,6 +604,25 @@ export class WaveManager {
    */
   handleBulletHit(enemy, damageMultiplier = 1) {
     const killed = enemy.hit(this._playerDamage * damageMultiplier);
+
+    // Bouncer Primal (and any future boss with its own summon-on-hit
+    // mechanic) queues newly-summoned enemies inside its own hit() —
+    // drained here regardless of whether THIS particular hit was fatal,
+    // since the summon already happened the instant the hit landed. Every
+    // other enemy type simply has no `drainSummons` method, so this is a no-op for them.
+    if (enemy.drainSummons) {
+      for (const summon of enemy.drainSummons()) this._enemies.push(summon);
+    }
+
+    // Same on-hit (not just on-kill) shape as the summon drain above — a
+    // boss with its own higher on-hit PowerUp chance (currently only
+    // Bouncer Primal) queues drops inside its own hit(), drained here every
+    // hit regardless of whether it was fatal.
+    if (enemy.drainPowerUpDrops) {
+      const dropCount = enemy.drainPowerUpDrops();
+      for (let i = 0; i < dropCount; i++) this._spawnRandomPowerUp(enemy.x, enemy.y);
+    }
+
     if (killed) {
       const reward = this._rewardFor(enemy);
       this._hud.score += reward.points;
@@ -632,14 +663,26 @@ export class WaveManager {
    * destroyed by reaching the barrier (routed through _onDrifterBarrierHit
    * instead, which never calls this) can't drop one — that's the player
    * failing to intercept it, not a kill worth rewarding.
+   */
+  _maybeDropPowerUp(x, y) {
+    if (Math.random() >= Config.powerUps.dropChance) return;
+    this._spawnRandomPowerUp(x, y);
+  }
+
+  /**
+   * Picks a random PowerUp type and spawns it — the un-gated half of
+   * `_maybeDropPowerUp` (its own outer `dropChance` roll happens before
+   * this), pulled out so it can also be reused by a boss's own on-hit drop
+   * chance (currently only Bouncer Primal's, higher than the flat kill-time
+   * `dropChance` — see BouncerPrimalBoss.hit and handleBulletHit's
+   * `drainPowerUpDrops` check).
    *
    * Type is a cumulative-threshold roll across the four kinds — shield,
    * then fireBoost, then invincible, health taking whatever's left — not
    * four independent rolls, so the weights always sum to a clean 100%
    * regardless of their individual values.
    */
-  _maybeDropPowerUp(x, y) {
-    if (Math.random() >= Config.powerUps.dropChance) return;
+  _spawnRandomPowerUp(x, y) {
     const { shieldDropWeight, fireBoostDropWeight, invincibleDropWeight } = Config.powerUps;
     const roll = Math.random();
     const type = roll < shieldDropWeight ? 'shield'
@@ -709,10 +752,16 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'bouncer') {
+      // A regular Bouncer always deals contact damage; a boss opts in by
+      // exposing its own `.contactDamage` (currently only Bouncer Primal —
+      // see that class's doc) rather than every other boss needing a
+      // no-op getter just to be excluded here.
+      if (e.type === 'bouncer' || e.contactDamage > 0) {
         const dx = e.x - x, dy = e.y - y;
         const r  = e.hitRadius + hitRadius;
-        if (dx * dx + dy * dy <= r * r) damage += Config.enemy.bouncer.contactDamage;
+        if (dx * dx + dy * dy <= r * r) {
+          damage += e.type === 'bouncer' ? Config.enemy.bouncer.contactDamage : e.contactDamage;
+        }
       }
     }
 
