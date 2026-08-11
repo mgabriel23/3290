@@ -9,6 +9,7 @@
  */
 import { Config } from './Config.js';
 import { isMuted, onMutedChange } from './AudioSettings.js';
+import { AudioFader } from './AudioFader.js';
 import { Renderer } from './Renderer.js';
 import { SwipeInput } from './SwipeInput.js';
 import { TapInput } from './TapInput.js';
@@ -118,17 +119,21 @@ export class Game {
    * gesture (see IntroScene's class doc for why that timing matters,
    * unlike `onContinue` which fires later from an `update()` tick). The
    * `!this._prologueAudio` guard mirrors `_startGameplay`'s own theme-audio
-   * guard, in case this is somehow reached more than once.
+   * guard, in case this is somehow reached more than once. Starts silent
+   * and ramps up via `_prologueFader` (advanced every frame in `_tick`)
+   * instead of jumping straight to full volume — see AudioFader's own doc.
    */
   _startPrologueMusic() {
     if (this._prologueAudio) return;
     try {
-      const { prologueThemeSrc, prologueThemeVolume, prologueThemeLoop } = Config.audio;
+      const { prologueThemeSrc, prologueThemeLoop, prologueFadeInDuration } = Config.audio;
       this._prologueAudio = new Audio(prologueThemeSrc);
-      this._prologueAudio.volume = prologueThemeVolume;
+      this._prologueAudio.volume = 0;
       this._prologueAudio.loop = prologueThemeLoop;
       this._prologueAudio.muted = isMuted();
       onMutedChange((muted) => { this._prologueAudio.muted = muted; });
+      this._prologueFader = new AudioFader();
+      this._prologueFader.rampTo(1, prologueFadeInDuration);
       this._prologueAudio.play().catch(() => {});
     } catch (err) {
       console.error('Failed to start the prologue music:', err);
@@ -144,10 +149,13 @@ export class Game {
    * title/PLAY card ("the main menu") — this is where it finally stops,
    * right as PLAY's tap actually lands (`onContinue` fires once the title
    * card's exit-fade finishes — see PrologueScene._updateExitFade), so it
-   * doesn't keep playing underneath the entire tutorial too.
+   * doesn't keep playing underneath the entire tutorial too. Ramps out
+   * smoothly (see `_prologueFader`/`_tick`) rather than an abrupt `.pause()`
+   * — the fader's own `onComplete` is what actually pauses the element,
+   * once it's already faded down to silence.
    */
   _startTutorial() {
-    this._prologueAudio?.pause();
+    this._prologueFader?.rampTo(0, Config.audio.prologueFadeOutDuration, () => this._prologueAudio?.pause());
     try {
       this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
     } catch (err) {
@@ -163,20 +171,27 @@ export class Game {
    * just calls this again — a fresh `GameplayScene` is by construction a
    * clean run (full health, level 1, zero score).
    *
-   * `_themeAudio` construction is guarded (only ever built once), but
-   * `.play()` runs every time this method does, not just the first —
-   * restarting must actually RESUME the music, since GameplayScene's
-   * `onMusicStop` callback (see its own doc) pauses it outright the instant
-   * the player dies. We're inside the user-gesture call chain either way
-   * (first launch: last tutorial hint tap → onContinue → here; restart: the
-   * restart tap → onGameOver → here), so audio.play() is permitted both times.
+   * `_themeAudio`/`_themeFader` construction is guarded (only ever built
+   * once), but `.play()` and the fade-in ramp both run every time this
+   * method does, not just the first — restarting must actually RESUME the
+   * music, since GameplayScene's `onMusicStop` callback (see its own doc)
+   * fades it out (then pauses it) the instant the player dies. We're inside
+   * the user-gesture call chain either way (first launch: last tutorial
+   * hint tap → onContinue → here; restart: the restart tap → onGameOver →
+   * here), so audio.play() is permitted both times.
+   *
+   * `_themeDuckMultiplier` (GameplayScene's per-level ducking) and
+   * `_themeFader.value` (this fade-in/out ramp) are two independent 0-1
+   * factors — `_tick`'s `_updateAudioFades` is what actually multiplies
+   * them together onto `.volume` each frame, rather than either one here
+   * fighting to be the last writer of `.volume`.
    */
   _startGameplay() {
     try {
       if (!this._themeAudio) {
-        const { themeSrc, themeVolume, themeLoop } = Config.audio;
+        const { themeSrc, themeLoop } = Config.audio;
         this._themeAudio = new Audio(themeSrc);
-        this._themeAudio.volume = themeVolume;
+        this._themeAudio.volume = 0;
         this._themeAudio.loop = themeLoop;
         this._themeAudio.muted = isMuted();
         // The mute toggle (in GameplayScene, via PlaybackControls) lives far
@@ -184,21 +199,26 @@ export class Game {
         // Game directly — so this subscription is how a live toggle actually
         // reaches the already-playing element's `.muted` property.
         onMutedChange((muted) => { this._themeAudio.muted = muted; });
+        this._themeFader = new AudioFader();
+        this._themeDuckMultiplier = 1; // GameplayScene's per-level duck — see onMusicDuck below
       }
       this._themeAudio.play().catch(() => {});
+      this._themeFader.rampTo(1, Config.audio.themeFadeInDuration);
       this.scene = new GameplayScene(this.renderer, {
         onGameOver: () => this._startGameplay(),
         // GameplayScene ducks this multiplier during each level's indicator
         // (see its own _updateMusicDuck) but doesn't own _themeAudio itself
         // — it persists across restarts, so Game.js has to be the one that
-        // actually touches its `.volume`.
-        onMusicDuck: (multiplier) => {
-          if (this._themeAudio) this._themeAudio.volume = Config.audio.themeVolume * multiplier;
-        },
-        // Hard stop (not a duck) the instant death triggers — see
-        // GameplayScene._triggerGameOver. Resumed above on the next
+        // actually applies it to `.volume` (see _updateAudioFades).
+        onMusicDuck: (multiplier) => { this._themeDuckMultiplier = multiplier; },
+        // Fade out (not an abrupt stop) the instant death triggers — see
+        // GameplayScene._triggerGameOver. The fader's onComplete is what
+        // actually pauses the element once it's faded down to silence.
+        // Resumed (played + faded back in) above on the next
         // _startGameplay() call, whether that's a fresh launch or a restart.
-        onMusicStop: () => { this._themeAudio?.pause(); },
+        onMusicStop: () => {
+          this._themeFader?.rampTo(0, Config.audio.themeFadeOutDuration, () => this._themeAudio?.pause());
+        },
       });
     } catch (err) {
       console.error('Failed to start gameplay:', err);
@@ -224,6 +244,12 @@ export class Game {
    * hang from the outside. `_consecutiveTickErrors` catches that case —
    * once a run of failures crosses the threshold, `_showFatalError` takes
    * over instead of continuing to fail silently.
+   *
+   * `_updateAudioFades` runs right after `scene.update(dt)` (inside the same
+   * try/catch, so a scene bug can't leave audio fades permanently stuck) —
+   * after, not before, so this frame's `onMusicDuck` call (fired from
+   * GameplayScene's own `update()`) is already reflected the same frame
+   * instead of lagging a frame behind.
    * @param {number} timestamp  high-resolution time in ms, supplied by rAF
    */
   _tick(timestamp) {
@@ -236,6 +262,7 @@ export class Game {
 
     try {
       this.scene.update(dt);
+      this._updateAudioFades(dt);
       this.scene.render();
       this._consecutiveTickErrors = 0;
     } catch (err) {
@@ -245,6 +272,27 @@ export class Game {
     }
 
     requestAnimationFrame(this._tick);
+  }
+
+  /**
+   * Advance whichever background-music fades are currently active
+   * (prologue, gameplay theme — either or both may not exist yet, e.g.
+   * before the intro swipe or before gameplay has ever started) and apply
+   * the result to each Audio element's `.volume`. The gameplay theme's
+   * final volume is its configured base volume times TWO independent 0-1
+   * factors multiplied together — `_themeDuckMultiplier` (GameplayScene's
+   * per-level ducking) and `_themeFader.value` (this fade-in/out ramp) —
+   * see `_startGameplay`'s doc for why those stay separate rather than one
+   * of them writing `.volume` directly.
+   * @param {number} dt seconds
+   */
+  _updateAudioFades(dt) {
+    if (this._prologueAudio && this._prologueFader) {
+      this._prologueAudio.volume = Config.audio.prologueThemeVolume * this._prologueFader.update(dt);
+    }
+    if (this._themeAudio && this._themeFader) {
+      this._themeAudio.volume = Config.audio.themeVolume * this._themeDuckMultiplier * this._themeFader.update(dt);
+    }
   }
 
   /**

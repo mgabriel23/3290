@@ -1643,10 +1643,18 @@ export const Config = Object.freeze({
 		// rather than getting buried.
 		prologueThemeVolume: 0.15,
 		prologueThemeLoop: true,
+		// Both tracks below ramp in/out via core/AudioFader.js (see Game.js)
+		// instead of snapping straight to full volume or silence — a fade-in
+		// on start, a fade-out (then an actual .pause()) on stop, so neither
+		// transition lands as an abrupt audio pop.
+		prologueFadeInDuration: 1.2, // swells in as the cinematic begins
+		prologueFadeOutDuration: 0.6, // stops promptly once PLAY is tapped, but not instantly
 
 		themeSrc: "assets/audio/bg-music.mp3",
 		themeVolume: 0.22, // BGM bed — lower than SFX so bullets and explosions always sit clearly on top
 		themeLoop: true,
+		themeFadeInDuration: 1.0, // eases in on gameplay start/restart
+		themeFadeOutDuration: 0.7, // smooth stop on death, not an abrupt cut
 	}),
 
 	/**
