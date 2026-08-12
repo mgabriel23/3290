@@ -17,14 +17,15 @@
  * is what drives that fade — Starfield itself stays opinion-free about
  * when or how it should appear; it just knows how to draw and scroll.
  *
- * The enemy codex (`EnemyCodex`) and the pause button (`PlaybackControls`)
- * both freeze everything gameplay-related (`update` returns early) while
- * open, but the starfield keeps drifting and the scene still renders one
- * last normal frame underneath the dimming overlay, so the game reads as
- * "paused", not "gone". They're mutually exclusive full-screen overlays —
- * this scene is what enforces that only one can be open at a time; the mute
- * button (also owned by `PlaybackControls`) never opens an overlay, so it
- * stays tappable regardless of what else is open.
+ * The enemy codex (`EnemyCodex`), the shop (`Shop`, opened by tapping the
+ * HUD's GOLD panel — see `HUD.isInsideGoldPanel`), and the pause button
+ * (`PlaybackControls`) all freeze everything gameplay-related (`update`
+ * returns early) while open, but the starfield keeps drifting and the scene
+ * still renders one last normal frame underneath the dimming overlay, so
+ * the game reads as "paused", not "gone". They're mutually exclusive
+ * full-screen overlays — this scene is what enforces that only one can be
+ * open at a time; the mute button (also owned by `PlaybackControls`) never
+ * opens an overlay, so it stays tappable regardless of what else is open.
  *
  * Impact feedback: this scene owns a `ScreenShake` (see core/ScreenShake.js)
  * and a `_hitStopTimer` — a kill triggers both (see `_checkCollisions`),
@@ -137,6 +138,7 @@ import { Particles } from '../entities/Particles.js';
 import { Player } from '../entities/Player.js';
 import { PlaybackControls } from '../entities/PlaybackControls.js';
 import { PlayerSkill } from '../entities/PlayerSkill.js';
+import { Shop } from '../entities/Shop.js';
 import { Starfield } from '../entities/Starfield.js';
 import { WaveManager } from '../entities/WaveManager.js';
 
@@ -165,6 +167,7 @@ export class GameplayScene {
     this.bullets = new Bullets();
     this.hud = new HUD();
     this._codex = new EnemyCodex();
+    this._shop = new Shop(this.hud);
     this._playback = new PlaybackControls();
     this._playerSkill = new PlayerSkill();
     this._screenShake = new ScreenShake();
@@ -218,14 +221,15 @@ export class GameplayScene {
    */
   update(dt) {
     this._codex.update(dt);
+    this._shop.update(dt);
     this._playback.update(dt);
-    this.starfield.update(dt); // keeps drifting even while paused/codex/game-over is showing — purely cosmetic, not gameplay
+    this.starfield.update(dt); // keeps drifting even while paused/codex/shop/game-over is showing — purely cosmetic, not gameplay
     if (this._isGameOver) {
       this._gameOverAge += dt;
       this._playerParticles.update(dt); // let the death burst finish animating while everything else is frozen
       return; // frozen for good — only a restart tap moves things forward
     }
-    if (this._codex.isOpen || this._playback.isPaused) return; // frozen — nothing gameplay-related advances
+    if (this._codex.isOpen || this._shop.isOpen || this._playback.isPaused) return; // frozen — nothing gameplay-related advances
 
     this._screenShake.update(dt);
     this._updateCameraFollow(dt);
@@ -317,10 +321,12 @@ export class GameplayScene {
     this._playerSkill.render(this.renderer);
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
-    // Codex, then playback controls — both must sit on top of everything else,
-    // including the level intro. Playback renders last so its mute/pause
-    // buttons stay visible and tappable even while the codex card is open.
+    // Codex, then shop, then playback controls — all three must sit on top
+    // of everything else, including the level intro. Playback renders last
+    // so its mute/pause buttons stay visible and tappable even while the
+    // codex card or the shop is open.
     this._codex.render(this.renderer);
+    this._shop.render(this.renderer);
     this._playback.render(this.renderer);
     // Game over sits on top of literally everything — the final word on the frame.
     if (this._isGameOver) this._renderGameOver();
@@ -379,6 +385,7 @@ export class GameplayScene {
     // that opens an overlay, toggles mute, or fires the skill would first
     // snap the ship to that button's position.
     if (this._codex.isOpen || this._codex.isInsideButton(x, y)) return;
+    if (this._shop.isOpen || this.hud.isInsideGoldPanel(x, y)) return;
     if (this._playback.isPaused
       || this._playback.isInsideMuteButton(x, y)
       || this._playback.isInsidePauseButton(x, y)) return;
@@ -389,7 +396,7 @@ export class GameplayScene {
 
   handlePointerMove(x, y) {
     if (this._isGameOver) return;
-    if (!this._pointerDown || this._codex.isOpen || this._playback.isPaused) return;
+    if (!this._pointerDown || this._codex.isOpen || this._shop.isOpen || this._playback.isPaused) return;
     this.player.moveTo(x, y);
   }
 
@@ -399,17 +406,17 @@ export class GameplayScene {
 
   /**
    * Game over wins first — once it's showing, nothing else is interactible
-   * (mirrors why mute/pause/codex are all mutually exclusive below, just
-   * one level higher). `minRestartDelay` guards against the residual tap
-   * that triggered the fatal hit being immediately reinterpreted as a
+   * (mirrors why mute/pause/codex/shop are all mutually exclusive below,
+   * just one level higher). `minRestartDelay` guards against the residual
+   * tap that triggered the fatal hit being immediately reinterpreted as a
    * restart. Otherwise: mute always wins next — it never opens an overlay,
-   * so it's always safe to toggle. Pause and the Codex are mutually
-   * exclusive full-screen overlays: opening either is ignored while the
-   * other is already open, so their dimming layers can never stack. If the
-   * Codex is open its own tap handling takes over entirely; otherwise, if
-   * paused, nothing further below responds (a paused game shouldn't fire
-   * the skill). Last: the skill button, but only during 'active' state —
-   * see `_useSkill`.
+   * so it's always safe to toggle. Pause, the Codex, and the Shop are
+   * mutually exclusive full-screen overlays: opening any one of them is
+   * ignored while another is already open, so their dimming layers can
+   * never stack. If the Shop or Codex is open its own tap handling takes
+   * over entirely; otherwise, if paused, nothing further below responds (a
+   * paused game shouldn't fire the skill). Last: the skill button, but only
+   * during 'active' state — see `_useSkill`.
    */
   handleTap(x, y) {
     if (this._isGameOver) {
@@ -421,11 +428,20 @@ export class GameplayScene {
       return;
     }
     if (this._playback.isInsidePauseButton(x, y)) {
-      if (!this._codex.isOpen) this._playback.togglePause();
+      if (!this._codex.isOpen && !this._shop.isOpen) this._playback.togglePause();
       return;
     }
     if (this._codex.isInsideButton(x, y)) {
-      if (!this._playback.isPaused) this._codex.handleTap(x, y);
+      if (!this._playback.isPaused && !this._shop.isOpen) this._codex.handleTap(x, y);
+      return;
+    }
+    // Checked before the GOLD-panel open-trigger below: the shop's own close
+    // button overlaps that panel's screen region, so once open, every tap
+    // (including one landing there) must route into the shop's own handling
+    // rather than being reinterpreted as "open" again.
+    if (this._shop.isOpen) { this._shop.handleTap(x, y); return; }
+    if (this.hud.isInsideGoldPanel(x, y)) {
+      if (!this._playback.isPaused && !this._codex.isOpen) this._shop.open();
       return;
     }
     if (this._codex.isOpen) { this._codex.handleTap(x, y); return; }

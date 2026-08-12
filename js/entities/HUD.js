@@ -14,6 +14,11 @@
  * (only saved once it's actually beaten), gold is a running wallet total
  * saved on every change.
  *
+ * The GOLD panel doubles as a button: `isInsideGoldPanel` is its tap
+ * hit-test, wired up by GameplayScene to open the Shop overlay (see
+ * Shop.js) — HUD only owns the hit-test (it's HUD's own geometry), not the
+ * shop itself or the open/close state.
+ *
  * Health is different: it's owned by Player (mirrors `Barrier.health`'s
  * convention), not by HUD, so `render(renderer, health)` takes the current
  * value as a parameter instead — the same pattern `Barrier.render` already
@@ -68,6 +73,24 @@ export class HUD {
   set gold(value) {
     this._gold = value;
     saveNumber('gold', this._gold);
+  }
+
+  /**
+   * True while (x, y) is inside the GOLD panel's tap target — opens the
+   * Shop (see Shop.js, GameplayScene.handleTap). HUD owns this hit-test
+   * itself, same convention as EnemyCodex.isInsideButton/PlaybackControls'
+   * isInsideMuteButton, since HUD is what actually draws the panel this
+   * button lives on top of.
+   * @param {number} x @param {number} y
+   */
+  isInsideGoldPanel(x, y) {
+    const { margin, goldButton } = Config.hud;
+    const { width: vW } = Config.virtual;
+    const right  = vW - margin + 8;
+    const left   = right - goldButton.hitWidth;
+    const top    = margin - goldButton.hitInsetTop;
+    const bottom = top + goldButton.hitHeight;
+    return x >= left && x <= right && y >= top && y <= bottom;
   }
 
   /**

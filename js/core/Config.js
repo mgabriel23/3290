@@ -3215,6 +3215,90 @@ export const Config = Object.freeze({
 			labelFont: '400 9px "Audiowide", "Courier New", monospace',
 			valueFont: '400 15px "Audiowide", "Courier New", monospace',
 		}),
+
+		/**
+		 * Tap target for the GOLD panel itself — opens the Shop (see Shop.js,
+		 * HUD.isInsideGoldPanel, GameplayScene.handleTap). Generous, wider than
+		 * the label+value text it sits over, same "easy to hit" philosophy as
+		 * Config.prologue.skip's own hit box.
+		 */
+		goldButton: Object.freeze({
+			hitWidth: 120,
+			hitHeight: 64,
+			hitInsetTop: 8, // vp above the label's y-anchor included in the tap target
+		}),
+	}),
+
+	/**
+	 * Shop — a placeholder purchase screen opened by tapping the HUD's GOLD
+	 * panel, freezing gameplay the same way Config.codex's overlay does (see
+	 * Shop.js). Laid out as an equipment screen: the player's real ship
+	 * (Player.js, reused as-is — no re-derived approximation, same
+	 * philosophy as EnemyCodex's enemy previews) sits center-screen, with
+	 * one card per ship "part" radiating outward at the four compass points,
+	 * a thin connector line tying each card back to the ship. The item
+	 * roster itself (names/descriptions/costs) lives in Shop.js, not here —
+	 * same content/chrome split as EnemyCodex (roster in EnemyCodex.js's
+	 * ENTRIES, layout/chrome tuning here) — because those items are
+	 * deliberately throwaway placeholders (see Shop.js's own doc) due to be
+	 * replaced once the real weapon/upgrade design lands; only this visual
+	 * chrome is expected to last.
+	 */
+	shop: Object.freeze({
+		dimAlpha: 0.85, // same "frozen frame behind a dark veil" treatment as Config.codex.overlay
+		fadeInDuration: 0.2,
+
+		titleFont: '400 16px "Audiowide", "Courier New", monospace',
+		titleColor: "#4DEFFF",
+		titleY: 100, // clears the mute/codex/pause button row — see Config.codex.overlay.titleY's own comment
+
+		balanceFont: '400 13px "Audiowide", "Courier New", monospace',
+		balanceColor: "#FFD700", // same coin-gold as Config.gold.color — this number IS that wallet
+		balanceY: 130,
+
+		// Explicit close button (top-right of the overlay's own content, not
+		// the HUD's dimmed GOLD panel underneath) — this popup must never
+		// rely on tapping "through" or "behind" it to dismiss. Same circle+
+		// glyph shape as Config.codex.button, just smaller.
+		closeButton: Object.freeze({
+			x: 500, y: 45, radius: 18,
+			color: "#4DEFFF", lineWidth: 2, glowBlur: 7,
+			font: '400 18px "Audiowide", "Courier New", monospace',
+		}),
+
+		// The ship renders at its real in-game position/scale (Config.player),
+		// just relocated to this fixed spot for the overlay — see Shop.js's
+		// frozen preview instance. Each item (see Shop.js's ITEMS) is tagged
+		// with a compass `slot` resolved to a card center via these offsets.
+		ship: Object.freeze({ x: 270, y: 520 }),
+		cardOffsetX: 175, // vp from ship center to a left/right card's center
+		cardOffsetY: 210, // vp from ship center to a top/bottom card's center
+
+		connectorColor: "#4DEFFF",
+		connectorLineWidth: 1,
+		connectorAlpha: 0.25,
+
+		// Corner-bracket-framed cards (same chrome motif as the codex's preview
+		// frame / the title screen's PLAY button — see core/shapes.js's
+		// cornerBracketPath), not a filled box, to read as this game's UI
+		// rather than a generic panel. The whole card is the tap target.
+		cardWidth: 150,
+		cardHeight: 90,
+		cardLegSize: 12,
+		cardLineWidth: 1,
+		cardGlowBlur: 3,
+
+		nameFont: '400 11px "Audiowide", "Courier New", monospace',
+		nameColor: "#e8ecff",
+		costFont: '400 13px "Audiowide", "Courier New", monospace',
+		buyAffordableColor: "#4DEFFF",
+		buyUnaffordableColor: "#4a5570", // dim — reads as "disabled," same intent as a grayed-out control
+		buyOwnedColor: "#4DFF8A", // same soft green as Config.powerUps.health — "acquired" reads the same as "restored"
+
+		footerFont: '400 11px "Audiowide", "Courier New", monospace',
+		footerColor: "#aab4d4",
+		footerY: 860,
+		footerText: "TAP A PART TO PURCHASE",
 	}),
 
 	/**
