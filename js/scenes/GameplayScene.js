@@ -259,6 +259,8 @@ export class GameplayScene {
       if (pickup.playerHeal > 0) this.player.heal(pickup.playerHeal);
       if (pickup.fireBoost) this._fireBoostTimer = Config.powerUps.fireBoost.duration;
       if (pickup.invincible) this.player.activateInvincibility(Config.powerUps.invincible.duration);
+      const goldCollected = this._waveManager.checkGoldPickup(this.player);
+      if (goldCollected > 0) this.hud.gold += goldCollected;
       if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
       // Wave cleared AND all death effects finished → begin the next level intro

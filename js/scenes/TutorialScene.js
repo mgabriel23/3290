@@ -119,7 +119,7 @@ const HINTS = [
     highlight: SCORE_BOX,
   },
   {
-    text: 'Defeating enemies earns GOLD too — it\'s credited automatically, no need to collect it.',
+    text: 'Defeating enemies also drops GOLD coins — fly through them to collect it.',
     textCY: 420,
     highlight: GOLD_BOX,
   },

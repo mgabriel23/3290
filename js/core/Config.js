@@ -1311,6 +1311,43 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * Gold coin pickup — a physical drop the player must fly through to
+	 * collect (see WaveManager.handleBulletHit/_maybeDropGold, checkGoldPickup,
+	 * and GoldPickups.js). This REPLACES what used to be an instant credit on
+	 * every kill: each coin's `value` is still the same per-enemy-type amount
+	 * Config.enemy.*.gold (or a boss/variant's own `gold` field) always
+	 * specified — see WaveManager._rewardFor — so the whole hand-tuned
+	 * effort-score balance table above is untouched; only the DELIVERY
+	 * changed, from automatic to collected.
+	 *
+	 * Deliberately its own pool and its own roll, NOT a fifth weighted type
+	 * folded into Config.powerUps' cumulative-threshold pick: gold used to be
+	 * guaranteed on every kill, so its drop chance needs to stay much higher
+	 * than the rare health/shield/fireBoost/invincible pool (dropChance 0.1)
+	 * or the gold economy would crash to a tenth of its former rate.
+	 */
+	gold: Object.freeze({
+		dropChance: 0.8, // fraction of real kills that drop a coin — much higher than Config.powerUps.dropChance (0.1) on purpose, see class doc above
+		fallSpeed: 90, // vp/sec, straight down — same as Config.powerUps
+		maxLife: 6, // seconds an uncollected coin survives before despawning
+		hitRadius: 16, // vp — collision radius against the player, added to Player.hitRadius
+		poolSize: 24, // higher than powerUps' 8 — dropChance is 8x higher, and triggerSkillBomb can kill many enemies (many coins) in one frame
+
+		radius: 12, // vp — outer circle size, slightly smaller than a powerUp orb so a swarm of coins doesn't visually compete with them
+		lineWidth: 2,
+		glowBlur: 10,
+		pulseSpeed: 3.0, // same gentle "alive" breathing alpha as Config.powerUps
+		pulseDepth: 0.25,
+
+		// Bright coin-gold, distinct enough from Config.powerUps.fireBoost's
+		// warm-gold (#FFD24D) to tell apart at a glance despite both reading
+		// "gold" — this one's icon (a concentric inner ring, see
+		// GoldPickups.render) is a coin, not a lightning bolt.
+		color: "#FFD700",
+		fillColor: "#332504",
+	}),
+
+	/**
 	 * Enemy-death explosion effect (see entities/Particles.js): two
 	 * concentric shockwave rings plus a radial spark burst. One `Particles`
 	 * pool exists per enemy family/variant so each can tune its own

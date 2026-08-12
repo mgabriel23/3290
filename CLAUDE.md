@@ -16,13 +16,13 @@ Combat: the player auto-fires straight up ([Bullets.js](js/entities/Bullets.js))
 - **Drifter family** ([DrifterEnemy.js](js/entities/DrifterEnemy.js)) — four path variants (looping drifter, sweeping rows, diving wedge, sine-sway weaver) sharing one tentacle-creature body, each formation flying a shared precomputed path; they lash a slow tracking projectile ([DrifterProjectiles.js](js/entities/DrifterProjectiles.js)) at the player.
 - **Bouncer family** ([BouncerEnemy.js](js/entities/BouncerEnemy.js)) — wireframe hexagons that bounce off walls/barrier under constant gravity; variants split into fragments on death or carry an absorbing shield.
 
-Death effects are pooled shockwave-rings + sparks ([Particles.js](js/entities/Particles.js)); the barrier ([Barrier.js](js/entities/Barrier.js)) takes damage from bounces and pulses on impact; [HUD.js](js/entities/HUD.js) draws the score/gold panels (currently static placeholders — no scoring system is wired up yet, deliberately).
+Death effects are pooled shockwave-rings + sparks ([Particles.js](js/entities/Particles.js)); the barrier ([Barrier.js](js/entities/Barrier.js)) takes damage from bounces and pulses on impact; [HUD.js](js/entities/HUD.js) draws the score/gold panels — score is a per-run wallet awarded directly on kill (see `WaveManager.handleBulletHit`/`_rewardFor`), and gold is a persistent (`localStorage`-backed) wallet filled by flying through [GoldPickups.js](js/entities/GoldPickups.js) coins that a high fraction of kills drop (`Config.gold`, `WaveManager._maybeDropGold`/`checkGoldPickup`) — a deliberately separate, much-higher-chance sibling of the rarer [PowerUps.js](js/entities/PowerUps.js) drop (`Config.powerUps`).
 
 [IntroScene.js](js/scenes/IntroScene.js) (a "swipe up to continue" prompt, the game's original entry point) still exists and works, but `Game`'s constructor currently boots straight into `PrologueScene` with `devSkipToTitle: true` as a dev convenience — see the comment right above that line for the one-line change that restores the full Intro → Prologue flow. Don't treat IntroScene as dead code and remove it.
 
 [preview.html](preview.html) is a separate, self-contained design sandbox for sketching new enemy/boss hulls before they're wired into real entity classes (see its own header comment) — it is **not** part of the game and isn't reachable from `index.html`.
 
-Don't scaffold systems that haven't been asked for yet — build the next milestone when the user asks for it, not preemptively. (Example: HUD's score/gold display is intentionally inert placeholder chrome, not a bug — no scoring system has been requested yet.)
+Don't scaffold systems that haven't been asked for yet — build the next milestone when the user asks for it, not preemptively.
 
 ## Architecture & conventions to preserve
 

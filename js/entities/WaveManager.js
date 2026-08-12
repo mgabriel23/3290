@@ -29,7 +29,10 @@
  * restore, shield restore, a temporary fire-power/fire-rate boost, or a
  * temporary full damage immunity — see Config.powerUps, PowerUps.js,
  * `_maybeDropPowerUp`, and `checkPowerUpPickup`, the pickup-side mirror of
- * `checkPlayerHit`).
+ * `checkPlayerHit`). A separate, much higher flat chance also drops a gold
+ * coin worth that enemy's reward (see Config.gold, GoldPickups.js,
+ * `_maybeDropGold`, and `checkGoldPickup`) — gold is no longer credited
+ * instantly on kill, it must be collected like any other pickup.
  *
  * `triggerSkillBomb` is the player's special-skill button (see
  * PlayerSkill.js and Config.playerSkill) — instantly kills every enemy
@@ -81,6 +84,7 @@ import { SpiralBullets } from './SpiralBullets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { PowerUps } from './PowerUps.js';
+import { GoldPickups } from './GoldPickups.js';
 import { AudioPool } from '../core/AudioPool.js';
 
 // Arbitrarily large multiplier on _playerDamage used by triggerSkillBomb to
@@ -160,7 +164,7 @@ export class WaveManager {
   /**
    * @param {number} level  1-based. Values beyond the config array reuse the last entry.
    * @param {import('./Barrier.js').Barrier} barrier  used by Bouncer clones (repeated bounces) and Diver/Weaver clones (one-shot dive-through impact) to detect/damage the barrier
-   * @param {import('./HUD.js').HUD} hud  score/gold are awarded directly onto it on kill — see handleBulletHit/_rewardFor
+   * @param {import('./HUD.js').HUD} hud  score is awarded directly onto it on kill; gold is collected via GoldPickups instead — see handleBulletHit/_rewardFor/checkGoldPickup
    * @param {import('../core/ScreenShake.js').ScreenShake} screenShake  triggered on barrier impacts — see the onBarrierHit closure below; kill-triggered shake/hit-stop instead lives in GameplayScene, driven by handleBulletHit's return value
    */
   constructor(level, barrier, hud, screenShake) {
@@ -192,6 +196,7 @@ export class WaveManager {
     this._buildParticlePools();
 
     this._powerUps = new PowerUps();
+    this._goldPickups = new GoldPickups();
 
     // Same audio file across all enemy types; volume set per-play (see
     // _playExplosionSfx) since it varies by which type died.
@@ -367,6 +372,7 @@ export class WaveManager {
     this._sniperBullets.update(dt);
     this._spiralBullets.update(dt);
     this._powerUps.update(dt);
+    this._goldPickups.update(dt);
 
     if (this._waveClear) return;
 
@@ -459,6 +465,7 @@ export class WaveManager {
     this._renderIndividualEnemies(renderer);
     this._renderExplosions(renderer);
     this._powerUps.render(renderer);
+    this._goldPickups.render(renderer);
   }
 
   /** Projectile pools — enemy bullets, sniper bullets, homing rockets, drifter orbs. */
@@ -723,7 +730,6 @@ export class WaveManager {
     if (killed) {
       const reward = this._rewardFor(enemy);
       this._hud.score += reward.points;
-      this._hud.gold  += reward.gold;
 
       if (enemy.type === 'rocketeer') {
         this._rocketeerParticles.emit(enemy.x, enemy.y);
@@ -753,6 +759,7 @@ export class WaveManager {
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
       }
       this._maybeDropPowerUp(enemy.x, enemy.y);
+      this._maybeDropGold(enemy.x, enemy.y, reward.gold);
     }
     return killed;
   }
@@ -767,6 +774,19 @@ export class WaveManager {
   _maybeDropPowerUp(x, y) {
     if (Math.random() >= Config.powerUps.dropChance) return;
     this._spawnRandomPowerUp(x, y);
+  }
+
+  /**
+   * Flat-chance gold-coin drop on a real kill — a separate roll from
+   * _maybeDropPowerUp/Config.powerUps on purpose, see Config.gold's class
+   * doc (gold used to be guaranteed on every kill, so it needs a much
+   * higher rate than the rare PowerUps pool). Same "only real kills"
+   * restriction as _maybeDropPowerUp applies here too.
+   * @param {number} x @param {number} y @param {number} value  gold amount from _rewardFor
+   */
+  _maybeDropGold(x, y, value) {
+    if (Math.random() >= Config.gold.dropChance) return;
+    this._goldPickups.spawn(x, y, value);
   }
 
   /**
@@ -902,6 +922,23 @@ export class WaveManager {
       else playerHeal += Config.powerUps.health.healAmount;
     }
     return { playerHeal, fireBoost, invincible };
+  }
+
+  /**
+   * Collects every gold coin currently overlapping the player, same
+   * loop-until-empty shape as checkPowerUpPickup — several coins picked up
+   * in the same frame are all summed rather than just the first. GoldPickups
+   * returns 0 (falsy) once nothing overlaps, ending the loop.
+   * @param {{ x: number, y: number, hitRadius: number }} player
+   * @returns {number} total gold collected this frame (0 if none)
+   */
+  checkGoldPickup(player) {
+    let total = 0;
+    let value;
+    while ((value = this._goldPickups.checkPickup(player.x, player.y, player.hitRadius))) {
+      total += value;
+    }
+    return total;
   }
 
   /**
