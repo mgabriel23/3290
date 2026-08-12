@@ -44,20 +44,21 @@
  * boss instance the same way it builds any other group. WHICH boss is read
  * off `Config.boss.roster`, cycling once every boss has had a turn (level
  * 8 → roster[0] "scout1", 16 → roster[1] "spiral", 24 → roster[2]
- * "bouncerPrimal", 32 → roster[0] again, ...) — see the constructor's
- * `_bossKey`/`_bossCfg` lookup and the `BOSS_CLASSES` table above for the
- * matching class construction. Every boss class shares one
- * `update(dt, playerX, playerY, ctx)` shape, where `ctx` is a bag of every
- * callback ANY boss might need — fire callbacks for the ship-family bosses
- * (`fireBullet`/`fireRocket`/`fireSniperBullet`/`fireSpiralBullet`) AND
- * `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal
- * (`_bossContext`, built once in the constructor) — each class reads only
- * the ones it actually uses (see BossEnemy.js/SpiralBoss.js/
- * BouncerPrimalBoss.js's own docs for their attack patterns). Every boss
- * renders itself individually like Drifter/Bouncer (see
- * `_renderIndividualEnemies`), and gets its own boss-tier UI treatment —
- * `renderBossHealthBar`, a separate method GameplayScene calls from the
- * fixed UI camera layer (not part of this class's own `render()`, which
+ * "bouncerPrimal", 32 → roster[3] "snake", 40 → roster[0] again, ...) — see
+ * the constructor's `_bossKey`/`_bossCfg` lookup and the `BOSS_CLASSES`
+ * table above for the matching class construction. Every boss class shares
+ * one `update(dt, playerX, playerY, ctx)` shape, where `ctx` is a bag of
+ * every callback ANY boss might need — fire callbacks for the ship-family
+ * bosses (`fireBullet`/`fireRocket`/`fireSniperBullet`/`fireSpiralBullet`),
+ * `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal,
+ * and `fireDrifterProjectile` for Snake's head (`_bossContext`, built once
+ * in the constructor) — each class reads only the ones it actually uses
+ * (see BossEnemy.js/SpiralBoss.js/BouncerPrimalBoss.js/SnakeBoss.js's own
+ * docs for their attack patterns). Every boss renders itself individually
+ * like Drifter/Bouncer (see `_renderIndividualEnemies`), and gets its own
+ * boss-tier UI treatment — `renderBossHealthBar`, a separate method
+ * GameplayScene calls from the fixed UI camera layer (not part of this
+ * class's own `render()`, which
  * runs inside the panned/shaking world layer) — driven generically off
  * whichever boss instance is alive (`.name`/`.color`/`.healthFrac`), not
  * hardcoded to one boss type, and skipped outright for a boss that opts out
@@ -72,6 +73,7 @@ import { BouncerEnemy } from './BouncerEnemy.js';
 import { BossEnemy } from './BossEnemy.js';
 import { SpiralBoss } from './SpiralBoss.js';
 import { BouncerPrimalBoss } from './BouncerPrimalBoss.js';
+import { SnakeBoss } from './SnakeBoss.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
@@ -88,7 +90,7 @@ const SKILL_LETHAL_MULTIPLIER = 9999;
 
 // Which boss CLASS to construct for a given Config.boss.roster key — see
 // the constructor's boss-selection lookup and _spawnNext's 'boss' branch.
-const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss };
+const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss, snake: SnakeBoss };
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -234,6 +236,7 @@ export class WaveManager {
     this._weaverParticles    = new Particles(Config.enemy.drifter.weaver.color, Config.enemy.drifter.weaver.sparksPerEmit);
     this._bouncerParticles   = new Particles(Config.enemy.bouncer.color, Config.enemy.bouncer.sparksPerEmit);
     this._bossParticles      = new Particles(this._bossCfg.color, this._bossCfg.sparksPerEmit);
+    this._snakeSegmentParticles = new Particles(Config.boss.snake.color, Config.boss.snake.segment.sparksPerEmit);
 
     this._powerUps = new PowerUps();
 
@@ -267,12 +270,15 @@ export class WaveManager {
     // callbacks) shares the same generic update() call site below.
     // barrierSurfaceY/onBarrierHit are the same closures a regular Bouncer
     // gets (see the 'bouncer' branch just below) — Bouncer Primal is the
-    // only boss that currently reads them, but every boss receives the full bag.
+    // only boss that currently reads them; fireDrifterProjectile is the
+    // same closure a regular Drifter's lash gets — only Snake's head reads
+    // it. Every boss receives the full bag regardless.
     this._bossContext = {
       fireBullet: this._fireBullet,
       fireRocket: this._fireRocket,
       fireSniperBullet: this._fireSniperBullet,
       fireSpiralBullet: this._fireSpiralBullet,
+      fireDrifterProjectile: this._fireDrifterProjectile,
       barrierSurfaceY: this._barrierSurfaceY,
       onBarrierHit: this._onBarrierHit,
     };
@@ -298,6 +304,7 @@ export class WaveManager {
     this._weaverParticles.update(dt);
     this._bouncerParticles.update(dt);
     this._bossParticles.update(dt);
+    this._snakeSegmentParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
     this._drifterProjectiles.update(dt, playerX, playerY);
     this._enemyBullets.update(dt);
@@ -348,6 +355,10 @@ export class WaveManager {
         e.update(dt, playerX, playerY, this._bossContext);
         continue;
       }
+      if (e.type === 'snakeSegment') {
+        e.update(dt, playerX, playerY, this._fireDrifterProjectile);
+        continue;
+      }
       let cb;
       if      (e.type === 'rocketeer') cb = this._fireRocket;
       else if (e.type === 'sniper')    cb = this._fireSniperBullet;
@@ -358,6 +369,16 @@ export class WaveManager {
     }
 
     this._resolveOverlaps();
+
+    // Time-based summons (currently only Snake's growth tick — see
+    // SnakeBoss.update) drain here every frame, unlike Bouncer Primal's
+    // on-hit summons which only ever queue inside handleBulletHit and are
+    // drained there. Both share the exact same generic drainSummons()
+    // interface, so this is harmless (and simply empty) for any boss whose
+    // summons are hit-triggered instead of time-triggered.
+    if (this._boss?.drainSummons) {
+      for (const summon of this._boss.drainSummons()) this._enemies.push(summon);
+    }
 
     // Remove dead enemies (compact in-place, no allocation)
     let w = 0;
@@ -397,7 +418,7 @@ export class WaveManager {
   _renderEngineFlames(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss') continue;
+      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss' || e.type === 'snakeSegment') continue;
       e.renderFlame(renderer);
     }
   }
@@ -419,7 +440,7 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'bouncer' || e.type === 'boss') continue; // rendered individually below
+      if (e.type === 'bouncer' || e.type === 'boss' || e.type === 'snakeSegment') continue; // rendered individually/batched separately below
       if (e.type === 'drifter') {
         if (!e._visible) continue;
         const isFlash = e._hitFlash > 0;
@@ -526,7 +547,7 @@ export class WaveManager {
   _renderEngineCores(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss') continue;
+      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss' || e.type === 'snakeSegment') continue;
       e.renderCore(renderer);
     }
   }
@@ -558,6 +579,7 @@ export class WaveManager {
     this._bouncerParticles.render(renderer);
     this._weaverParticles.render(renderer);
     this._bossParticles.render(renderer);
+    this._snakeSegmentParticles.render(renderer);
   }
 
   /**
@@ -648,6 +670,9 @@ export class WaveManager {
         this._bossParticles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(this._bossCfg.audio.volume);
         this._boss = null; // health bar disappears immediately rather than lingering through the death-flash
+      } else if (enemy.type === 'snakeSegment') {
+        this._snakeSegmentParticles.emit(enemy.x, enemy.y);
+        this._playExplosionSfx(Config.boss.snake.segment.audio.volume);
       } else {
         this._particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
@@ -702,6 +727,9 @@ export class WaveManager {
   _rewardFor(enemy) {
     if (enemy.type === 'boss') {
       return { points: this._bossCfg.points, gold: this._bossCfg.gold };
+    }
+    if (enemy.type === 'snakeSegment') {
+      return { points: Config.boss.snake.segment.points, gold: Config.boss.snake.segment.gold };
     }
     if (enemy.type === 'drifter') {
       return { points: enemy._palette.points, gold: enemy._palette.gold };
@@ -856,6 +884,7 @@ export class WaveManager {
       && !this._weaverParticles.active
       && !this._bouncerParticles.active
       && !this._bossParticles.active
+      && !this._snakeSegmentParticles.active
       && !this._rockets.active
       && !this._drifterProjectiles.active
       && !this._enemyBullets.active
@@ -873,11 +902,11 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const a = this._enemies[i];
-      if (a._state === 'entering' || a._type === 'drifter' || a._type === 'bouncer' || a._type === 'boss') continue;
+      if (a._state === 'entering' || a._type === 'drifter' || a._type === 'bouncer' || a._type === 'boss' || a._type === 'snakeSegment') continue;
 
       for (let j = i + 1; j < this._enemies.length; j++) {
         const b = this._enemies[j];
-        if (b._state === 'entering' || b._type === 'drifter' || b._type === 'bouncer' || b._type === 'boss') continue;
+        if (b._state === 'entering' || b._type === 'drifter' || b._type === 'bouncer' || b._type === 'boss' || b._type === 'snakeSegment') continue;
 
         const minSep = Math.max(a._cfg.minSeparation, b._cfg.minSeparation);
         const ddx    = b.x - a.x;
@@ -935,7 +964,7 @@ export class WaveManager {
       let clear = true;
       for (let i = 0; i < this._enemies.length; i++) {
         const other = this._enemies[i];
-        if (other === enemy || other._state === 'entering' || other._type === 'drifter' || other._type === 'bouncer' || other._type === 'boss') continue;
+        if (other === enemy || other._state === 'entering' || other._type === 'drifter' || other._type === 'bouncer' || other._type === 'boss' || other._type === 'snakeSegment') continue;
         const sep = Math.max(minSeparation, other._cfg.minSeparation);
         const dx  = other.x - x, dy = other.y - y;
         if (dx * dx + dy * dy < sep * sep) { clear = false; break; }
@@ -951,9 +980,19 @@ export class WaveManager {
 
     if (type === 'boss') {
       const BossClass = BOSS_CLASSES[this._bossKey];
-      const boss = new BossClass(this._healthBonus(this._bossCfg));
+      // `this._level` is only read by SnakeBoss, to derive its segments' own
+      // per-level health bonus (Config.boss.snake.segment.healthPerLevel) —
+      // every other boss class's constructor simply ignores the extra arg.
+      const boss = new BossClass(this._healthBonus(this._bossCfg), this._level);
       this._enemies.push(boss);
       this._boss = boss;
+      // Snake's initial chain (everything behind the head) is queued via
+      // the exact same drainSummons() interface its later growth ticks use
+      // — draining once right here collects that starting formation the
+      // same way. A no-op for every other boss class, which doesn't define drainSummons.
+      if (boss.drainSummons) {
+        for (const summon of boss.drainSummons()) this._enemies.push(summon);
+      }
       this._advanceSpawnIndex();
       return;
     }

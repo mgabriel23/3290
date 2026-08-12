@@ -868,6 +868,12 @@ export const Config = Object.freeze({
 			projectileSpeed: 320, // vp/sec toward the locked target
 			projectileRadius: 4,
 			projectileDamage: 8, // player HP lost if still within range when the orb arrives — see Config.player.maxHealth
+			// Bumped from a flat 16 (fine for a handful of regular Drifter
+			// clones lashing at once) — Boss #4 "Snake" (Config.boss.snake) can
+			// have up to ~20 attacker segments sharing this same pool, each on
+			// their own multi-second cycle, so concurrent in-flight orbs can
+			// climb well past what a normal level ever produces.
+			projectilePoolSize: 40,
 			engageRangeX: 160, // vp — a lash only fires if the player is within this horizontal range of the clone
 			engageRetryInterval: 0.3, // seconds before re-checking range after a would-be lash was withheld
 
@@ -1780,7 +1786,7 @@ export const Config = Object.freeze({
 	 */
 	boss: Object.freeze({
 		everyNLevels: 1,
-		roster: Object.freeze(["bouncerPrimal", "scout1", "spiral"]), // ordered — which boss spawns on the 1st/2nd/3rd/... boss-level encounter (level 8→roster[0], 16→roster[1], 24→roster[2], 32→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
+		roster: Object.freeze(["snake", "scout1", "spiral", "bouncerPrimal"]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/... boss-level encounter (level 8→roster[0], 16→roster[1], 24→roster[2], 32→roster[3], 40→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		scout1: Object.freeze({
@@ -2071,6 +2077,91 @@ export const Config = Object.freeze({
 			// longest, tankiest fight (see the class doc above).
 			points: 4000,
 			gold: 200,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.85,
+				poolSize: 3,
+			}),
+		}),
+
+		/**
+		 * Boss #4 — "Snake". An upgraded, far-longer, tankier Sweeper: reuses
+		 * DrifterEnemy.js's own exported Sweeper path/sampler
+		 * (createSweeperPath/sampleSweeperPath) and body silhouette
+		 * (BODY_PTS) rather than authoring new movement or a new hull — the
+		 * "upgrade" is the chain's length, toughness, and a dynamic
+		 * gap-closing behavior no regular Drifter formation has (see
+		 * SnakeBoss.js's own doc for exactly how that works).
+		 *
+		 * The FRONT segment (`SnakeBoss`, chain index 0) is the actual boss —
+		 * own health/reward/health-bar, same as every other boss. Every
+		 * segment behind it (`SnakeSegment`, `segment` below) is tougher than
+		 * a regular Sweeper clone but individually much cheaper, and only
+		 * every `attackInterval`-th one (fixed at spawn, ~1 in 10) actually
+		 * fires its own projectile at the player — the rest are pure physical
+		 * hazards. Starts at `initialSegments` and grows by
+		 * `growthBatchSize` every `growthInterval` seconds, up to
+		 * `maxSegments` (175) — see SnakeBoss.update's growth tick, drained
+		 * into WaveManager's enemy list the same generic `drainSummons` way
+		 * Bouncer Primal's on-hit summons already are, just triggered by time
+		 * instead of a hit.
+		 */
+		snake: Object.freeze({
+			name: "SNAKE",
+			color: "#4DFF6B", // fresh venom green — distinct from every other boss color (red/violet/amber) used so far
+			fillColor: "#0a2010",
+			lineWidth: 2,
+			glowBlur: 7,
+			hitGlowBlur: 16,
+			hitRadius: 18, // vp — same as a regular Sweeper's own (Config.enemy.drifter.hitRadius)
+
+			// Shared-path chain formation — see class doc.
+			spacing: 34, // vp along the path between segments — tighter than a regular Sweeper's 50, so a 200-long chain doesn't stretch absurdly far past both screen edges
+			speed: 190, // vp/sec along the path — a touch slower than a regular Sweeper's 220, reads as heavier
+			// Gap-closing "catch-up" rate (vp/sec) — see SnakeSegment.update.
+			// Faster than `speed` so a segment visibly hurries to close a gap
+			// left by a dead neighbor rather than trailing it forever.
+			catchUpSpeed: 260,
+
+			initialSegments: 15, // chain length (INCLUDING the head) at spawn — matches a regular Sweeper's own formationSize, so the fight visibly starts like "just a big Sweeper" before growing into something far larger
+			maxSegments: 175, // hard cap — trimmed down from an initial 200
+			growthInterval: 1.2, // seconds between growth ticks while under the cap
+			growthBatchSize: 4, // new tail segments added per growth tick (~55s to grow from 15 to 200)
+
+			// Every segment at a chain-index divisible by this fires its own
+			// projectile at the player (reusing the shared DrifterProjectiles
+			// pool every other Drifter-family enemy already uses — see
+			// Config.enemy.drifter.projectilePoolSize, bumped specifically to
+			// give this boss room) — fixed once at spawn from each segment's
+			// INITIAL chain position, not re-rolled as the chain reshuffles.
+			attackInterval: 10,
+			fireMinInterval: 2.2,
+			fireMaxInterval: 4.0,
+			engageRangeX: 160,
+
+			health: 350, // the front segment's (the actual boss) own health
+			healthPerLevel: 50,
+
+			segment: Object.freeze({
+				health: 8, // a regular Sweeper's own is 3 (+1/level) — noticeably tankier per "a more tanky one each"
+				healthPerLevel: 1.2,
+				points: 20,
+				gold: 1,
+				sparksPerEmit: 6, // small — many can die in close succession
+				audio: Object.freeze({
+					src: "assets/audio/explosion.mp3",
+					volume: 0.12, // quiet — shared pool, up to 200 possible deaths over the fight
+					poolSize: 4,
+				}),
+			}),
+
+			sparksPerEmit: 20,
+			// Highest flat reward of any boss so far, reflecting the sheer
+			// scale of the fight — on top of every individual segment's own
+			// (much smaller) reward, so a full clear pays out far more than
+			// the boss's own flat number alone suggests.
+			points: 5000,
+			gold: 250,
 			audio: Object.freeze({
 				src: "assets/audio/explosion.mp3",
 				volume: 0.85,

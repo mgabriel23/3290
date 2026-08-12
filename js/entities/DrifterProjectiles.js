@@ -12,7 +12,7 @@
 import { Config } from '../core/Config.js';
 import { directionalVelocity } from '../core/vectorMath.js';
 
-const MAX = 16;
+const MAX = Config.enemy.drifter.projectilePoolSize;
 
 export class DrifterProjectiles {
   /**
