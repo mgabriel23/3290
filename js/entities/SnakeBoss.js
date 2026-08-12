@@ -1,7 +1,7 @@
 /**
  * SnakeBoss.js
  * Boss #4 — "Snake". Spawned by WaveManager on every 4th boss-level
- * encounter (level 32, 64, ... — see Config.boss.roster and WaveManager's
+ * encounter (level 28, 56, ... — see Config.boss.roster and WaveManager's
  * boss-selection lookup in its constructor). This class IS the chain's
  * FRONT segment (chain index 0) — the actual boss, with its own health/
  * reward/health-bar, same as every other boss — and also OWNS/coordinates
@@ -124,6 +124,7 @@ export class SnakeBoss {
   get hitRadius()  { return this._cfg.hitRadius; }
   /** 0-1 remaining health fraction — read by WaveManager for the boss health bar. */
   get healthFrac() { return Math.max(0, this._health) / this._maxHealth; }
+  get maxHealth()  { return this._maxHealth; } // see WaveManager._applySkillBombToBoss
   get name()  { return this._cfg.name; }
   get color() { return this._cfg.color; }
 
@@ -233,6 +234,12 @@ export class SnakeBoss {
 
   /** Drains and returns any segments queued (initial formation, or a growth tick) since the last drain — see WaveManager.handleBulletHit/update. */
   drainSummons() {
+    // WaveManager calls this unconditionally every frame; the queue is
+    // empty on the overwhelming majority of them (only growth ticks and
+    // the initial-formation drain ever populate it), so skip allocating a
+    // fresh empty array in that common case rather than churning garbage
+    // 60x/sec for a boss encounter's entire duration.
+    if (this._pendingSummons.length === 0) return this._pendingSummons;
     const summons = this._pendingSummons;
     this._pendingSummons = [];
     return summons;

@@ -119,9 +119,11 @@
  * screen-clearing bomb button bottom-right above the barrier, is routed
  * through `handleTap` the same way the mute/pause/codex buttons already
  * are. `_useSkill` calls `WaveManager.triggerSkillBomb` (a real kill per
- * enemy — same reward/explosion/SFX pipeline `_checkCollisions` uses) and
- * only actually starts PlayerSkill's 85s cooldown if it killed something,
- * so tapping it at an empty screen doesn't waste the recharge for nothing.
+ * regular enemy — same reward/explosion/SFX pipeline `_checkCollisions`
+ * uses — but a capped, non-lethal heavy hit against a boss instead, see
+ * that method's own doc) and only actually starts PlayerSkill's 85s
+ * cooldown if it did something, so tapping it at an empty screen doesn't
+ * waste the recharge for nothing.
  */
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
@@ -261,6 +263,7 @@ export class GameplayScene {
 
       // Wave cleared AND all death effects finished → begin the next level intro
       if (this._waveManager.isDone) {
+        this.barrier.heal(Config.barrier.healPerWaveClear);
         this._level++;
         this._levelState  = 'intro';
         this._levelAge    = 0;
@@ -433,13 +436,14 @@ export class GameplayScene {
   /**
    * Fire the special-skill bomb (see PlayerSkill.js/Config.playerSkill and
    * WaveManager.triggerSkillBomb) — only actually starts the cooldown and
-   * triggers feedback if it killed at least one enemy, so tapping it at an
-   * empty screen doesn't waste the full 85s recharge for nothing.
+   * triggers feedback if it killed at least one regular enemy OR landed a
+   * hit on a boss, so tapping it at a genuinely empty screen doesn't waste
+   * the full 85s recharge for nothing.
    */
   _useSkill() {
     if (!this._playerSkill.ready) return;
-    const killCount = this._waveManager.triggerSkillBomb();
-    if (killCount === 0) return;
+    const { killCount, hitBoss } = this._waveManager.triggerSkillBomb();
+    if (killCount === 0 && !hitBoss) return;
     this._playerSkill.use();
     this._screenShake.trigger(Config.playerSkill.useTrauma);
     this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);

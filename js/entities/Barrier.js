@@ -70,7 +70,9 @@ export class Barrier {
 
   /**
    * Restore `amount` health, clamped at Config.barrier.maxHealth. Used by a
-   * shield PowerUp pickup (see WaveManager.checkPowerUpPickup).
+   * shield PowerUp pickup (see WaveManager.checkPowerUpPickup) and by
+   * GameplayScene's small guaranteed top-up on every wave clear
+   * (Config.barrier.healPerWaveClear).
    * @param {number} amount
    */
   heal(amount) {

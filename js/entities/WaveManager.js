@@ -37,14 +37,14 @@
  * bullet hit uses, so it's a real kill (reward, explosion, SFX and all),
  * not a separate mechanic.
  *
- * Every `Config.boss.everyNLevels`th level (8, 16, 24, ...) is a boss level
+ * Every `Config.boss.everyNLevels`th level (7, 14, 21, ...) is a boss level
  * — the constructor swaps in a synthetic one-group `_waveCfg` (`{ type:
  * 'boss', count: 1 }`) instead of reading `Config.waves.levels`, so the
  * existing spawn machinery (`_spawnNext`/`_groupForIdx`) builds a single
  * boss instance the same way it builds any other group. WHICH boss is read
  * off `Config.boss.roster`, cycling once every boss has had a turn (level
- * 8 → roster[0] "scout1", 16 → roster[1] "spiral", 24 → roster[2]
- * "bouncerPrimal", 32 → roster[3] "snake", 40 → roster[0] again, ...) — see
+ * 7 → roster[0] "scout1", 14 → roster[1] "spiral", 21 → roster[2]
+ * "bouncerPrimal", 28 → roster[3] "snake", 35 → roster[0] again, ...) — see
  * the constructor's `_bossKey`/`_bossCfg` lookup and the `BOSS_CLASSES`
  * table above for the matching class construction. Every boss class shares
  * one `update(dt, playerX, playerY, ctx)` shape, where `ctx` is a bag of
@@ -85,7 +85,9 @@ import { AudioPool } from '../core/AudioPool.js';
 
 // Arbitrarily large multiplier on _playerDamage used by triggerSkillBomb to
 // guarantee a one-shot kill regardless of level scaling, without needing to
-// read any enemy type's own private health field directly.
+// read any enemy type's own private health field directly. Only applied to
+// regular (non-boss) enemies — see _applySkillBombToBoss for the capped,
+// never-lethal damage a boss takes from the same button instead.
 const SKILL_LETHAL_MULTIPLIER = 9999;
 
 // Which boss CLASS to construct for a given Config.boss.roster key — see
@@ -101,6 +103,31 @@ const _scoutNormalHulls     = _mkPool();
 const _rocketeerNormalHulls = _mkPool();
 const _sniperNormalHulls    = _mkPool();
 const _flashHulls           = _mkPool();
+
+// Pre-allocated boss-health-bar rectangles (track + fill), mutated in place
+// every frame by renderBossHealthBar instead of building fresh nested arrays
+// each call — a boss fight can be a large share of playtime, so this stays
+// zero-allocation the same way the hull pools above do. Track's points never
+// change (Config.boss.healthBar's x/y/width/height are fixed), only the
+// fill rectangle's two right-edge x-coordinates move with boss.healthFrac.
+const _bossHealthBarCfg   = Config.boss.healthBar;
+const _bhbLeft            = _bossHealthBarCfg.x - _bossHealthBarCfg.width / 2;
+const _bhbRight           = _bhbLeft + _bossHealthBarCfg.width;
+const _bhbTop             = _bossHealthBarCfg.y;
+const _bhbBottom          = _bhbTop + _bossHealthBarCfg.height;
+const _bossHealthTrackPath = {
+  points: [[_bhbLeft, _bhbTop], [_bhbRight, _bhbTop], [_bhbRight, _bhbBottom], [_bhbLeft, _bhbBottom]],
+  closed: true,
+};
+const _bossHealthFillPath = {
+  points: [[_bhbLeft, _bhbTop], [_bhbLeft, _bhbTop], [_bhbLeft, _bhbBottom], [_bhbLeft, _bhbBottom]],
+  closed: true,
+};
+// fillStrokePaths wants an indexable array, not a bare path object — wrap
+// each pooled path in its own single-element array ONCE so the render call
+// below never allocates one fresh per frame either.
+const _bossHealthTrackPathArr = [_bossHealthTrackPath];
+const _bossHealthFillPathArr  = [_bossHealthFillPath];
 
 // Drifter bodies use a different vertex count (BODY_PTS) — separate pools,
 // same batching trick (≤2 extra fillStrokePaths calls regardless of formation size).
@@ -137,16 +164,60 @@ export class WaveManager {
    * @param {import('../core/ScreenShake.js').ScreenShake} screenShake  triggered on barrier impacts — see the onBarrierHit closure below; kill-triggered shake/hit-stop instead lives in GameplayScene, driven by handleBulletHit's return value
    */
   constructor(level, barrier, hud, screenShake) {
+    this._hud     = hud;
+    this._barrier = barrier; // direct reference — needed by checkPowerUpPickup to heal it outside the onBarrierHit closure below
+
+    this._resolveLevelAndBoss(level);
+    this._buildBarrierCallbacks(barrier, screenShake);
+
+    // Player bullet damage scales with level — see Config.player.damage/damagePerLevel.
+    this._playerDamage = Config.player.damage + (level - 1) * Config.player.damagePerLevel;
+
+    this._totalToSpawn = this._waveCfg.enemies.reduce((s, g) => s + g.count, 0);
+    this._spawnIdx   = 0;
+    this._allSpawned = false;
+    this._spawnTimer = 0;
+
+    // Accumulates damage from sources whose "did it hit the player" check
+    // naturally happens inside their own update() (Rockets/DrifterProjectiles
+    // detect proximity/arrival there) rather than via an external point-test —
+    // checkPlayerHit reads and clears this each frame alongside the sources
+    // it tests directly (enemy bullets, sniper bullets, bouncer contact).
+    this._pendingPlayerDamage = 0;
+
+    this._enemies = [];
+    this._boss    = null; // set by _spawnNext on a boss level — see renderBossHealthBar
+
+    this._buildProjectilePools();
+    this._buildParticlePools();
+
+    this._powerUps = new PowerUps();
+
+    // Same audio file across all enemy types; volume set per-play (see
+    // _playExplosionSfx) since it varies by which type died.
+    this._sfxPool = new AudioPool(Config.enemy.scout.audio.src, Config.enemy.scout.audio.poolSize);
+
+    this._buildFireCallbacks();
+
+    this._waveClear = false;
+  }
+
+  /**
+   * Resolves which level/wave content applies, and — every
+   * Config.boss.everyNLevels levels (7, 14, 21, ...) — which boss takes
+   * over the wave entirely. Checked against the raw level number rather
+   * than read from `Config.waves.levels` (which only defines 30 entries and
+   * caps at the last one forever), so boss levels keep recurring past level
+   * 30 too. Sets `_level`, `_isBossLevel`, `_bossKey`, `_bossCfg`, `_waveCfg`.
+   */
+  _resolveLevelAndBoss(level) {
     const levels = Config.waves.levels;
-    this._level   = level;
-    // A boss wave completely replaces the level's normal roster every
-    // Config.boss.everyNLevels levels (8, 16, 24, ...) — checked against the
-    // raw level number rather than read from `levels` (which only defines 10
-    // entries and caps at the last one forever), so boss levels keep
-    // recurring past level 10 too. This synthetic single-group config feeds
-    // the exact same spawn machinery every other level already uses
-    // (`_totalToSpawn`/`_groupForIdx`/`_spawnNext`) — see `_spawnNext`'s own
-    // 'boss' branch for how that group actually gets built.
+    this._level = level;
+    // A boss wave completely replaces the level's normal roster. This
+    // synthetic single-group config feeds the exact same spawn machinery
+    // every other level already uses (`_totalToSpawn`/`_groupForIdx`/
+    // `_spawnNext`) — see `_spawnNext`'s own 'boss' branch for how that
+    // group actually gets built.
     this._isBossLevel = level % Config.boss.everyNLevels === 0;
     // Which boss appears is read off Config.boss.roster, cycling once every
     // boss has had a turn (1st boss-level encounter → roster[0], 2nd →
@@ -164,8 +235,10 @@ export class WaveManager {
     this._waveCfg = this._isBossLevel
       ? { enemies: [{ type: 'boss', count: 1, spawnInterval: 0 }] }
       : levels[Math.min(level - 1, levels.length - 1)];
-    this._hud = hud;
-    this._barrier = barrier; // direct reference — needed by checkPowerUpPickup to heal it outside the onBarrierHit closure below
+  }
+
+  /** Sets `_barrierSurfaceY`, `_onBarrierHit`, `_onDrifterBarrierHit` — shared by every attack source that can hit the barrier. */
+  _buildBarrierCallbacks(barrier, screenShake) {
     this._barrierSurfaceY = (x) => barrier.surfaceY(x);
     // `damage` is explicit per-call, not hardcoded here, since multiple
     // attack sources now share this same callback with their own values —
@@ -188,28 +261,14 @@ export class WaveManager {
       particles.emit(x, y);
       this._playExplosionSfx(audio.volume);
     };
+  }
 
-    // Player bullet damage scales with level — see Config.player.damage/damagePerLevel.
-    this._playerDamage = Config.player.damage + (level - 1) * Config.player.damagePerLevel;
-
-    this._totalToSpawn = this._waveCfg.enemies.reduce((s, g) => s + g.count, 0);
-    this._spawnIdx   = 0;
-    this._allSpawned = false;
-    this._spawnTimer = 0;
-
-    // Accumulates damage from sources whose "did it hit the player" check
-    // naturally happens inside their own update() (Rockets/DrifterProjectiles
-    // detect proximity/arrival there) rather than via an external point-test —
-    // checkPlayerHit reads and clears this each frame alongside the sources
-    // it tests directly (enemy bullets, sniper bullets, bouncer contact).
-    this._pendingPlayerDamage = 0;
-
-    this._enemies      = [];
-    this._boss = null; // set by _spawnNext on a boss level — see renderBossHealthBar
-    this._enemyBullets = new EnemyBullets();
+  /** Constructs every projectile pool (enemy bullets, sniper/spiral bullets, rockets, drifter lashes) and their fire-and-forget impact callbacks. */
+  _buildProjectilePools() {
+    this._enemyBullets  = new EnemyBullets();
     this._sniperBullets = new SniperBullets();
     this._spiralBullets = new SpiralBullets();
-    this._rockets      = new Rockets({
+    this._rockets = new Rockets({
       onDetonate: (x, y) => {
         this._rocketeerParticles.emit(x, y);
         this._playExplosionSfx(Config.enemy.rocketeer.audio.volume);
@@ -226,7 +285,10 @@ export class WaveManager {
       },
       onPlayerHit: () => { this._pendingPlayerDamage += Config.enemy.drifter.projectileDamage; },
     });
+  }
 
+  /** Constructs one Particles pool per enemy/boss variant that can die or emit sparks. Reads `_bossCfg`, so must run after `_resolveLevelAndBoss`. */
+  _buildParticlePools() {
     this._particles          = new Particles(Config.enemy.scout.color);
     this._rocketeerParticles = new Particles(Config.enemy.rocketeer.color);
     this._sniperParticles    = new Particles(Config.enemy.sniper.color);
@@ -237,26 +299,22 @@ export class WaveManager {
     this._bouncerParticles   = new Particles(Config.enemy.bouncer.color, Config.enemy.bouncer.sparksPerEmit);
     this._bossParticles      = new Particles(this._bossCfg.color, this._bossCfg.sparksPerEmit);
     this._snakeSegmentParticles = new Particles(Config.boss.snake.color, Config.boss.snake.segment.sparksPerEmit);
+  }
 
-    this._powerUps = new PowerUps();
-
-    // Same audio file across all enemy types; volume set per-play (see
-    // _playExplosionSfx) since it varies by which type died.
-    this._sfxPool = new AudioPool(Config.enemy.scout.audio.src, Config.enemy.scout.audio.poolSize);
-
-    // Pre-bound fire callbacks — stored once, zero closures per frame.
-    this._fireBullet           = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
+  /** Pre-binds every fire callback (zero closures per frame) and bundles the boss-facing subset into `_bossContext`. Reads the projectile pools and barrier callbacks, so must run after both are built. */
+  _buildFireCallbacks() {
+    this._fireBullet = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
     // `sizeMult` is only ever passed by BossEnemy.js's rocketeer phase (see
     // Config.boss.scout1.rocketeerPhase.rocketSizeMult) — a regular
     // Rocketeer's onFire call omits it, so `Rockets.fire`'s own default (1)
     // applies and its rocket's rendered size is unaffected.
-    this._fireRocket           = (ox, oy, tx, ty, sizeMult) => this._rockets.fire(ox, oy, tx, ty, sizeMult);
+    this._fireRocket = (ox, oy, tx, ty, sizeMult) => this._rockets.fire(ox, oy, tx, ty, sizeMult);
     // `speedMult` is only ever passed by BossEnemy.js's sniper phase (see
     // Config.boss.scout1.sniperPhase.bulletSpeedMult) — a regular
     // SniperEnemy's onFire call omits it, so `SniperBullets.fire`'s own
     // default (1) applies and its shot is unaffected.
-    this._fireSniperBullet     = (ox, oy, tx, ty, speedMult) => this._sniperBullets.fire(ox, oy, tx, ty, speedMult);
-    this._fireSpiralBullet     = (ox, oy, angle) => this._spiralBullets.fire(ox, oy, angle);
+    this._fireSniperBullet = (ox, oy, tx, ty, speedMult) => this._sniperBullets.fire(ox, oy, tx, ty, speedMult);
+    this._fireSpiralBullet = (ox, oy, angle) => this._spiralBullets.fire(ox, oy, angle);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
     // Passed into Enemy.js's repositioning so it picks a fresh rest point
     // that's already clear of other enemies, instead of a blind random one
@@ -282,8 +340,6 @@ export class WaveManager {
       barrierSurfaceY: this._barrierSurfaceY,
       onBarrierHit: this._onBarrierHit,
     };
-
-    this._waveClear = false;
   }
 
   /**
@@ -428,12 +484,18 @@ export class WaveManager {
    * pool, then draw each non-empty pool in one fillStrokePaths call — keeps
    * GPU shadow-blur passes flat regardless of enemy count. Drifter/Bouncer
    * hulls vary per-clone and are rendered individually in
-   * _renderIndividualEnemies instead.
+   * _renderIndividualEnemies instead. Split into an assign pass (writes
+   * world-space points into the pools, returns per-pool counts) and a draw
+   * pass (issues the actual fillStrokePaths calls) — two distinguishable
+   * jobs glued into one call site below.
    */
   _renderHullBatches(renderer) {
-    const sCfg  = Config.enemy.scout;
-    const rCfg  = Config.enemy.rocketeer;
-    const snCfg = Config.enemy.sniper;
+    const counts = this._assignHullBatches();
+    this._drawHullBatches(renderer, counts);
+  }
+
+  /** Walks live enemies, world-transforms each batchable one's hull into its (type × flash) pool, and returns how many landed in each pool. */
+  _assignHullBatches() {
     let scoutNormalCount = 0, rocketeerNormalCount = 0, sniperNormalCount = 0, flashCount = 0;
     let drifterNormalCount = 0, drifterFlashCount = 0, sweeperNormalCount = 0, sweeperFlashCount = 0,
         diverNormalCount = 0, diverFlashCount = 0, weaverNormalCount = 0, weaverFlashCount = 0;
@@ -490,6 +552,24 @@ export class WaveManager {
         path.points[j][1] = e.y + s * lx + c * ly;
       }
     }
+
+    return {
+      scoutNormalCount, rocketeerNormalCount, sniperNormalCount, flashCount,
+      drifterNormalCount, drifterFlashCount, sweeperNormalCount, sweeperFlashCount,
+      diverNormalCount, diverFlashCount, weaverNormalCount, weaverFlashCount,
+    };
+  }
+
+  /** Issues one fillStrokePaths call per non-empty pool `_assignHullBatches` just filled. */
+  _drawHullBatches(renderer, counts) {
+    const {
+      scoutNormalCount, rocketeerNormalCount, sniperNormalCount, flashCount,
+      drifterNormalCount, drifterFlashCount, sweeperNormalCount, sweeperFlashCount,
+      diverNormalCount, diverFlashCount, weaverNormalCount, weaverFlashCount,
+    } = counts;
+    const sCfg  = Config.enemy.scout;
+    const rCfg  = Config.enemy.rocketeer;
+    const snCfg = Config.enemy.sniper;
 
     if (scoutNormalCount > 0) renderer.fillStrokePaths(_scoutNormalHulls, {
       fillColor: sCfg.fillColor,  strokeColor: sCfg.color,
@@ -593,27 +673,22 @@ export class WaveManager {
    */
   renderBossHealthBar(renderer) {
     if (!this._boss || !this._boss.alive || this._boss.hideHealthBar) return;
-    const cfg  = Config.boss.healthBar;
+    const cfg  = _bossHealthBarCfg;
     const boss = this._boss;
-    const left  = cfg.x - cfg.width / 2;
-    const right = left + cfg.width;
 
     renderer.drawText(boss.name, cfg.x, cfg.y - 14, {
       font: cfg.nameFont, color: boss.color, glowBlur: cfg.nameGlowBlur, glowColor: boss.color,
     });
 
-    renderer.fillStrokePaths([{
-      points: [[left, cfg.y], [right, cfg.y], [right, cfg.y + cfg.height], [left, cfg.y + cfg.height]],
-      closed: true,
-    }], { fillColor: cfg.trackColor, strokeColor: cfg.trackColor, lineWidth: 1 });
+    renderer.fillStrokePaths(_bossHealthTrackPathArr, { fillColor: cfg.trackColor, strokeColor: cfg.trackColor, lineWidth: 1 });
 
     const frac = boss.healthFrac;
     if (frac > 0) {
-      const fillRight = left + cfg.width * frac;
-      renderer.fillStrokePaths([{
-        points: [[left, cfg.y], [fillRight, cfg.y], [fillRight, cfg.y + cfg.height], [left, cfg.y + cfg.height]],
-        closed: true,
-      }], { fillColor: boss.color, strokeColor: boss.color, lineWidth: 1 });
+      const fillRight = _bhbLeft + cfg.width * frac;
+      const fp = _bossHealthFillPath.points;
+      fp[1][0] = fillRight;
+      fp[2][0] = fillRight;
+      renderer.fillStrokePaths(_bossHealthFillPathArr, { fillColor: boss.color, strokeColor: boss.color, lineWidth: 1 });
     }
   }
 
@@ -830,14 +905,17 @@ export class WaveManager {
   }
 
   /**
-   * The player's special skill: instantly kills every enemy currently on
-   * screen, reusing the exact same kill pipeline a bullet hit uses
-   * (handleBulletHit — reward, explosion, SFX, Splitter fragments, PowerUp
-   * drop roll, all included for free). "On screen" is a plain bounds check
-   * against Config.virtual — an enemy still off-screen (mid entry-glide, or
-   * a Drifter clone that hasn't reached the play area yet, see
-   * DrifterEnemy's own `_visible`) is untouched, and so are any already-
-   * fired enemy projectiles (this clears enemies, not bullets).
+   * The player's special skill: instantly kills every regular enemy
+   * currently on screen, reusing the exact same kill pipeline a bullet hit
+   * uses (handleBulletHit — reward, explosion, SFX, Splitter fragments,
+   * PowerUp drop roll, all included for free). A boss (`type === 'boss'`)
+   * is a deliberate exception — seeing it vanish in one tap would trivialize
+   * the fight, so it takes a heavy-but-capped hit instead (see
+   * `_applySkillBombToBoss`) and lives to keep fighting. "On screen" is a
+   * plain bounds check against Config.virtual — an enemy still off-screen
+   * (mid entry-glide, or a Drifter clone that hasn't reached the play area
+   * yet, see DrifterEnemy's own `_visible`) is untouched, and so are any
+   * already-fired enemy projectiles (this clears enemies, not bullets).
    *
    * `damage` is an arbitrarily large multiplier on `_playerDamage` rather
    * than reading each enemy's own health field directly — every enemy type
@@ -850,21 +928,45 @@ export class WaveManager {
    * Splitter pushes 3 fresh fragments onto `_enemies` mid-loop (see
    * handleBulletHit), and those are deliberately left for the player to
    * mop up afterward rather than recursively bombed in the same pass.
-   * @returns {number} how many enemies were actually killed, so
-   *   GameplayScene can skip the cooldown/shake entirely if the screen was
-   *   already empty
+   * @returns {{ killCount: number, hitBoss: boolean }} how many regular
+   *   enemies died and whether a boss was damaged, so GameplayScene can
+   *   skip the cooldown/shake entirely if the button did nothing at all
    */
   triggerSkillBomb() {
     const { width: vW, height: vH } = Config.virtual;
     const n = this._enemies.length;
     let killCount = 0;
+    let hitBoss = false;
     for (let i = 0; i < n; i++) {
       const e = this._enemies[i];
       if (!e.alive) continue;
       if (e.x < 0 || e.x > vW || e.y < 0 || e.y > vH) continue; // only what's actually on screen
+      if (e.type === 'boss') {
+        if (this._applySkillBombToBoss(e)) hitBoss = true;
+        continue;
+      }
       if (this.handleBulletHit(e, SKILL_LETHAL_MULTIPLIER)) killCount++;
     }
-    return killCount;
+    return { killCount, hitBoss };
+  }
+
+  /**
+   * Deals Config.boss.skillBombDamageFrac of the boss's own max health,
+   * capped so it can never be the killing blow — reuses handleBulletHit
+   * (so a boss's own on-hit mechanics, e.g. Bouncer Primal's summon roll,
+   * still fire normally) by expressing the capped raw damage as an
+   * equivalent `_playerDamage` multiplier.
+   * @returns {boolean} true if any damage was actually dealt (false only
+   *   if the boss was already down to 1 health, an edge case the normal
+   *   bullet-kill path will finish off next hit)
+   */
+  _applySkillBombToBoss(boss) {
+    const maxHealth = boss.maxHealth;
+    const currentHealth = boss.healthFrac * maxHealth;
+    const damage = Math.min(Config.boss.skillBombDamageFrac * maxHealth, currentHealth - 1);
+    if (damage <= 0) return false;
+    this.handleBulletHit(boss, damage / this._playerDamage);
+    return true;
   }
 
   /** Direct reference — GameplayScene runs the bullet↔enemy collision loop. */

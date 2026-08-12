@@ -1232,7 +1232,13 @@ export const Config = Object.freeze({
 	 * — see _onDrifterBarrierHit) never rolls for a drop.
 	 */
 	powerUps: Object.freeze({
-		dropChance: 0.12, // fraction of real kills that drop something
+		// Trimmed down from an initial 0.12 now that the campaign runs 30
+		// levels deep (see Config.waves.levels) instead of 10 — the back-half
+		// levels throw far more enemies per wave, so the same fraction would
+		// otherwise mean a steadily climbing ABSOLUTE pickup count as the
+		// campaign progresses, not a steady one. `poolSize` below (8) is
+		// still the hard on-screen cap regardless of this rate.
+		dropChance: 0.1, // fraction of real kills that drop something
 		// Of the drops that DO happen, these three fractions are shield/
 		// fireBoost/invincible pickups — health gets whatever's left (~0.25).
 		// invincible is weighted lowest on purpose — full damage immunity is
@@ -1563,32 +1569,30 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 7 — "Alien Invasion" — {Weaver, Drifter, Sweeper, Diver,
-			// Scout, Sniper, Rocketeer}. The only level in the game where all
-			// four Drifter-family variants (same creature, four path/palette
-			// reskins) are on screen together — the family's completion, played
-			// as one deliberate spectacle rather than a rule to avoid. Seven types.
+			// Level 7 — {Scout, Rocketeer, Sniper, Bouncer, Diver}. Every 7th
+			// level is a boss level (see Config.boss.everyNLevels) — WaveManager
+			// checks that BEFORE ever reading this array, so this entry (and
+			// every other multiple of 7 below) never actually plays while that
+			// stays true. Kept as a real, playable config anyway rather than a
+			// placeholder — everyNLevels has already changed more than once
+			// during development, and a stale/broken entry would only turn into
+			// a problem the next time it does.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
-						type: "weaver",
-						count: 2,
-						spawnInterval: 5,
-					}),
-					Object.freeze({
-						type: "drifter",
-						count: 1,
-						spawnInterval: 5,
-					}),
-					Object.freeze({
-						type: "sweeper",
-						count: 1,
-						spawnInterval: 5,
-					}),
-					Object.freeze({
 						type: "scout",
-						count: 2,
+						count: 3,
 						spawnInterval: 2.0,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 2,
+						spawnInterval: 3.3,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 3,
+						spawnInterval: 2.4,
 					}),
 					Object.freeze({
 						type: "diver",
@@ -1596,19 +1600,9 @@ export const Config = Object.freeze({
 						spawnInterval: 3.5,
 					}),
 					Object.freeze({
-						type: "sniper",
+						type: "bouncer",
 						count: 2,
-						spawnInterval: 3.5,
-					}),
-					Object.freeze({
-						type: "weaver",
-						count: 1,
-						spawnInterval: 5,
-					}),
-					Object.freeze({
-						type: "rocketeer",
-						count: 2,
-						spawnInterval: 2.5,
+						spawnInterval: 3.2,
 					}),
 				]),
 			}),
@@ -1619,33 +1613,33 @@ export const Config = Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
 						type: "bouncer",
-						count: 3,
-						spawnInterval: 3.2,
+						count: 4,
+						spawnInterval: 2.8,
 					}),
 					Object.freeze({
 						type: "scout",
 						count: 3,
-						spawnInterval: 2.2,
+						spawnInterval: 1.9,
 					}),
 					Object.freeze({
 						type: "sniper",
 						count: 2,
-						spawnInterval: 3.5,
+						spawnInterval: 3.1,
 					}),
 					Object.freeze({
 						type: "rocketeer",
 						count: 3,
-						spawnInterval: 2.5,
+						spawnInterval: 2.2,
 					}),
 					Object.freeze({
 						type: "drifter",
 						count: 1,
-						spawnInterval: 5,
+						spawnInterval: 4.4,
 					}),
 					Object.freeze({
 						type: "bouncer",
 						count: 2,
-						spawnInterval: 3.2,
+						spawnInterval: 2.8,
 					}),
 				]),
 			}),
@@ -1658,107 +1652,834 @@ export const Config = Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
 						type: "splitter",
-						count: 2,
-						spawnInterval: 4,
+						count: 3,
+						spawnInterval: 3.5,
 					}),
 					Object.freeze({
 						type: "weaver",
 						count: 2,
-						spawnInterval: 5,
+						spawnInterval: 4.4,
 					}),
 					Object.freeze({
 						type: "sniper",
 						count: 2,
-						spawnInterval: 3.2,
+						spawnInterval: 2.8,
 					}),
 					Object.freeze({
 						type: "bouncer",
 						count: 2,
-						spawnInterval: 3.2,
+						spawnInterval: 2.8,
 					}),
 					Object.freeze({
 						type: "scout",
 						count: 2,
-						spawnInterval: 2.0,
+						spawnInterval: 1.8,
 					}),
 					Object.freeze({
 						type: "rocketeer",
 						count: 2,
-						spawnInterval: 2.5,
+						spawnInterval: 2.2,
 					}),
 					Object.freeze({
 						type: "splitter",
 						count: 1,
-						spawnInterval: 4,
+						spawnInterval: 3.5,
 					}),
 					Object.freeze({
 						type: "drifter",
 						count: 1,
-						spawnInterval: 5,
+						spawnInterval: 4.4,
 					}),
 				]),
 			}),
 			// Level 10 — "Last Stand" — every single one of the 10 placeable
-			// types, all overlapping. This is the level that repeats forever
-			// once reached (WaveManager caps at the last entry), so "endless
-			// mode" is genuinely the whole roster colliding at once, not a
-			// curated subset.
+			// types, all overlapping. The campaign continues past this one now
+			// (see levels 11-30 below) — it was the endless-mode repeat cap
+			// before the campaign was extended, and reads as a real mid-campaign
+			// gut-check rather than a final wall.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
 						type: "shielded",
 						count: 2,
-						spawnInterval: 3.5,
+						spawnInterval: 3.1,
 					}),
 					Object.freeze({
 						type: "sweeper",
 						count: 1,
-						spawnInterval: 5,
+						spawnInterval: 4.4,
 					}),
 					Object.freeze({
 						type: "scout",
-						count: 3,
-						spawnInterval: 2.0,
+						count: 4,
+						spawnInterval: 1.8,
 					}),
 					Object.freeze({
 						type: "sniper",
 						count: 2,
-						spawnInterval: 3.2,
+						spawnInterval: 2.8,
 					}),
 					Object.freeze({
 						type: "splitter",
 						count: 2,
-						spawnInterval: 4,
+						spawnInterval: 3.5,
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 2,
+						spawnInterval: 2.8,
+					}),
+					Object.freeze({
+						type: "weaver",
+						count: 2,
+						spawnInterval: 4.4,
+					}),
+					Object.freeze({
+						type: "diver",
+						count: 1,
+						spawnInterval: 3.1,
+					}),
+					Object.freeze({
+						type: "drifter",
+						count: 1,
+						spawnInterval: 4.4,
+					}),
+					Object.freeze({
+						type: "shielded",
+						count: 1,
+						spawnInterval: 3.1,
+					}),
+				]),
+			}),
+			// Level 11 — "Alien Invasion" — {Weaver, Drifter, Sweeper, Diver,
+			// Scout, Sniper, Rocketeer}. The only level in the game where all
+			// four Drifter-family variants (same creature, four path/palette
+			// reskins) are on screen together — the family's completion, played
+			// as one deliberate spectacle rather than a rule to avoid. Originally
+			// level 7, moved here once every 7th level became a boss level (see
+			// Config.boss.everyNLevels) — this is the first level of "act two",
+			// right after the player's first boss kill.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "weaver",
+						count: 3,
+						spawnInterval: 4.4,
+					}),
+					Object.freeze({
+						type: "drifter",
+						count: 1,
+						spawnInterval: 4.4,
+					}),
+					Object.freeze({
+						type: "sweeper",
+						count: 1,
+						spawnInterval: 4.4,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 2,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "diver",
+						count: 1,
+						spawnInterval: 3.1,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 2,
+						spawnInterval: 3.1,
+					}),
+					Object.freeze({
+						type: "weaver",
+						count: 1,
+						spawnInterval: 4.4,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2.2,
+					}),
+				]),
+			}),
+			// Level 12 — "Splitter Squad" — three Splitters (and the fragment
+			// swarm each leaves behind) under steady ship-family pressure.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "splitter",
+						count: 4,
+						spawnInterval: 3.3,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 3,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2.1,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 2,
+						spawnInterval: 2.8,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+				]),
+			}),
+			// Level 13 — "Shielded Wall" — Shielded Bouncers debut in force,
+			// each one soaking hits while Sniper telegraphs demand you hold position.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "shielded",
+						count: 4,
+						spawnInterval: 2.9,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 3,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 2,
+						spawnInterval: 1.7,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2,
+					}),
+				]),
+			}),
+			// Level 14 — {Scout, Sniper, Rocketeer, Bouncer}. A boss level (see
+			// the comment on level 7's entry above for why this never actually
+			// plays while Config.boss.everyNLevels stays 7 — kept as a real
+			// config for the same reason).
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "scout",
+						count: 4,
+						spawnInterval: 1.7,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+				]),
+			}),
+			// Level 15 — "Diver Storm" — Divers and Weavers layered together,
+			// both diving/descending toward the barrier at once.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "diver",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "weaver",
+						count: 4,
+						spawnInterval: 4,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 2,
+						spawnInterval: 1.7,
+					}),
+				]),
+			}),
+			// Level 16 — "Sweeper Tide" — two full Sweeper rows layered with a
+			// Drifter loop, a dense wall of tentacle-creatures on screen at once.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "sweeper",
+						count: 3,
+						spawnInterval: 4,
+					}),
+					Object.freeze({
+						type: "drifter",
+						count: 1,
+						spawnInterval: 4,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 2,
+						spawnInterval: 1.7,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2,
+					}),
+					Object.freeze({
+						type: "diver",
+						count: 1,
+						spawnInterval: 2.6,
+					}),
+				]),
+			}),
+			// Level 17 — "Gauntlet" — pure ship-family pressure, tightened
+			// intervals across the board instead of a new type to lean on.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "scout",
+						count: 5,
+						spawnInterval: 1.6,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.9,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 3,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 2,
+						spawnInterval: 2.5,
+					}),
+				]),
+			}),
+			// Level 18 — "Splitter Swarm" — four Splitters (and their fragments)
+			// on top of a Weaver descent.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "splitter",
+						count: 5,
+						spawnInterval: 3.1,
+					}),
+					Object.freeze({
+						type: "weaver",
+						count: 2,
+						spawnInterval: 4,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 2,
+						spawnInterval: 1.6,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 2,
+						spawnInterval: 1.9,
+					}),
+				]),
+			}),
+			// Level 19 — "Full Roster Redux" — every type from level 10's "Last
+			// Stand" again, denser this time — the finale you already beat,
+			// escalated.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "shielded",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 2,
+						spawnInterval: 3.1,
+					}),
+					Object.freeze({
+						type: "sweeper",
+						count: 1,
+						spawnInterval: 4,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 4,
+						spawnInterval: 1.6,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 3,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.9,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 2,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "weaver",
+						count: 2,
+						spawnInterval: 4,
+					}),
+					Object.freeze({
+						type: "diver",
+						count: 1,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "drifter",
+						count: 1,
+						spawnInterval: 4,
+					}),
+				]),
+			}),
+			// Level 20 — "Iron Wall" — Shielded, Bouncer, and Splitter all
+			// together, the tankiest non-boss lineup in the game.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "shielded",
+						count: 4,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 3,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 2,
+						spawnInterval: 3.1,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 2,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 2,
+						spawnInterval: 1.6,
+					}),
+				]),
+			}),
+			// Level 21 — {Scout, Sniper, Rocketeer, Splitter}. A boss level (see
+			// the comment on level 7's entry above).
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "scout",
+						count: 4,
+						spawnInterval: 1.6,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 2,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 2,
+						spawnInterval: 1.9,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 1,
+						spawnInterval: 3.1,
+					}),
+				]),
+			}),
+			// Level 22 — "Crossfire" — Snipers and Rocketeers at their fastest
+			// reload yet, forcing constant movement between two aimed threats.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "sniper",
+						count: 5,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 3,
+						spawnInterval: 1.5,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 2,
+						spawnInterval: 2.3,
+					}),
+				]),
+			}),
+			// Level 23 — "Storm Front" — Weaver, Diver, and Sweeper formations
+			// layered on top of steady ship-family fire.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "weaver",
+						count: 4,
+						spawnInterval: 3.7,
+					}),
+					Object.freeze({
+						type: "diver",
+						count: 2,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "sweeper",
+						count: 2,
+						spawnInterval: 3.7,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 3,
+						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 3,
+						spawnInterval: 1.5,
+					}),
+				]),
+			}),
+			// Level 24 — "Chaos Engine" — Shielded, Splitter, ship-family, and
+			// Bouncer all overlapping at once — no single threat to focus on.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "shielded",
+						count: 4,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 3,
+						spawnInterval: 2.8,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 3,
+						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 3,
+						spawnInterval: 1.5,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 3,
+						spawnInterval: 2.3,
+					}),
+				]),
+			}),
+			// Level 25 — "Endurance" — more, smaller groups than any level
+			// before it, so the wave keeps producing fresh threats for longer
+			// rather than front-loading everything into one dense burst.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "scout",
+						count: 4,
+						spawnInterval: 1.5,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 3,
+						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "drifter",
+						count: 1,
+						spawnInterval: 3.7,
+					}),
+					Object.freeze({
+						type: "weaver",
+						count: 2,
+						spawnInterval: 3.7,
+					}),
+					Object.freeze({
+						type: "diver",
 						count: 2,
 						spawnInterval: 2.5,
 					}),
 					Object.freeze({
 						type: "bouncer",
 						count: 2,
-						spawnInterval: 3.2,
+						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "sweeper",
+						count: 1,
+						spawnInterval: 3.7,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 2,
+						spawnInterval: 2.8,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 3,
+						spawnInterval: 1.5,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 2,
+						spawnInterval: 2.3,
+					}),
+				]),
+			}),
+			// Level 26 — "Overwhelm" — the highest single-type counts yet across
+			// Shielded, Splitter, Sniper, Rocketeer, and Scout at once.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "shielded",
+						count: 5,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 3,
+						spawnInterval: 2.8,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 4,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 4,
+						spawnInterval: 1.4,
+					}),
+				]),
+			}),
+			// Level 27 — "Last Stretch" — the run-up to the Snake fight, dense
+			// ship-family and Bouncer-family pressure with a Weaver descent on top.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "scout",
+						count: 5,
+						spawnInterval: 1.4,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.7,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 4,
+						spawnInterval: 2.1,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 3,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 2,
+						spawnInterval: 2.6,
 					}),
 					Object.freeze({
 						type: "weaver",
 						count: 2,
-						spawnInterval: 5,
+						spawnInterval: 3.5,
+					}),
+				]),
+			}),
+			// Level 28 — {Scout, Sniper, Rocketeer, Shielded}. A boss level (see
+			// the comment on level 7's entry above).
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "scout",
+						count: 4,
+						spawnInterval: 1.5,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 3,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "shielded",
+						count: 2,
+						spawnInterval: 2.5,
+					}),
+				]),
+			}),
+			// Level 29 — "Final Wave" — every family at once, one step short of
+			// the finale — the last chance to get comfortable before level 30.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "shielded",
+						count: 3,
+						spawnInterval: 2.4,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 3,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "sweeper",
+						count: 2,
+						spawnInterval: 3.5,
+					}),
+					Object.freeze({
+						type: "weaver",
+						count: 2,
+						spawnInterval: 3.5,
 					}),
 					Object.freeze({
 						type: "diver",
-						count: 1,
-						spawnInterval: 3.5,
+						count: 2,
+						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 5,
+						spawnInterval: 2.1,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.7,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 4,
+						spawnInterval: 1.4,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 3,
+						spawnInterval: 2.2,
 					}),
 					Object.freeze({
 						type: "drifter",
 						count: 1,
-						spawnInterval: 5,
+						spawnInterval: 3.5,
+					}),
+				]),
+			}),
+			// Level 30 — "The Reckoning" — the entire roster at the campaign's
+			// highest density. This is the level that repeats forever once
+			// reached (WaveManager caps at the last entry), so "endless mode" is
+			// genuinely the whole roster colliding at once, not a curated subset.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({
+						type: "shielded",
+						count: 4,
+						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "sweeper",
+						count: 2,
+						spawnInterval: 3.5,
+					}),
+					Object.freeze({
+						type: "scout",
+						count: 6,
+						spawnInterval: 1.3,
+					}),
+					Object.freeze({
+						type: "sniper",
+						count: 4,
+						spawnInterval: 2,
+					}),
+					Object.freeze({
+						type: "splitter",
+						count: 3,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.6,
+					}),
+					Object.freeze({
+						type: "bouncer",
+						count: 3,
+						spawnInterval: 2.1,
+					}),
+					Object.freeze({
+						type: "weaver",
+						count: 3,
+						spawnInterval: 3.3,
+					}),
+					Object.freeze({
+						type: "diver",
+						count: 2,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
+						type: "drifter",
+						count: 2,
+						spawnInterval: 3.5,
 					}),
 					Object.freeze({
 						type: "shielded",
-						count: 1,
-						spawnInterval: 3.5,
+						count: 2,
+						spawnInterval: 2.3,
 					}),
 				]),
 			}),
@@ -1767,11 +2488,11 @@ export const Config = Object.freeze({
 
 	/**
 	 * Boss encounters — a single, much tougher enemy that completely
-	 * replaces the normal level roster every `everyNLevels` levels (8, 16,
-	 * 24, ...). Checked against the raw level number in WaveManager rather
-	 * than read from `waves.levels` above (which only defines 10 entries and
+	 * replaces the normal level roster every `everyNLevels` levels (7, 14,
+	 * 21, ...). Checked against the raw level number in WaveManager rather
+	 * than read from `waves.levels` above (which only defines 30 entries and
 	 * caps at the last one forever), so boss levels keep recurring past
-	 * level 10 too.
+	 * level 30 too.
 	 *
 	 * `scout1` is the first boss ("Scout Prime") — a giant reskin of the
 	 * Scout hull (BossEnemy.js reuses SCOUT_HULL_PTS's exact authored
@@ -1780,21 +2501,34 @@ export const Config = Object.freeze({
 	 * burst (`scoutPhase`), a Rocketeer-style homing-missile salvo
 	 * (`rocketeerPhase`), then a Sniper-style charge/lock/fire
 	 * (`sniperPhase`) — looping back to the first once all three have run.
-	 * Later boss encounters (level 16, 24, ...) reuse this same boss for
-	 * now, scaled up via `healthPerLevel` like every regular enemy — future
-	 * reiterations (a giant Rocketeer or Sniper build) are a later addition.
+	 * Later boss encounters (level 35, 63, ... — this boss is roster[0], so
+	 * it recurs every 4th boss encounter once the roster cycles) reuse this
+	 * same boss for now, scaled up via `healthPerLevel` like every regular
+	 * enemy — future reiterations (a giant Rocketeer or Sniper build) are a
+	 * later addition.
 	 */
 	boss: Object.freeze({
-		everyNLevels: 1,
-		roster: Object.freeze(["snake", "scout1", "spiral", "bouncerPrimal"]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/... boss-level encounter (level 8→roster[0], 16→roster[1], 24→roster[2], 32→roster[3], 40→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
+		everyNLevels: 7,
+		roster: Object.freeze(['scout1', 'spiral', 'bouncerPrimal', 'snake']), // ordered — which boss spawns on the 1st/2nd/3rd/4th/... boss-level encounter (level 7→roster[0], 14→roster[1], 21→roster[2], 28→roster[3], 35→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
+
+		// Fraction of a boss's OWN max health the player's skill bomb deals
+		// when it lands on one, instead of the instant kill it deals to every
+		// regular enemy — see WaveManager.triggerSkillBomb. A flat fraction
+		// (rather than a fixed damage number) scales correctly across every
+		// boss's very different health pool, from Snake's ~350 to Bouncer
+		// Primal's 12000+. 0.25 reads as a clearly powerful burst (noticeably
+		// more than what a stretch of ordinary bullets would do) without
+		// letting one tap of an 85s-cooldown button skip a meaningful chunk
+		// of the fight.
+		skillBombDamageFrac: 0.25,
 
 		scout1: Object.freeze({
 			name: "SCOUT PRIME", // boss health-bar label
 
 			size: 58, // vp — same authored hull proportions as Scout (Enemy.js's SCOUT_HULL_PTS), just ~2.6x Scout's 22 (trimmed down from an initial 70 — read as too large)
 			health: 450,
-			healthPerLevel: 60, // later boss encounters (level 16, 24, ...) scale up like every regular enemy's healthPerLevel
+			healthPerLevel: 60, // later boss encounters (level 35, 63, ...) scale up like every regular enemy's healthPerLevel
 			color: "#ff3b3b", // same danger-red as Config.player.lowHealth/Config.gameOver — a boss reads as the threat, not another squad member
 			fillColor: "#200808",
 			lineWidth: 3,
@@ -2286,7 +3020,15 @@ export const Config = Object.freeze({
 	 * visual detail and is read once at construction time (see Barrier.js).
 	 */
 	barrier: Object.freeze({
-		maxHealth: 100, // barrier HP — see Barrier.js's takeDamage/heal
+		maxHealth: 150, // barrier HP — see Barrier.js's takeDamage/heal. Bumped from 100 (+50) so the shield has more of a cushion across a 30-level campaign.
+		// A small guaranteed top-up applied once per wave clear (see
+		// GameplayScene's isDone handling) — on top of, not instead of, the
+		// rare shield PowerUp drop (Config.powerUps.shield.healAmount, 20).
+		// Deliberately smaller than that drop's amount since this one is
+		// guaranteed every single wave rather than a rare pickup — enough to
+		// meaningfully offset routine chip damage between waves without
+		// making barrier health management pressure-free for the whole run.
+		healPerWaveClear: 15,
 		color: "#4DEFFF",
 		lineWidth: 2,
 		glowBlur: 10, // reduced from 12 — blur cost ∝ radius², so 10 vs 12 is ~31% cheaper
@@ -2340,7 +3082,7 @@ export const Config = Object.freeze({
 		// (1 - depth*(0.5+0.5*sin(age*speed))), just faster/deeper so it reads
 		// as urgent rather than idle. See Barrier._isLowHealth/_lowHealthAlpha.
 		lowHealth: Object.freeze({
-			threshold: 25, // health (0-100) at/below which the warning kicks in
+			threshold: 38, // flat health value at/below which the warning kicks in — 25% of maxHealth (150), same ratio as the original 25/100
 			color: "#ff3b3b", // warning red
 			pulseSpeed: 4.0, // rad/sec — noticeably faster than the ~2.0 UI buttons pulse at
 			pulseDepth: 0.5, // how far the alpha dips at the trough of each pulse
@@ -2470,11 +3212,19 @@ export const Config = Object.freeze({
 			// stat), and deliberate breathing room at the bottom for thumb reach.
 			titleFont: '400 16px "Audiowide", "Courier New", monospace',
 			titleColor: "#4DEFFF",
-			titleY: 56,
+			// Pushed down from an initial 56 — the mute/codex/pause row sits at
+			// y=48 with a 25vp radius (bottom edge ~73, see
+			// Config.playbackControls' own comment), and those buttons render
+			// on top of this overlay every frame (GameplayScene draws
+			// PlaybackControls after EnemyCodex; EnemyCodex draws its own
+			// toggle button after its overlay too), so the old titleY sat right
+			// under them and read as overlapping/cut-off text (then 85, still
+			// felt tight). 100 clears the row with clear breathing room.
+			titleY: 100,
 
 			progressFont: '400 12px "Audiowide", "Courier New", monospace',
 			progressColor: "#aab4d4",
-			progressY: 86,
+			progressY: 130, // shifted down by the same amount as titleY, preserving their original 30px gap
 
 			// Enemies are drawn at their real in-game size (see EnemyCodex —
 			// it renders actual entity instances, not a re-derived approximation),
@@ -2588,9 +3338,13 @@ export const Config = Object.freeze({
 	/**
 	 * The player's single special skill: a screen-clearing bomb. Tap the
 	 * button — bottom-right, just above the barrier's dome — to instantly
-	 * kill every enemy currently on screen through the exact same kill
-	 * pipeline a bullet hit uses (reward, explosion, SFX, even a Splitter's
-	 * fragments/a PowerUp drop roll — see WaveManager.triggerSkillBomb).
+	 * kill every regular enemy currently on screen through the exact same
+	 * kill pipeline a bullet hit uses (reward, explosion, SFX, even a
+	 * Splitter's fragments/a PowerUp drop roll — see
+	 * WaveManager.triggerSkillBomb). A boss on screen is a deliberate
+	 * exception: it takes a heavy hit (Config.boss.skillBombDamageFrac of
+	 * its own max health) instead of dying outright, so the button stays a
+	 * strong assist rather than a fight-skipping button.
 	 * Enemies still off-screen (mid entry-glide, or a Drifter clone that
 	 * hasn't reached the play area yet) are untouched, and so are any
 	 * already-fired enemy projectiles — this clears enemies, not bullets.

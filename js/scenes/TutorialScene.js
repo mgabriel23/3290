@@ -3,14 +3,16 @@
  * Tutorial overlay that plays once between the title screen and the player's
  * first gameplay session. The full gameplay backdrop — starfield, barrier
  * (with its permanent SHIELD health readout), HUD (score/gold/health), the
- * Enemy Codex button, and the mute/pause buttons — is visible behind a
- * dimming overlay, so every hint highlights the real UI element it
- * describes rather than a mock diagram. Codex/PlaybackControls are
- * constructed here purely as inert display chrome — their `_open`/`_paused`
- * state never gets touched (this scene never forwards taps into them), so
- * they only ever render their idle always-visible button, never an overlay.
+ * Enemy Codex button, the mute/pause buttons, and the special-skill button —
+ * is visible behind a dimming overlay, so every hint highlights the real UI
+ * element it describes rather than a mock diagram. Codex/PlaybackControls/
+ * PlayerSkill are constructed here purely as inert display chrome — their
+ * `_open`/`_paused`/cooldown state never gets touched (this scene never
+ * forwards taps into them, and PlayerSkill's `.use()` is never called), so
+ * they only ever render their idle always-visible/always-ready button, never
+ * an overlay or a mid-cooldown state.
  *
- * Seven sequential hints advance on tap or swipe-up. The first tap/swipe
+ * Eight sequential hints advance on tap or swipe-up. The first tap/swipe
  * during a still-typing hint fast-forwards the typewriter to completion;
  * the second advances to the next hint. After the last hint `onContinue`
  * fires and GameplayScene takes over, which starts the normal player fly-in.
@@ -40,6 +42,7 @@ import { HUD } from '../entities/HUD.js';
 import { Starfield } from '../entities/Starfield.js';
 import { EnemyCodex } from '../entities/EnemyCodex.js';
 import { PlaybackControls } from '../entities/PlaybackControls.js';
+import { PlayerSkill } from '../entities/PlayerSkill.js';
 import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { AudioPool } from '../core/AudioPool.js';
 import { cornerBracketPath } from '../core/shapes.js';
@@ -94,6 +97,11 @@ const PLAYBACK_BOX = {
   left: MUTE_BTN.x - MUTE_BTN.radius - 3, top: MUTE_BTN.y - MUTE_BTN.radius - 3,
   right: PAUSE_BTN.x + PAUSE_BTN.radius + 3, bottom: PAUSE_BTN.y + PAUSE_BTN.radius + 3,
 };
+const SKILL_BTN = Config.playerSkill;
+const SKILL_BOX = {
+  left: SKILL_BTN.x - SKILL_BTN.radius - 3, top: SKILL_BTN.y - SKILL_BTN.radius - 3,
+  right: SKILL_BTN.x + SKILL_BTN.radius + 3, bottom: SKILL_BTN.y + SKILL_BTN.radius + 3,
+};
 
 /**
  * Static hint definitions.
@@ -140,6 +148,11 @@ const HINTS = [
     textCY: 420,
     highlight: PLAYBACK_BOX,
   },
+  {
+    text: 'Tap this button to unleash your special attack — it instantly destroys nearby enemies and hits bosses with heavy damage. It needs time to recharge after each use.',
+    textCY: 420,
+    highlight: SKILL_BOX,
+  },
 ];
 
 // Controls-demo constants — the orbiting hand icon shown on the movement hint (index 4)
@@ -162,6 +175,7 @@ export class TutorialScene {
     this._hud = new HUD();
     this._codex = new EnemyCodex();
     this._playback = new PlaybackControls();
+    this._playerSkill = new PlayerSkill();
 
     this._age = 0;       // seconds since scene start — drives starfield fade-in
     this._hintIndex = 0;
@@ -189,6 +203,7 @@ export class TutorialScene {
     this._starfield.update(dt);
     this._codex.update(dt);
     this._playback.update(dt);
+    this._playerSkill.update(dt);
     // Don't advance hint state during the intro delay — hints haven't appeared yet.
     // _hintAge only starts counting once hints are actually visible so its fade-in
     // and blink timings stay relative to when the first hint is shown, not scene start.
@@ -212,10 +227,14 @@ export class TutorialScene {
     // real gameplay chrome the hints point at, so it shows a nominal full
     // health bar rather than an undefined/NaN one.
     this._hud.render(renderer, Config.player.maxHealth);
-    // Codex/PlaybackControls only ever render their idle button here — see
-    // the class doc for why their overlay/pause state is never touched.
+    // Codex/PlaybackControls/PlayerSkill only ever render their idle button
+    // here — see the class doc for why their overlay/pause/cooldown state
+    // is never touched (PlayerSkill's cooldown timer starts at 0 and is
+    // never advanced by a real `.use()` call in this scene, so it always
+    // renders its "ready" pulse).
     this._codex.render(renderer);
     this._playback.render(renderer);
+    this._playerSkill.render(renderer);
 
     // Fade in from black — covers the cut from PrologueScene's black fade-out
     if (this._age < fadeInDuration) {

@@ -12,7 +12,14 @@
      9:16 aspect ratio, so the container is always the exact right
      proportion on desktop/tablet — no arbitrary pixel guess needed.
      On real phones (always narrower than this value) `width: 100%` on
-     `.app` wins and the cap never fires, so phone layout is unaffected. */
+     `.app` wins and the cap never fires, so phone layout is unaffected.
+     Same `vh`-before-`dvh` fallback as `.app`'s own height in
+     layouts/_app.css — see that comment for why the fallback line matters
+     on older mobile browsers without `dvh` support; without it, this
+     custom property would compute to an invalid value there and `.app`'s
+     `max-width: var(--game-max-width)` would silently fall back to `none`
+     (stretching edge-to-edge, unletterboxed, on wider screens). */
+  --game-max-width: calc(100vh * 9 / 16);
   --game-max-width: calc(100dvh * 9 / 16);
 }
 

@@ -1,7 +1,7 @@
 /**
  * BouncerPrimalBoss.js
  * Boss #3 — "Bouncer Primal". Spawned by WaveManager on every 3rd boss-level
- * encounter (level 24, 48, ... — see Config.boss.roster and WaveManager's
+ * encounter (level 21, 49, ... — see Config.boss.roster and WaveManager's
  * boss-selection lookup in its constructor). A giant reskin of the Splitter
  * Bouncer variant — same wireframe hexagon silhouette, same physics — unlike
  * Boss #1/#2, which hold position or orbit, this one drops in and bounces
@@ -87,6 +87,8 @@ export class BouncerPrimalBoss {
   get hitRadius() { return this._radius; }
   get contactDamage() { return this._cfg.contactDamage; } // opts this boss into WaveManager.checkPlayerHit's contact-damage check, same as a regular Bouncer
   get hideHealthBar() { return true; } // see WaveManager.renderBossHealthBar
+  get healthFrac()    { return Math.max(0, this._health) / this._maxHealth; } // no health bar of its own, but still needed generically by WaveManager._applySkillBombToBoss
+  get maxHealth()      { return this._maxHealth; } // see WaveManager._applySkillBombToBoss
   get name()  { return this._cfg.name; }
   get color() { return this._cfg.color; }
 
@@ -142,6 +144,11 @@ export class BouncerPrimalBoss {
 
   /** Drains and returns any Bouncers queued by `hit` since the last drain — see WaveManager.handleBulletHit. */
   drainSummons() {
+    // WaveManager.update() calls this unconditionally every frame for the
+    // whole encounter; the queue is only ever non-empty right after a hit
+    // rolls a summon, so skip allocating a fresh empty array on every other
+    // frame rather than churning garbage the entire fight.
+    if (this._pendingSummons.length === 0) return this._pendingSummons;
     const summons = this._pendingSummons;
     this._pendingSummons = [];
     return summons;

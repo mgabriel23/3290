@@ -1,7 +1,7 @@
 /**
  * SpiralBoss.js
  * Boss #2 — "Spiral". Spawned by WaveManager on every OTHER boss-level
- * encounter (level 16, 32, ... — see Config.boss.roster and WaveManager's
+ * encounter (level 14, 42, ... — see Config.boss.roster and WaveManager's
  * boss-selection lookup in its constructor). An original radial-turret/orb
  * silhouette (see SPIRAL_HULL_PTS below — a symmetric N-pointed star/gear),
  * unlike Boss #1's giant-Scout reskin: no other enemy in the game is
@@ -42,7 +42,7 @@ const INNER_R  = BS * Config.boss.spiral.innerRadiusRatio;
 // and inner (core ring) points evenly spaced around a full circle. Unlike
 // BOSS_HULL_PTS (BossEnemy.js), this isn't derived from any existing
 // enemy's authored silhouette — it's original to this boss.
-export const SPIRAL_HULL_PTS = [];
+const SPIRAL_HULL_PTS = [];
 for (let j = 0; j < SPIKES * 2; j++) {
   const angle = j * (Math.PI / SPIKES);
   const r = (j % 2 === 0) ? OUTER_R : INNER_R;
@@ -91,6 +91,7 @@ export class SpiralBoss {
   get hitRadius()  { return this._cfg.hitRadius; }
   /** 0-1 remaining health fraction — read by WaveManager for the boss health bar. */
   get healthFrac() { return Math.max(0, this._health) / this._maxHealth; }
+  get maxHealth()  { return this._maxHealth; } // see WaveManager._applySkillBombToBoss
   get name()  { return this._cfg.name; }
   get color() { return this._cfg.color; }
 

@@ -15,6 +15,10 @@
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
   />
   <meta name="theme-color" content="#05070f" />
+  <meta
+    name="description"
+    content="Space Shooter — a mobile-first 2D arcade space shooter. Defend your barrier through 30 waves of scouts, rocketeers, snipers, drifters and bouncers, and take down four unique bosses."
+  />
   <title>Space Shooter</title>
 
   <!-- Minimal inline wireframe-ship mark, matching the game's void backdrop + neon-cyan chrome. -->
@@ -33,7 +37,7 @@
     <!-- Responsive canvas (sized by the Renderer). All UI is canvas-drawn,
          so the accessible name below is the only screen-reader-visible
          description of the page's content. -->
-    <canvas class="app__canvas" id="game-canvas" aria-label="Space Shooter — a 2D arcade space shooter game"></canvas>
+    <canvas class="app__canvas" id="game-canvas" role="img" aria-label="Space Shooter — a 2D arcade space shooter game"></canvas>
   </div>
 
   <script type="module" src="js/main.js"></script>

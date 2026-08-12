@@ -22,6 +22,14 @@ document.fonts.load(Config.intro.font).finally(() => {
   const game = new Game(canvas, stage);
 
   window.addEventListener('resize', () => game.resize());
+  // `window.resize` alone isn't reliable on mobile: the address bar/toolbar
+  // showing or hiding changes the actual visible viewport (which is exactly
+  // what the CSS `dvh` unit tracks live), but doesn't always fire a plain
+  // `resize` event to tell the canvas to re-fit — leaving it stale-sized
+  // relative to a `.app` box that's already resized itself via CSS.
+  // `visualViewport`'s own `resize` event is the modern, purpose-built
+  // signal for this exact case; feature-detected since older browsers lack it.
+  window.visualViewport?.addEventListener('resize', () => game.resize());
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) game.resumeFromBackground();
   });

@@ -1,7 +1,15 @@
 /* layouts/_app.css — full-screen stage that hosts the canvas */
 .app {
   width: 100%;
-  /* Dynamic viewport unit so mobile browser chrome is accounted for. */
+  /* `100dvh` is the preferred unit (accounts for mobile browser chrome
+     showing/hiding), but isn't supported on older mobile browsers
+     (pre-2022-ish Safari/Chrome) — there, the `dvh` declaration is invalid
+     and simply dropped, leaving NO height rule at all and collapsing the
+     stage to near-zero. The `100vh` line first is a deliberate CSS
+     fallback: a browser without `dvh` support keeps this value (the
+     later invalid declaration never overrides it), while a browser that
+     does support `dvh` uses that one instead, per normal cascade order. */
+  height: 100vh;
   height: 100dvh;
   /* Fills small (mobile) screens edge-to-edge; on larger screens it's
      capped and centered so the game stays a comfortable, phone-like size. */

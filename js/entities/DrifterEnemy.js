@@ -80,7 +80,7 @@ export function createDrifterPath() {
 }
 
 /** Position + heading at distance `dist` along the given path. */
-export function samplePath(p, dist) {
+function samplePath(p, dist) {
   const cfg = Config.enemy.drifter;
   if (dist < p.L1) {
     return {
@@ -164,7 +164,7 @@ export function createDiverPath() {
  * toward the player, tentacles trailing above), same pose as the sweeper's
  * vertical step.
  */
-export function sampleDiverPath(p, t, offset) {
+function sampleDiverPath(p, t, offset) {
   const cfg  = Config.enemy.drifter.diver;
   const dist = cfg.startSpeed * t + 0.5 * cfg.accel * t * t;
   return { x: p.x + offset[0], y: cfg.spawnY + dist + offset[1], heading: Math.PI };
@@ -190,7 +190,7 @@ export function createWeaverPath() {
  * path's tangent direction (nose pointed along the direction of travel,
  * same convention as variant #1).
  */
-export function sampleWeaverPath(p, dist) {
+function sampleWeaverPath(p, dist) {
   const cfg = Config.enemy.drifter.weaver;
   const { width: vW } = Config.virtual;
   const baseX = vW / 2;

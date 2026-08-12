@@ -43,7 +43,7 @@ const BS = Config.boss.scout1.size;
 
 // Same authored proportions as Enemy.js's SCOUT_HULL_PTS, just parameterized
 // by the boss's own (much bigger) size — see class doc.
-export const BOSS_HULL_PTS = [
+const BOSS_HULL_PTS = [
   [ 0,        -BS * 0.30],
   [ BS * 0.80, -BS * 0.50],
   [ BS * 0.85,  BS * 0.00],
@@ -120,6 +120,7 @@ export class BossEnemy {
   get hitRadius() { return this._cfg.hitRadius; }
   /** 0-1 remaining health fraction — read by WaveManager for the boss health bar. */
   get healthFrac() { return Math.max(0, this._health) / this._maxHealth; }
+  get maxHealth()  { return this._maxHealth; } // see WaveManager._applySkillBombToBoss
   get name()  { return this._cfg.name; }
   get color() { return this._cfg.color; }
 
