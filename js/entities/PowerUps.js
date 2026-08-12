@@ -9,10 +9,11 @@
  *
  * Same pre-allocated-typed-array pooling shape as EnemyBullet.js: swap-
  * remove on cull (falls off the bottom of the screen or outlives `maxLife`)
- * or on pickup. WaveManager discards this whole pool on every level
- * transition (a fresh WaveManager is constructed per level), so an
- * uncollected pickup is simply lost, not carried over — no special handling
- * needed here for that.
+ * or on pickup. Owned by GameplayScene, not WaveManager, even though only
+ * WaveManager spawns into/drains it — a fresh WaveManager is constructed
+ * every level, but an uncollected pickup must survive that transition
+ * rather than vanishing with the old one, so GameplayScene hands the same
+ * pool instance to each new WaveManager (see WaveManager's constructor doc).
  *
  * A third kind, 'fireBoost', and a fourth, 'invincible', are temporary
  * buffs rather than an instant restore — this pool only spawns/falls/gets

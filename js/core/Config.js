@@ -3057,7 +3057,8 @@ export const Config = Object.freeze({
 	 * visual detail and is read once at construction time (see Barrier.js).
 	 */
 	barrier: Object.freeze({
-		maxHealth: 150, // barrier HP — see Barrier.js's takeDamage/heal. Bumped from 100 (+50) so the shield has more of a cushion across a 30-level campaign.
+		maxHealth: 150, // barrier HP at level 1 — see Barrier.js's takeDamage/heal. Bumped from 100 (+50) so the shield has more of a cushion across a 30-level campaign.
+		maxHealthPerLevel: 50, // +50 max HP per wave level beyond 1 — see Barrier.maxHealth/setLevel. Same "base + (level-1)*perLevel" shape as Config.player.damage/damagePerLevel.
 		// A small guaranteed top-up applied once per wave clear (see
 		// GameplayScene's isDone handling) — on top of, not instead of, the
 		// rare shield PowerUp drop (Config.powerUps.shield.healAmount, 20).
@@ -3119,7 +3120,7 @@ export const Config = Object.freeze({
 		// (1 - depth*(0.5+0.5*sin(age*speed))), just faster/deeper so it reads
 		// as urgent rather than idle. See Barrier._isLowHealth/_lowHealthAlpha.
 		lowHealth: Object.freeze({
-			threshold: 38, // flat health value at/below which the warning kicks in — 25% of maxHealth (150), same ratio as the original 25/100
+			thresholdRatio: 0.25, // fraction of the CURRENT (per-level-scaled) maxHealth at/below which the warning kicks in — was a flat 38 (25% of the original fixed 150) before maxHealth started scaling per level; a ratio keeps that same 25% read at every level instead of going stale as the ceiling rises
 			color: "#ff3b3b", // warning red
 			pulseSpeed: 4.0, // rad/sec — noticeably faster than the ~2.0 UI buttons pulse at
 			pulseDepth: 0.5, // how far the alpha dips at the trough of each pulse

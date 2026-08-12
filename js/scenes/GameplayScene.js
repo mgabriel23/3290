@@ -138,6 +138,8 @@ import { Particles } from '../entities/Particles.js';
 import { Player } from '../entities/Player.js';
 import { PlaybackControls } from '../entities/PlaybackControls.js';
 import { PlayerSkill } from '../entities/PlayerSkill.js';
+import { PowerUps } from '../entities/PowerUps.js';
+import { GoldPickups } from '../entities/GoldPickups.js';
 import { Shop } from '../entities/Shop.js';
 import { Starfield } from '../entities/Starfield.js';
 import { WaveManager } from '../entities/WaveManager.js';
@@ -166,6 +168,13 @@ export class GameplayScene {
     this.player = new Player();
     this.bullets = new Bullets();
     this.hud = new HUD();
+    // Owned here, not by WaveManager, even though only WaveManager spawns
+    // into and drains them (see its constructor doc) — a fresh WaveManager
+    // is constructed every level, and a pickup still falling when a level
+    // ends must not be discarded along with the old one, so the SAME pool
+    // instances are handed to each new WaveManager across the transition.
+    this._powerUps = new PowerUps();
+    this._goldPickups = new GoldPickups();
     this._codex = new EnemyCodex();
     this._shop = new Shop(this.hud);
     this._playback = new PlaybackControls();
@@ -243,7 +252,7 @@ export class GameplayScene {
     // Transition from intro → active once the indicator animation is done
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
       this._levelState  = 'active';
-      this._waveManager = new WaveManager(this._level, this.barrier, this.hud, this._screenShake);
+      this._waveManager = new WaveManager(this._level, this.barrier, this.hud, this._screenShake, this._powerUps, this._goldPickups);
     }
 
     this.barrier.update(effectiveDt);
@@ -271,6 +280,7 @@ export class GameplayScene {
       if (this._waveManager.isDone) {
         this.barrier.heal(Config.barrier.healPerWaveClear);
         this._level++;
+        this.barrier.setLevel(this._level); // raises maxHealth's ceiling for the level just entered — see Barrier.setLevel
         this._levelState  = 'intro';
         this._levelAge    = 0;
         this._waveManager = null;

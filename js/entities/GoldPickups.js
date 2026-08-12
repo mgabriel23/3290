@@ -12,6 +12,8 @@
  * on cull (falls off the bottom of the screen or outlives `maxLife`) or on
  * pickup. A deliberately separate pool and drop roll from PowerUps — see
  * Config.gold's own class doc for why gold isn't just a fifth PowerUp type.
+ * Owned by GameplayScene rather than WaveManager, same cross-level-survival
+ * reasoning as PowerUps.js's own class doc.
  */
 import { Config } from '../core/Config.js';
 

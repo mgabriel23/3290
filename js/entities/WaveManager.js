@@ -32,7 +32,11 @@
  * `checkPlayerHit`). A separate, much higher flat chance also drops a gold
  * coin worth that enemy's reward (see Config.gold, GoldPickups.js,
  * `_maybeDropGold`, and `checkGoldPickup`) — gold is no longer credited
- * instantly on kill, it must be collected like any other pickup.
+ * instantly on kill, it must be collected like any other pickup. Both
+ * pools are constructor-injected (owned by GameplayScene, not `new`'d
+ * here) specifically so an uncollected pickup survives a level transition
+ * instead of vanishing with the WaveManager that spawned it — see the
+ * constructor's own doc.
  *
  * `triggerSkillBomb` is the player's special-skill button (see
  * PlayerSkill.js and Config.playerSkill) — instantly kills every enemy
@@ -83,8 +87,6 @@ import { SniperBullets } from './SniperBullets.js';
 import { SpiralBullets } from './SpiralBullets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
-import { PowerUps } from './PowerUps.js';
-import { GoldPickups } from './GoldPickups.js';
 import { AudioPool } from '../core/AudioPool.js';
 
 // Arbitrarily large multiplier on _playerDamage used by triggerSkillBomb to
@@ -166,8 +168,10 @@ export class WaveManager {
    * @param {import('./Barrier.js').Barrier} barrier  used by Bouncer clones (repeated bounces) and Diver/Weaver clones (one-shot dive-through impact) to detect/damage the barrier
    * @param {import('./HUD.js').HUD} hud  score is awarded directly onto it on kill; gold is collected via GoldPickups instead — see handleBulletHit/_rewardFor/checkGoldPickup
    * @param {import('../core/ScreenShake.js').ScreenShake} screenShake  triggered on barrier impacts — see the onBarrierHit closure below; kill-triggered shake/hit-stop instead lives in GameplayScene, driven by handleBulletHit's return value
+   * @param {import('./PowerUps.js').PowerUps} powerUps  owned by GameplayScene, not this class — a fresh WaveManager is constructed every level, but an uncollected pickup shouldn't vanish with the old one, so the SAME pool instance is handed to each new WaveManager across level transitions. See GoldPickups' own param for why.
+   * @param {import('./GoldPickups.js').GoldPickups} goldPickups  same cross-level-survival reasoning as `powerUps` above
    */
-  constructor(level, barrier, hud, screenShake) {
+  constructor(level, barrier, hud, screenShake, powerUps, goldPickups) {
     this._hud     = hud;
     this._barrier = barrier; // direct reference — needed by checkPowerUpPickup to heal it outside the onBarrierHit closure below
 
@@ -195,8 +199,8 @@ export class WaveManager {
     this._buildProjectilePools();
     this._buildParticlePools();
 
-    this._powerUps = new PowerUps();
-    this._goldPickups = new GoldPickups();
+    this._powerUps    = powerUps;    // not owned here — see constructor doc
+    this._goldPickups = goldPickups; // not owned here — see constructor doc
 
     // Same audio file across all enemy types; volume set per-play (see
     // _playExplosionSfx) since it varies by which type died.

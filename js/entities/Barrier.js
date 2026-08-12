@@ -19,6 +19,11 @@
  * omitting either just skips that readout, which is how TutorialScene's
  * inert preview Barrier shows neither.
  *
+ * `maxHealth` scales with the wave level (see `setLevel`,
+ * Config.barrier.maxHealthPerLevel) — GameplayScene calls `setLevel` every
+ * time its level counter advances. Only the ceiling moves on a level up;
+ * current `health` still only changes via `heal`/`takeDamage`.
+ *
  * Below `Config.barrier.lowHealth.threshold`, the whole barrier (arc +
  * health readout) switches from its normal cyan to a pulsing warning red —
  * see _isLowHealth/_lowHealthPulseAlpha, same breathing-alpha formula the
@@ -40,7 +45,8 @@ import { AudioPool } from '../core/AudioPool.js';
 
 export class Barrier {
   constructor() {
-    this.health = Config.barrier.maxHealth; // 0–maxHealth; written by gameplay systems, read by this render method
+    this._level = 1; // current wave level — drives `maxHealth`'s scaling, see setLevel/Config.barrier.maxHealthPerLevel. Must be set before the `this.maxHealth` read below.
+    this.health = this.maxHealth; // 0–maxHealth; written by gameplay systems, read by this render method
     this._pulseX = 0;
     this._pulseT = -1; // -1 = no ripple in progress
     this._age = 0; // seconds — drives the low-health warning pulse only
@@ -52,6 +58,30 @@ export class Barrier {
     this._warningTimer = 0;
     this._warningPlays = 0;
     this._wasLowHealth = false;
+  }
+
+  /**
+   * Effective max health at the current wave level — base
+   * Config.barrier.maxHealth (level 1) plus Config.barrier.maxHealthPerLevel
+   * for every level beyond that, same "base + (level-1)*perLevel" shape as
+   * Config.player.damage/damagePerLevel. Only the ceiling moves on a level
+   * up — current `health` doesn't jump to fill it; it still only changes
+   * via heal()/takeDamage() (e.g. Config.barrier.healPerWaveClear's guaranteed
+   * top-up, now with more room to matter at higher levels).
+   */
+  get maxHealth() {
+    return Config.barrier.maxHealth + (this._level - 1) * Config.barrier.maxHealthPerLevel;
+  }
+
+  /**
+   * Advance the barrier's own notion of the current wave level — called by
+   * GameplayScene whenever its level counter increments. Drives
+   * `maxHealth`'s scaling only; see that getter's doc for why current
+   * health is left untouched here.
+   * @param {number} level
+   */
+  setLevel(level) {
+    this._level = level;
   }
 
   /**
@@ -69,14 +99,14 @@ export class Barrier {
   }
 
   /**
-   * Restore `amount` health, clamped at Config.barrier.maxHealth. Used by a
+   * Restore `amount` health, clamped at the current `maxHealth`. Used by a
    * shield PowerUp pickup (see WaveManager.checkPowerUpPickup) and by
    * GameplayScene's small guaranteed top-up on every wave clear
    * (Config.barrier.healPerWaveClear).
    * @param {number} amount
    */
   heal(amount) {
-    this.health = Math.min(Config.barrier.maxHealth, this.health + amount);
+    this.health = Math.min(this.maxHealth, this.health + amount);
   }
 
   /** Trigger a spring-ripple deformation centered on horizontal position `x`. */
@@ -119,7 +149,7 @@ export class Barrier {
 
   /** True once health has dropped to (or below) the warning threshold — stays true all the way to 0, not just briefly on crossing it. */
   _isLowHealth() {
-    return this.health <= Config.barrier.lowHealth.threshold;
+    return this.health <= this.maxHealth * Config.barrier.lowHealth.thresholdRatio;
   }
 
   /** Same breathing-alpha shape as the UI's pulsing buttons (see EnemyCodex/PlaybackControls), just faster/deeper. */
