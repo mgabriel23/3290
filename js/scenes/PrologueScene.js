@@ -76,10 +76,12 @@ const _CREATURE_PATH_FACTORIES = {
 export class PrologueScene {
   /**
    * @param {import('../core/Renderer.js').Renderer} renderer
-   * @param {{ onContinue: () => void, devSkipToTitle?: boolean }} options
-   *   `onContinue` fires once PLAY is tapped. `devSkipToTitle` starts
-   *   straight on the title/PLAY card instead of the cinematic — a
-   *   manual testing convenience, not wired to anything by default.
+   * @param {{ onContinue: (mode: 'mission'|'survival') => void, devSkipToTitle?: boolean }} options
+   *   `onContinue` fires once a mode button is tapped, passed which one —
+   *   see `_renderModeButtons`/handleTap. `devSkipToTitle` starts straight
+   *   on the title/mode-button card instead of the cinematic — used both as
+   *   a manual testing convenience and by Game.js's "back" navigation from
+   *   MissionSelectScene (see its own doc).
    */
   constructor(renderer, { onContinue, devSkipToTitle = false }) {
     this.renderer = renderer;
@@ -87,6 +89,7 @@ export class PrologueScene {
 
     this._beat = devSkipToTitle ? 'title' : 'yearCard';
     this._beatAge = 0;
+    this._chosenMode = null; // 'mission' | 'survival' — set on a mode-button tap, read by _updateExitFade
 
     this._yearRevealedCount = 0; // fractional char count — drives letter-by-letter reveal
     this._yearHoldAge = 0;       // accumulates AFTER the text is fully typed (hold + fade-out)
@@ -148,15 +151,20 @@ export class PrologueScene {
   }
 
   /**
-   * PLAY is the only interactive element once the title beat arrives.
-   * Before that, SKIP is live on every beat — see `_canSkip`/`_isInsideSkipButton`.
+   * The two mode buttons are the only interactive elements once the title
+   * beat arrives. Before that, SKIP is live on every beat — see
+   * `_canSkip`/`_isInsideSkipButton`.
    */
   handleTap(x, y) {
     if (this._beat === 'title') {
-      if (this._isInsidePlayButton(x, y)) {
+      let mode = null;
+      if (this._isInsideMissionButton(x, y)) mode = 'mission';
+      else if (this._isInsideSurvivalButton(x, y)) mode = 'survival';
+      if (mode) {
         // Save the current beat age so the exit-fade can hold the title frozen
         // at the exact frame the tap landed, rather than restarting its animation.
         this._frozenTitleAge = this._beatAge;
+        this._chosenMode = mode;
         this._advanceBeat('exitFade');
       }
       return;
@@ -541,12 +549,14 @@ export class PrologueScene {
    * the entire chrome layer render as a single `strokePaths` call.
    *
    * Geometry produced:
-   *   _chromePaths   — 10 paths: two HRules (3 each) + 4 corner bracket ticks,
-   *                    all sharing the same color/lineWidth/glowBlur so they
-   *                    batch into one shadow-blur pass
-   *   _buttonPaths   — 4 L-bracket corner paths for the PLAY button
-   *   _buttonBounds  — hit-test rect (used by _isInsidePlayButton)
-   *   _buttonCX/CY   — button center for text placement
+   *   _chromePaths     — 10 paths: two HRules (3 each) + 4 corner bracket
+   *                      ticks, all sharing the same color/lineWidth/glowBlur
+   *                      so they batch into one shadow-blur pass
+   *   _missionButtonPaths / _survivalButtonPaths — 4 L-bracket corner paths each
+   *   _missionButtonBounds / _survivalButtonBounds — hit-test rects (used by
+   *                      _isInsideMissionButton/_isInsideSurvivalButton)
+   *   _buttonCX        — shared button center X (both are centered)
+   *   _missionButtonCY / _survivalButtonCY — each button's center Y
    */
   _initTitleGeometry() {
     const { width: vW, height: vH } = Config.virtual;
@@ -578,21 +588,33 @@ export class PrologueScene {
       cornerBracketPath(bx2, by2, -1, -1, leg),
     ];
 
-    const btn = Config.prologue.title.playButton;
-    const btnCY = ty + btn.offsetBelowTitle;
-    const btnL = cx - btn.width / 2, btnR = cx + btn.width / 2;
-    const btnT = btnCY - btn.height / 2, btnB = btnCY + btn.height / 2;
+    const btn = Config.prologue.title.modeButtons;
     const bl = btn.cornerSize;
-
-    this._buttonPaths = [
-      cornerBracketPath(btnL, btnT, 1, 1, bl),
-      cornerBracketPath(btnR, btnT, -1, 1, bl),
-      cornerBracketPath(btnL, btnB, 1, -1, bl),
-      cornerBracketPath(btnR, btnB, -1, -1, bl),
-    ];
     this._buttonCX = cx;
-    this._buttonCY = btnCY;
-    this._buttonBounds = { left: btnL, top: btnT, right: btnR, bottom: btnB };
+
+    this._missionButtonCY = ty + btn.firstOffsetBelowTitle;
+    this._survivalButtonCY = this._missionButtonCY + btn.height + btn.gap;
+
+    const btnL = cx - btn.width / 2, btnR = cx + btn.width / 2;
+    const halfH = btn.height / 2;
+
+    const missionT = this._missionButtonCY - halfH, missionB = this._missionButtonCY + halfH;
+    this._missionButtonPaths = [
+      cornerBracketPath(btnL, missionT, 1, 1, bl),
+      cornerBracketPath(btnR, missionT, -1, 1, bl),
+      cornerBracketPath(btnL, missionB, 1, -1, bl),
+      cornerBracketPath(btnR, missionB, -1, -1, bl),
+    ];
+    this._missionButtonBounds = { left: btnL, top: missionT, right: btnR, bottom: missionB };
+
+    const survivalT = this._survivalButtonCY - halfH, survivalB = this._survivalButtonCY + halfH;
+    this._survivalButtonPaths = [
+      cornerBracketPath(btnL, survivalT, 1, 1, bl),
+      cornerBracketPath(btnR, survivalT, -1, 1, bl),
+      cornerBracketPath(btnL, survivalB, 1, -1, bl),
+      cornerBracketPath(btnR, survivalB, -1, -1, bl),
+    ];
+    this._survivalButtonBounds = { left: btnL, top: survivalT, right: btnR, bottom: survivalB };
   }
 
   _renderTitle() {
@@ -600,7 +622,7 @@ export class PrologueScene {
     this.renderer.clear(Config.colors.void);
     this._renderTitleChrome(alpha);
     this._renderTitleText(alpha);
-    this._renderPlayButton(alpha);
+    this._renderModeButtons(alpha);
   }
 
   _titleY() {
@@ -644,30 +666,41 @@ export class PrologueScene {
     this.renderer.drawText('LAST DEFENSE PROTOCOL', vW / 2, ty - 89, {
       font: taglineFont, color: taglineColor, alpha: alpha * 0.35,
     });
-    this.renderer.drawText('SYSTEM: ONLINE  ·  SECTOR SOL', vW / 2, ty + 200, {
+    // Pushed down from ty+200 (which fit under the old single PLAY button)
+    // to ty+260 — clears the two-button stack's lower (SURVIVAL MODE)
+    // button, whose bottom edge now sits at ty+~241 (see _initTitleGeometry).
+    this.renderer.drawText('SYSTEM: ONLINE  ·  SECTOR SOL', vW / 2, ty + 260, {
       font: taglineFont, color: taglineColor, alpha: alpha * 0.28,
     });
   }
 
-  _isInsidePlayButton(x, y) {
-    const { left, top, right, bottom } = this._buttonBounds;
+  _isInsideMissionButton(x, y) {
+    const { left, top, right, bottom } = this._missionButtonBounds;
     return x >= left && x <= right && y >= top && y <= bottom;
   }
 
-  _renderPlayButton(alpha) {
-    const { label, font, color, lineWidth, glowBlur, pulseSpeed, pulseDepth } =
-      Config.prologue.title.playButton;
+  _isInsideSurvivalButton(x, y) {
+    const { left, top, right, bottom } = this._survivalButtonBounds;
+    return x >= left && x <= right && y >= top && y <= bottom;
+  }
+
+  _renderModeButtons(alpha) {
+    const { font, color, lineWidth, glowBlur, pulseSpeed, pulseDepth, missionLabel, survivalLabel } =
+      Config.prologue.title.modeButtons;
     const pulse = 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._beatAge * pulseSpeed));
     const btnAlpha = alpha * pulse;
 
-    this.renderer.strokePaths(this._buttonPaths, { color, lineWidth, glowBlur, alpha: btnAlpha });
-    this.renderer.drawText(label, this._buttonCX, this._buttonCY, { font, color, alpha: btnAlpha });
+    this.renderer.strokePaths(this._missionButtonPaths, { color, lineWidth, glowBlur, alpha: btnAlpha });
+    this.renderer.drawText(missionLabel, this._buttonCX, this._missionButtonCY, { font, color, alpha: btnAlpha });
+
+    this.renderer.strokePaths(this._survivalButtonPaths, { color, lineWidth, glowBlur, alpha: btnAlpha });
+    this.renderer.drawText(survivalLabel, this._buttonCX, this._survivalButtonCY, { font, color, alpha: btnAlpha });
   }
 
-  // --- Beat 6: exit fade (play button tapped → black → onContinue) -----------------
+  // --- Beat 6: exit fade (a mode button tapped → black → onContinue) -----------------
 
   _updateExitFade() {
-    if (this._beatAge >= Config.prologue.title.exitFadeDuration) this.onContinue();
+    if (this._beatAge >= Config.prologue.title.exitFadeDuration) this.onContinue(this._chosenMode);
   }
 
   /**

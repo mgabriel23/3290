@@ -102,10 +102,14 @@ export class HUD {
    *   PowerUp (0 or omitted = inactive, badge is skipped entirely) — see class doc
    * @param {number} [invincibleTimer]  seconds remaining on an active invincible
    *   PowerUp (0 or omitted = inactive, badge is skipped entirely) — see class doc
+   * @param {number} [comboMultiplier]  current score-combo multiplier (see
+   *   Config.combo, GameplayScene._comboMultiplier) — 1 or omitted = no
+   *   streak yet, the readout is skipped entirely, same "only show while it
+   *   matters" convention as the fireBoost/invincible badges
    */
-  render(renderer, health, fireBoostTimer = 0, invincibleTimer = 0) {
+  render(renderer, health, fireBoostTimer = 0, invincibleTimer = 0, comboMultiplier = 1) {
     const {
-      margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur, bestFont,
+      margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur, bestFont, combo,
       chromeColor, chromeLineWidth, chromeGlowBlur,
     } = Config.hud;
 
@@ -124,6 +128,11 @@ export class HUD {
     renderer.drawText(`BEST ${this.bestScore}`, this._scoreTX, margin + 62, {
       font: bestFont, color: labelColor, align: 'left', alpha: 0.6,
     });
+    if (comboMultiplier > 1) {
+      renderer.drawText(`COMBO ×${comboMultiplier}`, this._scoreTX, margin + combo.offsetY, {
+        font: combo.font, color: combo.color, align: 'left',
+      });
+    }
 
     // Gold panel (right)
     renderer.drawText('GOLD', this._goldTX, margin + 22, {

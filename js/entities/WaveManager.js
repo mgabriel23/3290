@@ -708,9 +708,14 @@ export class WaveManager {
    * @param {number} [damageMultiplier]  applied on top of `_playerDamage` —
    *   GameplayScene passes >1 while a fireBoost PowerUp is active (see
    *   Config.powerUps.fireBoost), 1 otherwise.
+   * @param {number} [scoreMultiplier]  applied to this kill's POINTS only
+   *   (never gold) — GameplayScene passes its current combo streak
+   *   multiplier here (see Config.combo, GameplayScene._checkCollisions), 1
+   *   otherwise (e.g. triggerSkillBomb's kills, which deliberately don't
+   *   feed or benefit from the combo — see that method's own doc).
    * @returns {boolean} true if this hit was fatal — GameplayScene uses this to trigger kill-feedback (screen shake, hit-stop)
    */
-  handleBulletHit(enemy, damageMultiplier = 1) {
+  handleBulletHit(enemy, damageMultiplier = 1, scoreMultiplier = 1) {
     const killed = enemy.hit(this._playerDamage * damageMultiplier);
 
     // Bouncer Primal (and any future boss with its own summon-on-hit
@@ -733,7 +738,7 @@ export class WaveManager {
 
     if (killed) {
       const reward = this._rewardFor(enemy);
-      this._hud.score += reward.points;
+      this._hud.score += Math.round(reward.points * scoreMultiplier);
 
       if (enemy.type === 'rocketeer') {
         this._rocketeerParticles.emit(enemy.x, enemy.y);

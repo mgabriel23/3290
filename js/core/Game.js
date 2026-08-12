@@ -17,7 +17,9 @@ import { DragInput } from './DragInput.js';
 import { IntroScene } from '../scenes/IntroScene.js';
 import { PrologueScene } from '../scenes/PrologueScene.js';
 import { TutorialScene } from '../scenes/TutorialScene.js';
+import { MissionSelectScene } from '../scenes/MissionSelectScene.js';
 import { GameplayScene } from '../scenes/GameplayScene.js';
+import { completeMission } from './MissionProgress.js';
 
 export class Game {
   /**
@@ -103,10 +105,18 @@ export class Game {
    * with a minimal always-inert one that draws the actual error on-screen
    * instead, so a transition failure reads as "something broke" rather
    * than "the game froze."
+   * @param {boolean} [devSkipToTitle]  forwarded to PrologueScene — starts
+   *   straight on the title/mode-button card instead of replaying the whole
+   *   cinematic. Passed `true` by `_startMissionSelect`'s "back" navigation
+   *   (see MissionSelectScene) so returning to the title screen doesn't
+   *   force the player back through the opening cinematic every time.
    */
-  _startPrologue() {
+  _startPrologue(devSkipToTitle = false) {
     try {
-      this.scene = new PrologueScene(this.renderer, { onContinue: () => this._startTutorial() });
+      this.scene = new PrologueScene(this.renderer, {
+        onContinue: (mode) => this._startTutorial(mode),
+        devSkipToTitle,
+      });
     } catch (err) {
       console.error('Failed to start the prologue:', err);
       this._showFatalError(err);
@@ -143,23 +153,62 @@ export class Game {
   }
 
   /**
-   * Swap the cinematic out for the tutorial once the player taps PLAY on
-   * the title card. The prologue's own music has been playing continuously
-   * since the intro swipe, straight through the cinematic AND the
-   * title/PLAY card ("the main menu") — this is where it finally stops,
-   * right as PLAY's tap actually lands (`onContinue` fires once the title
-   * card's exit-fade finishes — see PrologueScene._updateExitFade), so it
-   * doesn't keep playing underneath the entire tutorial too. Ramps out
-   * smoothly (see `_prologueFader`/`_tick`) rather than an abrupt `.pause()`
-   * — the fader's own `onComplete` is what actually pauses the element,
-   * once it's already faded down to silence.
+   * Swap the cinematic out for the tutorial once the player taps a mode
+   * button on the title card. The prologue's own music has been playing
+   * continuously since the intro swipe, straight through the cinematic AND
+   * the title/mode-button card ("the main menu") — this is where it
+   * finally stops, right as the tap actually lands (`onContinue` fires
+   * once the title card's exit-fade finishes — see
+   * PrologueScene._updateExitFade), so it doesn't keep playing underneath
+   * the entire tutorial too. Ramps out smoothly (see
+   * `_prologueFader`/`_tick`) rather than an abrupt `.pause()` — the
+   * fader's own `onComplete` is what actually pauses the element, once
+   * it's already faded down to silence.
+   * @param {'mission'|'survival'} mode  which button was tapped — carried
+   *   through (via closure, not stored on `this`) to `_afterTutorial` once
+   *   the tutorial itself finishes.
    */
-  _startTutorial() {
+  _startTutorial(mode) {
     this._prologueFader?.rampTo(0, Config.audio.prologueFadeOutDuration, () => this._prologueAudio?.pause());
     try {
-      this.scene = new TutorialScene(this.renderer, { onContinue: () => this._startGameplay() });
+      this.scene = new TutorialScene(this.renderer, { onContinue: () => this._afterTutorial(mode) });
     } catch (err) {
       console.error('Failed to start the tutorial:', err);
+      this._showFatalError(err);
+    }
+  }
+
+  /**
+   * Routes to the right next screen once the tutorial's last hint is
+   * dismissed, based on which mode button was tapped back on the title
+   * card. Survival Mode goes straight into gameplay, same as the single
+   * PLAY button always did. Mission Mode goes to the mission-select screen
+   * first, since (unlike Survival Mode) there's a choice of which level to
+   * play — gameplay itself only starts once a specific mission is picked
+   * there (see `_startMissionSelect`).
+   * @param {'mission'|'survival'} mode
+   */
+  _afterTutorial(mode) {
+    if (mode === 'mission') this._startMissionSelect();
+    else this._startGameplay({ mode: 'survival' });
+  }
+
+  /**
+   * Mission Mode's level-select screen (see MissionSelectScene.js). No
+   * gameplay bg-music here — same silence Tutorial/Prologue's title card
+   * already sit in; `_startGameplay` is what actually starts the theme
+   * track, same as it always has. "Back" returns to the title card without
+   * replaying the cinematic (`devSkipToTitle: true` — see
+   * `_startPrologue`'s own doc).
+   */
+  _startMissionSelect() {
+    try {
+      this.scene = new MissionSelectScene(this.renderer, {
+        onSelectMission: (level) => this._startGameplay({ mode: 'mission', level }),
+        onBack: () => this._startPrologue(true),
+      });
+    } catch (err) {
+      console.error('Failed to start mission select:', err);
       this._showFatalError(err);
     }
   }
@@ -169,7 +218,9 @@ export class Game {
    * dismissed. Also reused verbatim as the "restart" path: GameplayScene's
    * `onGameOver` callback below is this same method, so a post-death tap
    * just calls this again — a fresh `GameplayScene` is by construction a
-   * clean run (full health, level 1, zero score).
+   * clean run (full health, zero score, and the same starting level the
+   * previous attempt had — level 1 for Survival Mode, whichever mission
+   * was chosen for Mission Mode, since `mode`/`level` are closed over).
    *
    * `_themeAudio`/`_themeFader` construction is guarded (only ever built
    * once), but `.play()` and the fade-in ramp both run every time this
@@ -185,8 +236,17 @@ export class Game {
    * factors — `_tick`'s `_updateAudioFades` is what actually multiplies
    * them together onto `.volume` each frame, rather than either one here
    * fighting to be the last writer of `.volume`.
+   *
+   * @param {{ mode?: 'mission'|'survival', level?: number }} [options]
+   *   `mode`/`level` default to Survival Mode's original always-level-1
+   *   behavior, so every existing call site (and `onGameOver` below, which
+   *   calls this method again) keeps working unchanged. Mission Mode passes
+   *   its target level explicitly (from MissionSelectScene's tap, or from
+   *   `onGameOver`'s own closure over the SAME values on a post-death
+   *   restart, so a mission retry replays that same mission rather than
+   *   dropping back to Survival Mode's level 1).
    */
-  _startGameplay() {
+  _startGameplay({ mode = 'survival', level = 1 } = {}) {
     try {
       if (!this._themeAudio) {
         const { themeSrc, themeLoop } = Config.audio;
@@ -205,7 +265,17 @@ export class Game {
       this._themeAudio.play().catch(() => {});
       this._themeFader.rampTo(1, Config.audio.themeFadeInDuration);
       this.scene = new GameplayScene(this.renderer, {
-        onGameOver: () => this._startGameplay(),
+        mode,
+        level,
+        onGameOver: () => this._startGameplay({ mode, level }),
+        // Mission Mode only — fires once that single level's wave clears
+        // (see GameplayScene._triggerMissionComplete). Persists the
+        // completion (unlocking the next mission — see MissionProgress.js)
+        // and returns to the select screen. Survival Mode never calls this.
+        onMissionComplete: mode === 'mission' ? () => {
+          completeMission(level);
+          this._startMissionSelect();
+        } : undefined,
         // GameplayScene ducks this multiplier during each level's indicator
         // (see its own _updateMusicDuck) but doesn't own _themeAudio itself
         // — it persists across restarts, so Game.js has to be the one that
@@ -218,6 +288,17 @@ export class Game {
         // _startGameplay() call, whether that's a fresh launch or a restart.
         onMusicStop: () => {
           this._themeFader?.rampTo(0, Config.audio.themeFadeOutDuration, () => this._themeAudio?.pause());
+        },
+        // Resumes the SAME theme track in place after a paid revive (see
+        // GameplayScene._tryRevive) — unlike onGameOver above, this must NOT
+        // construct a new GameplayScene (that would lose the current run's
+        // level/score/combo state); it only undoes onMusicStop's fade-out.
+        // Called from inside the revive tap's handler, so audio.play() is
+        // still within the user-gesture chain the same way _startGameplay's
+        // own call is (see that method's own doc).
+        onMusicResume: () => {
+          this._themeAudio?.play().catch(() => {});
+          this._themeFader?.rampTo(1, Config.audio.themeFadeInDuration);
         },
       });
     } catch (err) {

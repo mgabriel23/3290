@@ -178,6 +178,59 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * Mission Mode — a discrete, one-level-at-a-time alternative to the
+	 * default endless Survival Mode (see PrologueScene's two title buttons,
+	 * MissionSelectScene.js, MissionProgress.js). Mission N plays exactly
+	 * Config.waves.levels[N-1] (the same wave content Survival Mode's level
+	 * N would) via GameplayScene constructed with `{ mode: 'mission', level:
+	 * N }`, and ends the instant that single level's wave clears — no
+	 * auto-advance to N+1 like Survival Mode does. `count` starts small
+	 * on purpose ("we can broaden it later" — only the first 3 of
+	 * Config.waves.levels' 30 entries are reachable this way for now);
+	 * bump it whenever more missions are ready.
+	 */
+	mission: Object.freeze({
+		count: 3,
+	}),
+
+	/**
+	 * MissionSelectScene — the level-select screen reached after choosing
+	 * MISSION MODE on the title card and finishing the tutorial. One tile
+	 * per mission (Config.mission.count), stacked vertically, corner-bracket
+	 * framed like Shop's item cards — locked (dim), unlocked-not-completed
+	 * (normal), or completed (green) — see MissionProgress.js for the
+	 * unlock/completion rules and MissionSelectScene.js for the tile content.
+	 */
+	missionSelect: Object.freeze({
+		fadeInDuration: 0.3,
+
+		titleFont: '400 20px "Audiowide", "Courier New", monospace',
+		titleColor: "#4DEFFF",
+		titleY: 110,
+
+		backLabel: "◀ BACK",
+		backFont: '400 14px "Audiowide", "Courier New", monospace',
+		backColor: "#aab4d4",
+		backX: 20,
+		backY: 34,
+		backHitWidth: 90, // generous tap target, same "wider than the text itself" philosophy as Config.prologue.skip
+		backHitHeight: 40,
+
+		tileStartY: 260,
+		tileSpacing: 150,
+		tileWidth: 320,
+		tileHeight: 110,
+		tileLegSize: 14,
+
+		nameFont: '400 20px "Audiowide", "Courier New", monospace',
+		statusFont: '400 13px "Audiowide", "Courier New", monospace',
+
+		unlockedColor: "#4DEFFF", // ready to play — same cyan as everything else interactive
+		completedColor: "#4DFF8A", // same soft green as Config.powerUps.health / Shop's OWNED color
+		lockedColor: "#4a5570", // dim — same "disabled" read as Shop's unaffordable color
+	}),
+
+	/**
 	 * Game over — a full-screen overlay GameplayScene shows once the
 	 * player's health reaches 0 (see GameplayScene's `_isGameOver`).
 	 * The ship explodes first (particle burst + explosion SFX, same
@@ -207,7 +260,32 @@ export const Config = Object.freeze({
 		promptText: "TAP TO RESTART",
 		promptFont: '400 18px "Audiowide", "Courier New", monospace',
 		promptColor: "#aab4d4",
-		promptOffsetY: 60, // vp below the title
+		promptOffsetY: 150, // vp below the title — pushed down from 60 to clear the REVIVE button (see `continue` below) sitting between it and the title
+
+		/**
+		 * Gold-cost revive — tap this button (instead of anywhere else, which
+		 * still restarts as before) to resume the CURRENT run in place rather
+		 * than starting over from level 1: full health/barrier restore plus a
+		 * brief immunity window (see GameplayScene._tryRevive), same shape as
+		 * an 'invincible' PowerUp. Cost rises with each use THIS run
+		 * (`baseCost + continuesUsed*costStep`) and resets to `baseCost` only
+		 * on an actual restart (a fresh GameplayScene) — classic arcade
+		 * "continue?" pacing. Always drawn, dimmed when unaffordable rather
+		 * than hidden, so the option (and its cost) is never a surprise.
+		 */
+		continue: Object.freeze({
+			baseCost: 100,
+			costStep: 50,
+			invincibleDuration: 3, // seconds of immunity granted immediately on revive — see Player.activateInvincibility
+			offsetY: 75, // vp below the title, above the restart prompt
+			width: 220,
+			height: 46,
+			legSize: 12,
+			label: "REVIVE",
+			font: '400 16px "Audiowide", "Courier New", monospace',
+			affordableColor: "#4DFF8A", // soft green — same "yes, go" read as Config.powerUps.health / Shop's OWNED color
+			unaffordableColor: "#4a5570", // dim — reads as disabled, same as Shop's own unaffordable color
+		}),
 
 		// Death explosion — reuses the same shared explosion.mp3 every enemy
 		// death already plays, just louder/bigger: this is the single most
@@ -225,6 +303,30 @@ export const Config = Object.freeze({
 		// onMusicStop wiring — and resumes on restart.
 		audioSrc: "assets/audio/gameover.mp3",
 		audioVolume: 0.7,
+	}),
+
+	/**
+	 * Mission Mode's victory overlay — GameplayScene shows this instead of
+	 * advancing to a next level once a mission's single wave clears (see
+	 * Config.mission, GameplayScene._triggerMissionComplete). Deliberately
+	 * mirrors Config.gameOver's shape (dim overlay, clean fade-in title,
+	 * tap prompt) since it's the same "freeze gameplay, show a full-screen
+	 * result, tap to continue" pattern — just a win instead of a loss, so
+	 * the color reads as success (soft green, matching Config.powerUps.health/
+	 * Shop's OWNED color) rather than the alarm red of GAME OVER. No
+	 * explosion delay — nothing to wait out, the fade-in starts immediately.
+	 */
+	missionComplete: Object.freeze({
+		fadeInDuration: 0.6,
+		dimAlpha: 0.75,
+		titleText: "MISSION COMPLETE",
+		titleFont: '400 44px "Audiowide", "Courier New", monospace',
+		titleColor: "#4DFF8A",
+		titleGlowBlur: 16,
+		promptText: "TAP TO CONTINUE",
+		promptFont: '400 18px "Audiowide", "Courier New", monospace',
+		promptColor: "#aab4d4",
+		promptOffsetY: 60,
 	}),
 
 	/**
@@ -557,20 +659,31 @@ export const Config = Object.freeze({
 			chromeLineWidth: 1,
 			chromeGlowBlur: 6,
 			fadeInDuration: 1.0,
-			exitFadeDuration: 0.55, // seconds — black veil that falls over the title when PLAY is tapped
+			exitFadeDuration: 0.55, // seconds — black veil that falls over the title when a mode button is tapped
 
-			playButton: Object.freeze({
-				label: "PLAY",
-				font: '400 20px "Audiowide", "Courier New", monospace',
+			/**
+			 * Two stacked buttons replace the old single PLAY button — the
+			 * player's very first choice is which mode to enter (see
+			 * PrologueScene.handleTap/_renderModeButtons), threaded through
+			 * Game.js as a `mode` string ('mission' | 'survival') all the way to
+			 * `GameplayScene`. Same corner-bracket framing/pulse the old PLAY
+			 * button used, just two of them and a bit narrower/smaller-font to
+			 * fit each mode's longer label.
+			 */
+			modeButtons: Object.freeze({
+				font: '400 17px "Audiowide", "Courier New", monospace',
 				color: "#4DEFFF",
 				lineWidth: 1.5,
 				glowBlur: 14,
-				width: 168,
-				height: 52,
-				offsetBelowTitle: 148, // more vertical room for the subtitle + decorative rules below it
+				width: 220,
+				height: 50,
+				firstOffsetBelowTitle: 148, // MISSION MODE — same offset the old single PLAY button used
+				gap: 18, // vp between the two buttons
 				cornerSize: 14, // leg length (virtual px) of each L-bracket corner tick
-				pulseSpeed: 2.2, // radians/second — drives the breathing alpha on the button
+				pulseSpeed: 2.2, // radians/second — drives the breathing alpha on the buttons
 				pulseDepth: 0.28, // how far the alpha dips at the trough of each breath
+				missionLabel: "MISSION MODE",
+				survivalLabel: "SURVIVAL MODE",
 			}),
 		}),
 	}),
@@ -1347,6 +1460,21 @@ export const Config = Object.freeze({
 		// GoldPickups.render) is a coin, not a lightning bolt.
 		color: "#FFD700",
 		fillColor: "#332504",
+	}),
+
+	/**
+	 * Score combo — a streak multiplier on kill POINTS only (never gold) that
+	 * climbs while the player goes without taking damage, and resets to ×1
+	 * the instant a hit actually lands (see GameplayScene._checkPlayerHit).
+	 * Tiered rather than per-kill-continuous so it's simple to read at a
+	 * glance (HUD just shows "COMBO ×N") — see Config.hud.combo for the
+	 * display side. Skill-bomb kills (triggerSkillBomb) deliberately don't
+	 * feed this — see GameplayScene._checkCollisions' own doc for why.
+	 */
+	combo: Object.freeze({
+		step: 5, // kills-without-damage per multiplier tier
+		incrementPerStep: 0.5, // multiplier added per tier
+		maxMultiplier: 4, // hard cap — reached at 30 kills into an unbroken streak
 	}),
 
 	/**
@@ -3171,6 +3299,16 @@ export const Config = Object.freeze({
 		chromeLineWidth: 1,
 		chromeGlowBlur: 4, // reduced from 5
 		bracketSize: 12, // leg length (virtual px) of the L-bracket corner accent
+
+		// COMBO readout — sits under the SCORE/BEST lines, only drawn once the
+		// multiplier is actually above ×1 (see HUD.render), same "only show
+		// while it matters" convention as the fireBoost/invincible badges
+		// below. See Config.combo for the gameplay-side tuning this displays.
+		combo: Object.freeze({
+			font: '400 12px "Audiowide", "Courier New", monospace',
+			color: "#FF7A45", // warm "hot streak" orange — distinct from every other HUD/pickup color in the game
+			offsetY: 80, // vp below the panel's margin anchor — 18vp under the BEST line (margin+62)
+		}),
 
 		/**
 		 * Player health bar — centered under the mute/codex/pause button row
