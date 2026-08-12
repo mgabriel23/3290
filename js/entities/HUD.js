@@ -189,18 +189,22 @@ export class HUD {
    * Right-middle badge shown only while a fireBoost PowerUp is running —
    * the same circle-backdrop + lightning-bolt icon language PowerUps.js
    * itself draws for the pickup, so this reads as "that thing is still
-   * active," plus a "BOOST" label and a whole-seconds countdown.
+   * active," plus a "BOOST +25%" label (the actual bullet-damage/fire-rate
+   * multiplier, not just "something is boosted" — see
+   * Config.powerUps.fireBoost.multiplier, applied to both stats equally)
+   * and a whole-seconds countdown.
    */
   _renderFireBoostIndicator(renderer, timer) {
     const cfg  = Config.hud.fireBoost;
     const pCfg = Config.powerUps.fireBoost;
     const { x, y, radius, lineWidth, glowBlur, labelFont, valueFont } = cfg;
+    const percent = Math.round((pCfg.multiplier - 1) * 100);
 
     renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor: pCfg.fillColor });
     renderer.strokeCircle(x, y, radius, { color: pCfg.color, lineWidth, glowBlur });
     renderer.strokePaths(this._boltPath, { x, y, color: pCfg.color, lineWidth, lineCap: 'round' });
 
-    renderer.drawText('BOOST', x, y - radius - 12, {
+    renderer.drawText(`BOOST +${percent}%`, x, y - radius - 12, {
       font: labelFont, color: pCfg.color, alpha: 0.7,
     });
     renderer.drawText(`${Math.ceil(timer)}s`, x, y + radius + 16, {

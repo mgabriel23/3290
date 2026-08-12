@@ -125,12 +125,18 @@ export class PowerUps {
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
     if (this._count === 0) return;
-    const { radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, health, shield, fireBoost, invincible } = Config.powerUps;
+    const { radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, maxLife, expireFadeDuration, health, shield, fireBoost, invincible } = Config.powerUps;
     for (let i = 0; i < this._count; i++) {
       const type  = this._type[i];
       const cfg   = type === 'shield' ? shield : type === 'fireBoost' ? fireBoost : type === 'invincible' ? invincible : health;
       const x = this._x[i], y = this._y[i];
-      const alpha = 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._age[i] * pulseSpeed));
+      const pulseAlpha = 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._age[i] * pulseSpeed));
+      // Fades to fully transparent over the last `expireFadeDuration` seconds
+      // before despawn — a visible "about to vanish" cue instead of an
+      // abrupt pop once `update` culls it at maxLife.
+      const timeLeft = maxLife - this._age[i];
+      const expireAlpha = timeLeft < expireFadeDuration ? Math.max(0, timeLeft / expireFadeDuration) : 1;
+      const alpha = pulseAlpha * expireAlpha;
 
       renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor: cfg.fillColor, alpha });
       renderer.strokeCircle(x, y, radius, { color: cfg.color, lineWidth, glowBlur, alpha });

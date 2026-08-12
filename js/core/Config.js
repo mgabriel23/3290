@@ -1249,6 +1249,7 @@ export const Config = Object.freeze({
 		invincibleDropWeight: 0.15,
 		fallSpeed: 90, // vp/sec, straight down — same for every kind
 		maxLife: 6, // seconds an uncollected pickup survives before despawning
+		expireFadeDuration: 1.5, // seconds before despawn during which the pickup fades to transparent — a visible "about to vanish" cue instead of an abrupt pop, see PowerUps.render
 		hitRadius: 16, // vp — collision radius against the player, added to Player.hitRadius
 		poolSize: 8,
 
@@ -1330,6 +1331,7 @@ export const Config = Object.freeze({
 		dropChance: 0.8, // fraction of real kills that drop a coin — much higher than Config.powerUps.dropChance (0.1) on purpose, see class doc above
 		fallSpeed: 90, // vp/sec, straight down — same as Config.powerUps
 		maxLife: 6, // seconds an uncollected coin survives before despawning
+		expireFadeDuration: 1.5, // seconds before despawn during which the coin fades to transparent — a visible "about to vanish" cue instead of an abrupt pop, see GoldPickups.render
 		hitRadius: 16, // vp — collision radius against the player, added to Player.hitRadius
 		poolSize: 24, // higher than powerUps' 8 — dropChance is 8x higher, and triggerSkillBomb can kill many enemies (many coins) in one frame
 
@@ -1345,6 +1347,22 @@ export const Config = Object.freeze({
 		// GoldPickups.render) is a coin, not a lightning bolt.
 		color: "#FFD700",
 		fillColor: "#332504",
+	}),
+
+	/**
+	 * Small "+N"-style text popups (see entities/FloatingText.js) — currently
+	 * only used for the gold amount gained on a coin pickup (see
+	 * GameplayScene's checkGoldPickup handling), giving that otherwise-silent
+	 * stat change (the HUD number just changing) a moment of on-screen
+	 * feedback right where it happened.
+	 */
+	floatingText: Object.freeze({
+		poolSize: 12,
+		riseDistance: 30, // vp — total upward drift over the effect's lifetime
+		maxLife: 0.9, // seconds
+		fadeStart: 0.5, // fraction of maxLife after which alpha starts easing to 0 — full opacity before that
+		font: '400 14px "Audiowide", "Courier New", monospace',
+		glowBlur: 4,
 	}),
 
 	/**

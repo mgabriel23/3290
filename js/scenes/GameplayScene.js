@@ -133,6 +133,7 @@ import { ScreenShake } from '../core/ScreenShake.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
 import { EnemyCodex } from '../entities/EnemyCodex.js';
+import { FloatingText } from '../entities/FloatingText.js';
 import { HUD } from '../entities/HUD.js';
 import { Particles } from '../entities/Particles.js';
 import { Player } from '../entities/Player.js';
@@ -175,6 +176,7 @@ export class GameplayScene {
     // instances are handed to each new WaveManager across the transition.
     this._powerUps = new PowerUps();
     this._goldPickups = new GoldPickups();
+    this._floatingText = new FloatingText(); // "+N GOLD" popups on pickup — see checkGoldPickup handling in update()
     this._codex = new EnemyCodex();
     this._shop = new Shop(this.hud);
     this._playback = new PlaybackControls();
@@ -258,6 +260,7 @@ export class GameplayScene {
     this.barrier.update(effectiveDt);
     this.player.update(effectiveDt);
     this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
+    this._floatingText.update(effectiveDt);
     this._playerSkill.update(effectiveDt);
     this._updateMusicDuck(effectiveDt);
 
@@ -273,7 +276,10 @@ export class GameplayScene {
       if (pickup.fireBoost) this._fireBoostTimer = Config.powerUps.fireBoost.duration;
       if (pickup.invincible) this.player.activateInvincibility(Config.powerUps.invincible.duration);
       const goldCollected = this._waveManager.checkGoldPickup(this.player);
-      if (goldCollected > 0) this.hud.gold += goldCollected;
+      if (goldCollected > 0) {
+        this.hud.gold += goldCollected;
+        this._floatingText.spawn(this.player.x, this.player.y - 30, `+${goldCollected} GOLD`, Config.gold.color);
+      }
       if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
       // Wave cleared AND all death effects finished → begin the next level intro
@@ -324,6 +330,7 @@ export class GameplayScene {
     this._playerParticles.render(this.renderer); // no-op when inactive — cheap to always call, same as WaveManager's own pools
     this.bullets.render(this.renderer);
     this._waveManager?.render(this.renderer);
+    this._floatingText.render(this.renderer); // no-op when inactive — cheap to always call, same as _playerParticles above
 
     this.renderer.setCameraOffset(0, 0);
     this.hud.render(this.renderer, this.player.health, this._fireBoostTimer, this.player.invincibleTimer);
