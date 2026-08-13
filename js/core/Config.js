@@ -2698,6 +2698,7 @@ export const Config = Object.freeze({
 		// appended at the end regardless, so it's in rotation either way.
 		everyNLevels: 1,
 		roster: Object.freeze([
+			"zigzag",
 			"pulsor",
 			"nova",
 			"tetra",
@@ -2705,7 +2706,7 @@ export const Config = Object.freeze({
 			"spiral",
 			"bouncerPrimal",
 			"snake",
-		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
+		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/8th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[7] "zigzag", 63→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		// Fraction of a boss's OWN max health the player's skill bomb deals
@@ -3517,6 +3518,100 @@ export const Config = Object.freeze({
 			sparksPerEmit: 44,
 			points: 3100,
 			gold: 155,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.8,
+				poolSize: 3,
+			}),
+		}),
+
+		/**
+		 * Boss #8 — "Zigzag". The first TRIANGULAR hull (see ZigzagBoss.js's
+		 * ZIGZAG_HULL_PTS — a plain equilateral triangle, not a reskin, same
+		 * "original hull" lineage as Spiral/Tetra/Nova/Pulsor), parked at a
+		 * single FIXED spot — the middle of the arena just under both health
+		 * bars (`restY`) — for the entire fight; it never patrols or
+		 * otherwise leaves that spot.
+		 *
+		 * A simple 2-state loop, driven by a shot COUNT rather than a shared
+		 * elapsed-time clock the way Tetra/Nova/Pulsor's own phase1/phase2
+		 * loops are:
+		 *
+		 *   'firing' — hull spins continuously (`rotationSpeed`) and fires one
+		 *   bullet (ZigzagBullets.js) from EACH of its 3 sides simultaneously
+		 *   every `bullet.fireInterval` seconds (the same "N shots evenly
+		 *   spaced around rotation" fire-from-facing idiom Tetra's 4 sides/
+		 *   Nova's 5 sides use, just 3 here, matching the triangular hull) —
+		 *   until it has fired `bulletLimit` (60 — 20 ticks × 3 sides) shots
+		 *   total, then moves to 'cooldown'.
+		 *
+		 *   'cooldown' — stops firing (still spinning) for `cooldownDuration`
+		 *   seconds — a breathing-room beat — then goes back to 'firing' with
+		 *   a clean bullet count, looping for the rest of the fight.
+		 *
+		 * Zigzag's bullets have their OWN twist on top of ZigzagBullets.js's
+		 * shared TetraBullets-shaped pool: each one reflects off the
+		 * LEFT/RIGHT screen edges (not top/bottom) up to `bullet.maxBounces`
+		 * (2) times before it's allowed to fly off-screen and cull normally
+		 * — see ZigzagBullets.js's own doc.
+		 */
+		zigzag: Object.freeze({
+			name: "ZIGZAG",
+			// vp — circumradius (center-to-vertex). ZigzagBoss.js derives the
+			// apothem (center-to-edge-midpoint, used as the fire-origin radius
+			// for the 3-sided volley) from this as size*cos(60°).
+			size: 60,
+			health: 540,
+			healthPerLevel: 70,
+			color: "#FF8A00", // hazard orange — distinct from every other boss color used so far (red/violet/amber/green/blue/gold/coral)
+			fillColor: "#2a1500",
+			lineWidth: 3,
+			glowBlur: 18,
+			hitGlowBlur: 30,
+			// vp — deliberately between the apothem (30) and the full
+			// circumradius (60) rather than pinned to either: the pointy
+			// corners carry real visual weight (unlike Tetra's square, whose
+			// apothem IS its half-side), so a hit circle pinned to the apothem
+			// would feel unfairly tight against them.
+			hitRadius: 50,
+
+			entrySpeed: 150,
+			// Fixed rest position — this boss never patrols; it parks dead
+			// center, just below both the boss health bar (Config.boss.
+			// healthBar, bottom edge ~162) and the player's own HUD health
+			// bar above that, and stays there for the whole fight.
+			restY: 210,
+
+			rotationSpeed: 0.9, // rad/sec — continuous turret spin through 'firing'/'cooldown'
+
+			// 3 bullets per tick, one from each hull side (see class doc).
+			// Also drives ZigzagBullets.js's pool sizing/styling.
+			bullet: Object.freeze({
+				fireInterval: 0.3, // seconds between ticks — "mid" pace: faster than Tetra's 0.5, well below Spiral's near-continuous 0.12
+				speed: 130, // vp/sec
+				color: "#FF8A00",
+				lineWidth: 4,
+				glowBlur: 8,
+				halfLen: 7,
+				poolSize: 300, // generous — up to bulletLimit (60) can be alive from one visit (3 per tick), plus stragglers still bouncing from a prior visit
+				damage: 10,
+				maxBounces: 2, // times a bullet reflects off the LEFT/RIGHT screen edges before it's allowed to exit and cull — see ZigzagBullets.js
+			}),
+
+			bulletLimit: 60, // total shots fired per 'firing' visit before switching to 'cooldown' — 20 ticks × 3 sides, see class doc
+			cooldownDuration: 1.5, // seconds spent in 'cooldown' (still spinning, not firing) before the next 'firing' burst
+
+			// Pulsing core-ring glow at the center — stands in for an engine
+			// flame, same reasoning as every other original-hull boss
+			// (Spiral/Tetra/Nova/Pulsor's own `coreGlow*` fields).
+			coreRadius: 15, // vp
+			coreGlowLineWidth: 3,
+			coreGlowBlur: 12,
+			coreGlowPulseSpeed: 3, // rad/sec — breathing pulse
+
+			sparksPerEmit: 43,
+			points: 3300,
+			gold: 165,
 			audio: Object.freeze({
 				src: "assets/audio/explosion.mp3",
 				volume: 0.8,
