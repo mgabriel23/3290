@@ -52,17 +52,18 @@
  * off `Config.boss.roster`, cycling once every boss has had a turn (level
  * 7 → roster[0] "scout1", 14 → roster[1] "spiral", 21 → roster[2]
  * "bouncerPrimal", 28 → roster[3] "snake", 35 → roster[4] "tetra", 42 →
- * roster[5] "nova", 49 → roster[0] again, ...) — see the constructor's
- * `_bossKey`/`_bossCfg` lookup and the `BOSS_CLASSES` table above for the
- * matching class construction. Every boss class shares one
- * `update(dt, playerX, playerY, ctx)` shape, where `ctx` is a bag of every
- * callback ANY boss might need — fire callbacks for the ship-family bosses
- * (`fireBullet`/`fireRocket`/`fireSniperBullet`/`fireSpiralBullet`/
- * `fireTetraBullet`/`fireNovaSeed`/`fireNovaSeedAngle`), `barrierSurfaceY`/`onBarrierHit` for a
- * bouncing boss like Bouncer Primal, and `fireDrifterProjectile` for
- * Snake's head (`_bossContext`, built once in the constructor) — each class
- * reads only the ones it actually uses (see BossEnemy.js/SpiralBoss.js/
- * BouncerPrimalBoss.js/SnakeBoss.js/TetraBoss.js/NovaBoss.js's own docs for
+ * roster[5] "nova", 49 → roster[6] "pulsor", 56 → roster[0] again, ...) —
+ * see the constructor's `_bossKey`/`_bossCfg` lookup and the `BOSS_CLASSES`
+ * table above for the matching class construction. Every boss class shares
+ * one `update(dt, playerX, playerY, ctx)` shape, where `ctx` is a bag of
+ * every callback ANY boss might need — fire callbacks for the ship-family
+ * bosses (`fireBullet`/`fireRocket`/`fireSniperBullet`/`fireSpiralBullet`/
+ * `fireTetraBullet`/`fireNovaSeed`/`fireNovaSeedAngle`/`firePulsorBullet`),
+ * `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal,
+ * and `fireDrifterProjectile` for Snake's head (`_bossContext`, built once
+ * in the constructor) — each class reads only the ones it actually uses
+ * (see BossEnemy.js/SpiralBoss.js/BouncerPrimalBoss.js/SnakeBoss.js/
+ * TetraBoss.js/NovaBoss.js/PulsorBoss.js's own docs for
  * their attack patterns). Every boss renders itself individually
  * like Drifter/Bouncer (see `_renderIndividualEnemies`), and gets its own
  * boss-tier UI treatment — `renderBossHealthBar`, a separate method
@@ -85,6 +86,7 @@ import { BouncerPrimalBoss } from './BouncerPrimalBoss.js';
 import { SnakeBoss } from './SnakeBoss.js';
 import { TetraBoss } from './TetraBoss.js';
 import { NovaBoss } from './NovaBoss.js';
+import { PulsorBoss } from './PulsorBoss.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
@@ -92,6 +94,7 @@ import { SpiralBullets } from './SpiralBullets.js';
 import { TetraBullets } from './TetraBullets.js';
 import { NovaSeedBullets } from './NovaSeedBullets.js';
 import { NovaBullets } from './NovaBullets.js';
+import { PulsorBullets } from './PulsorBullets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { AudioPool } from '../core/AudioPool.js';
@@ -105,7 +108,7 @@ const SKILL_LETHAL_MULTIPLIER = 9999;
 
 // Which boss CLASS to construct for a given Config.boss.roster key — see
 // the constructor's boss-selection lookup and _spawnNext's 'boss' branch.
-const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss, snake: SnakeBoss, tetra: TetraBoss, nova: NovaBoss };
+const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss, snake: SnakeBoss, tetra: TetraBoss, nova: NovaBoss, pulsor: PulsorBoss };
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -303,6 +306,7 @@ export class WaveManager {
         }
       },
     });
+    this._pulsorBullets = new PulsorBullets();
     this._rockets = new Rockets({
       onDetonate: (x, y) => {
         this._rocketeerParticles.emit(x, y);
@@ -358,6 +362,7 @@ export class WaveManager {
     // still independently spreads into its own spiral burst later, through
     // this exact same onDetonate wiring above.
     this._fireNovaSeedAngle = (ox, oy, angle) => this._novaSeedBullets.fireAngle(ox, oy, angle);
+    this._firePulsorBullet = (ox, oy, angle, speed) => this._pulsorBullets.fire(ox, oy, angle, speed);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
     // Passed into Enemy.js's repositioning so it picks a fresh rest point
     // that's already clear of other enemies, instead of a blind random one
@@ -382,6 +387,7 @@ export class WaveManager {
       fireTetraBullet: this._fireTetraBullet,
       fireNovaSeed: this._fireNovaSeed,
       fireNovaSeedAngle: this._fireNovaSeedAngle,
+      firePulsorBullet: this._firePulsorBullet,
       fireDrifterProjectile: this._fireDrifterProjectile,
       barrierSurfaceY: this._barrierSurfaceY,
       onBarrierHit: this._onBarrierHit,
@@ -415,6 +421,7 @@ export class WaveManager {
     this._tetraBullets.update(dt);
     this._novaBullets.update(dt);
     this._novaSeedBullets.update(dt);
+    this._pulsorBullets.update(dt);
     this._powerUps.update(dt);
     this._goldPickups.update(dt);
 
@@ -520,6 +527,7 @@ export class WaveManager {
     this._tetraBullets.render(renderer);
     this._novaBullets.render(renderer);
     this._novaSeedBullets.render(renderer);
+    this._pulsorBullets.render(renderer);
     this._rockets.render(renderer);
     this._drifterProjectiles.render(renderer);
   }
@@ -930,6 +938,7 @@ export class WaveManager {
     if (this._tetraBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.bullet.damage;
     if (this._novaBullets.checkHit(x, y, hitRadius)) damage += Config.boss.nova.fragment.damage;
     if (this._novaSeedBullets.checkHit(x, y, hitRadius)) damage += Config.boss.nova.seed.damage;
+    if (this._pulsorBullets.checkHit(x, y, hitRadius)) damage += Config.boss.pulsor.pulseDamage;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
@@ -1093,7 +1102,8 @@ export class WaveManager {
       && !this._spiralBullets.active
       && !this._tetraBullets.active
       && !this._novaBullets.active
-      && !this._novaSeedBullets.active;
+      && !this._novaSeedBullets.active
+      && !this._pulsorBullets.active;
   }
 
   // ---------------------------------------------------------------------------

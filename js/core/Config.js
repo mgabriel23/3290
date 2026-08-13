@@ -2684,8 +2684,8 @@ export const Config = Object.freeze({
 	 * burst (`scoutPhase`), a Rocketeer-style homing-missile salvo
 	 * (`rocketeerPhase`), then a Sniper-style charge/lock/fire
 	 * (`sniperPhase`) — looping back to the first once all three have run.
-	 * Later boss encounters (level 49, 91, ... — this boss is roster[0], so
-	 * it recurs every 6th boss encounter once the roster cycles) reuse this
+	 * Later boss encounters (level 56, 105, ... — this boss is roster[0], so
+	 * it recurs every 7th boss encounter once the roster cycles) reuse this
 	 * same boss for now, scaled up via `healthPerLevel` like every regular
 	 * enemy — future reiterations (a giant Rocketeer or Sniper build) are a
 	 * later addition.
@@ -2698,13 +2698,14 @@ export const Config = Object.freeze({
 		// appended at the end regardless, so it's in rotation either way.
 		everyNLevels: 1,
 		roster: Object.freeze([
+			"pulsor",
 			"nova",
 			"tetra",
 			"scout1",
 			"spiral",
 			"bouncerPrimal",
 			"snake",
-		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
+		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		// Fraction of a boss's OWN max health the player's skill bomb deals
@@ -3378,6 +3379,144 @@ export const Config = Object.freeze({
 			sparksPerEmit: 42,
 			points: 2900,
 			gold: 145,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.8,
+				poolSize: 3,
+			}),
+		}),
+
+		/**
+		 * Boss #7 — "Pulsor". The first CIRCULAR hull (see PulsorBoss.js's
+		 * `_renderHull` — a plain stroked+filled circle via Renderer's
+		 * `fillEllipse`/`strokeCircle` primitives, not a polygon, so it can't
+		 * reuse EnemyCombat.js's `renderHull` the way every other boss/enemy
+		 * does) patrolling a slow bouncing path around the upper arena, same
+		 * DVD-logo bounce technique as Tetra/Nova. A small bright marker dot
+		 * orbits the rim at radius `size` along `_angle` — during phase 1 it
+		 * points at the player (an aim indicator, same idea as Nova's hull
+		 * vertex), during phase 2 it's the visible tell for the boss's own
+		 * spin, since a plain circle's rotation is otherwise invisible.
+		 *
+		 * Fires "pulses," not ordinary bullets — both phases share one
+		 * pooled-bullet class (PulsorBullets.js, structurally identical to
+		 * TetraBullets.js/NovaBullets.js — angle+speed, batched capsule
+		 * render) tuned as short, thick, heavily-glowing round blobs rather
+		 * than streaks, so they read as orbs of energy. `pulseDamage` is
+		 * shared by both phases' bullets — WaveManager.checkPlayerHit reads
+		 * one pool with one damage value regardless of which phase fired a
+		 * given bullet, same simplification Nova's shared fragment pool
+		 * already makes.
+		 *
+		 * A repeating TIMED loop between two phases, same shape as Tetra's/
+		 * Nova's own phase1/phase2 loops:
+		 *
+		 *   phase 1 (`phase1Duration` seconds) — an expanding "C-shaped"
+		 *   wave: every `wave.interval` seconds, `wave.count` pulses fire
+		 *   simultaneously from the hull, evenly spaced around all but a
+		 *   `wave.gapAngle`-wide slice of the circle — a full ring with one
+		 *   bite taken out. Since every pulse in a wave launches at the same
+		 *   instant and the same `wave.speed`, they stay in ring formation as
+		 *   they travel outward, reading as one curved wall sweeping out
+		 *   rather than a scatter of individual shots (see
+		 *   PulsorBoss._fireWave). The gap is centered on the direction AWAY
+		 *   from the player at that instant — the bulk of the wave converges
+		 *   around wherever they're standing, so dodging means moving THROUGH
+		 *   the expanding wall toward the opening on the far side, not just
+		 *   standing still in an already-safe gap.
+		 *
+		 *   phase 2 (`phase2Duration` seconds) — the hull spins continuously
+		 *   (`ring.rotationSpeed`) and every `ring.interval` seconds fires a
+		 *   FULL circular pulse (`ring.count` bullets around the entire
+		 *   circle) with `ring.gapCount` evenly-spaced narrow gaps
+		 *   (`ring.gapWidth` each) carved out for the player to slip through
+		 *   — see PulsorBoss._fireRing. Each gap's angular position is
+		 *   `this._angle + <fixed offset>`, so because the hull keeps
+		 *   spinning between pulses, every new ring's safe lanes land
+		 *   somewhere different from the last one's — the same "rotate so
+		 *   the safe gaps keep sweeping past" language Tetra's laser already
+		 *   uses, just applied to a pulsing ring instead of a static beam.
+		 *   A short `ring.windUp` delay before the very first ring of each
+		 *   phase-2 visit gives the spin-up itself a beat to read as a
+		 *   telegraph before the first ring lands.
+		 */
+		pulsor: Object.freeze({
+			name: "PULSOR",
+			size: 46, // vp — hull circle radius
+			health: 520,
+			healthPerLevel: 68,
+			color: "#FF4D6D", // coral-red — distinct from every other boss (red/violet/amber/green/blue/gold) and reads as pulsing energy
+			fillColor: "#2a0812",
+			lineWidth: 3,
+			glowBlur: 18,
+			hitGlowBlur: 30,
+			hitRadius: 46, // vp — matches `size`
+
+			entrySpeed: 150,
+			restY: 250, // vp — where the entry glide ends and patrolling begins
+
+			// Continuous bouncing patrol, same DVD-logo bounce technique as
+			// Tetra/Nova's own `_updatePatrol`.
+			moveSpeed: 80, // vp/sec
+			boundMarginX: 90, // vp from each side edge
+			boundYMin: 180, // vp — kept clear of the boss health bar above it
+			boundYMax: 420,
+
+			// Rim marker — see class doc.
+			markerRadius: 5, // vp
+			markerLineWidth: 2,
+			markerGlowBlur: 8,
+
+			// How long each phase lasts before looping to the other — see
+			// class doc.
+			phase1Duration: 9, // seconds of the C-shaped wave attack
+			phase2Duration: 7, // seconds of the rotating full-ring pulses
+
+			// Phase 1 — see class doc.
+			wave: Object.freeze({
+				interval: 1.4, // seconds between waves — trimmed from 1.6 for a slightly more aggressive cadence
+				count: 16, // pulses around the solid arc
+				gapAngle: 1.0, // radians (~57°) left open, centered away from the player
+				speed: 155, // vp/sec — bumped from 140 alongside the faster cadence
+				poolSize: 140, // generous — several waves' worth can be in flight at once given interval (1.4s) vs how long a pulse lingers before leaving the screen
+			}),
+
+			// Phase 2 — see class doc.
+			ring: Object.freeze({
+				windUp: 0.5, // seconds of visible spin-up before the first ring of a phase-2 visit — the telegraph
+				interval: 1.15, // seconds between ring pulses — trimmed from 1.3 for a slightly more aggressive cadence
+				count: 30, // bullet slots evenly spaced around the full circle, before gaps are carved out
+				gapCount: 3, // evenly-spaced safe lanes per ring
+				gapWidth: 0.65, // radians per gap (~37°)
+				rotationSpeed: 1.1, // rad/sec while in phase 2 — what makes each ring's gaps land somewhere new
+				speed: 175, // vp/sec — bumped from 160 alongside the faster cadence, still a touch faster than the phase-1 wave
+				poolSize: 220, // generous — see wave.poolSize's own reasoning, scaled up for the larger per-ring bullet count
+			}),
+
+			// Shared pulse-orb visuals (PulsorBullets.js) — short, thick,
+			// heavily-glowing capsules that read as round energy blobs
+			// rather than elongated streaks, used by both `wave` and `ring`.
+			// A separate sub-object (not top-level fields) specifically so
+			// these don't collide with the hull's OWN `color`/`lineWidth`/
+			// `glowBlur` fields above.
+			bullet: Object.freeze({
+				color: "#FF4D6D",
+				lineWidth: 9,
+				halfLen: 2,
+				glowBlur: 10,
+			}),
+			pulseDamage: 9, // shared by both phases' pulses — see class doc
+
+			// Pulsing core-ring glow at the center — stands in for an engine
+			// flame, same reasoning as Spiral/Tetra/Nova's own `coreGlow*` fields.
+			coreRadius: 14, // vp
+			coreGlowLineWidth: 3,
+			coreGlowBlur: 12,
+			coreGlowPulseSpeed: 3, // rad/sec — breathing pulse
+
+			sparksPerEmit: 44,
+			points: 3100,
+			gold: 155,
 			audio: Object.freeze({
 				src: "assets/audio/explosion.mp3",
 				volume: 0.8,
