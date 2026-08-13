@@ -2684,21 +2684,27 @@ export const Config = Object.freeze({
 	 * burst (`scoutPhase`), a Rocketeer-style homing-missile salvo
 	 * (`rocketeerPhase`), then a Sniper-style charge/lock/fire
 	 * (`sniperPhase`) — looping back to the first once all three have run.
-	 * Later boss encounters (level 42, 77, ... — this boss is roster[0], so
-	 * it recurs every 5th boss encounter once the roster cycles) reuse this
+	 * Later boss encounters (level 49, 91, ... — this boss is roster[0], so
+	 * it recurs every 6th boss encounter once the roster cycles) reuse this
 	 * same boss for now, scaled up via `healthPerLevel` like every regular
 	 * enemy — future reiterations (a giant Rocketeer or Sniper build) are a
 	 * later addition.
 	 */
 	boss: Object.freeze({
+		// NOTE: everyNLevels/roster below are currently hand-tweaked for local
+		// playtesting (forces every level to be a boss level, Tetra moved to
+		// the front) — canonical shipped values are `everyNLevels: 7` and
+		// roster starting with 'scout1'; revert before shipping. `nova` is
+		// appended at the end regardless, so it's in rotation either way.
 		everyNLevels: 1,
 		roster: Object.freeze([
+			"nova",
 			"tetra",
 			"scout1",
 			"spiral",
 			"bouncerPrimal",
 			"snake",
-		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/... boss-level encounter (level 7→roster[0], 14→roster[1], 21→roster[2], 28→roster[3], 35→roster[4], 42→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
+		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		// Fraction of a boss's OWN max health the player's skill bomb deals
@@ -3206,6 +3212,172 @@ export const Config = Object.freeze({
 			sparksPerEmit: 42,
 			points: 2700,
 			gold: 135,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.8,
+				poolSize: 3,
+			}),
+		}),
+
+		/**
+		 * Boss #6 — "Nova". An original hull (see NovaBoss.js's NOVA_HULL_PTS
+		 * — a plain regular pentagon, not a reskin of any existing enemy,
+		 * same "original hull" lineage as Spiral/Tetra), one vertex always
+		 * pointing at the player (`_angle = atan2(...)`, same convention
+		 * Scout/BossEnemy already use), patrolling a slow bouncing path
+		 * CONFINED TO THE TOP HALF of the arena (`boundYMin`/`boundYMax`,
+		 * both well under the virtual canvas's own half-height of 480 —
+		 * same DVD-logo bounce technique as Tetra's `_updatePatrol`, just a
+		 * tighter, higher band) rather than roaming the whole upper arena.
+		 *
+		 * Attack — the whole point of this boss — is a delayed spiral burst,
+		 * not a direct spray: every `fireInterval` seconds it launches ONE
+		 * slow bullet (`seed`, NovaSeedBullets.js) straight at the player's
+		 * CURRENT position (no lead prediction — "slowly" is the whole
+		 * threat, not accuracy). That seed bullet travels on its own for
+		 * `seed.spreadDelay` seconds (visibly swelling as it nears that
+		 * moment — see NovaSeedBullets.render's telegraph), then detonates
+		 * wherever it currently is — NOT necessarily on the player, who has
+		 * had that whole `spreadDelay` window to move away — into
+		 * `fragment.count` new bullets (`fragment`, NovaBullets.js). The
+		 * fragments don't fan out into a static ring: each successive
+		 * fragment is launched `fragment.angleStep` radians further around
+		 * (≈137.5°, the golden angle — the same phyllotaxis trick sunflower
+		 * seed-heads use for a dense, non-repeating fan) AND `fragment.
+		 * speedStep` vp/sec faster than the last, so plotting all of them at
+		 * any single instant traces a genuine expanding spiral arm, not a
+		 * ring that just grows uniformly — no curved-path bullet math
+		 * needed, purely straight-line bullets whose LAUNCH parameters
+		 * happen to correlate (the exact same "no curve math, just angle
+		 * correlation" principle SpiralBoss's own continuous spiral uses).
+		 * The detonation fan-out math itself lives in WaveManager's
+		 * `_buildProjectilePools` (NovaSeedBullets' `onDetonate` callback),
+		 * not in NovaBoss or NovaSeedBullets — same separation Rockets.js's
+		 * `onDetonate` already uses (a pool reports WHEN something happens,
+		 * WaveManager decides what that means for other pools/effects).
+		 *
+		 * A repeating TIMED loop between two phases, same shape as Tetra's
+		 * own phase1/phase2 loop (see Config.boss.tetra's class doc):
+		 *
+		 *   phase 1 (`phase1Duration` seconds) — the seed/spiral-burst attack
+		 *   described above, hull tracking the player.
+		 *
+		 *   phase 2 (`phase2` below) — the SAME seed/spiral-burst attack as
+		 *   phase 1, just far denser: the hull stops tracking the player and
+		 *   instead spins continuously (`phase2.rotationSpeed`), firing a
+		 *   SEED from each of its 5 sides simultaneously (`fireNovaSeedAngle`
+		 *   — NovaSeedBullets' angle-launch mode — same "N shots evenly
+		 *   spaced around the current rotation" mechanic Tetra/Spiral already
+		 *   use) — `phase2.volleyCount` times (2), `phase2.volleyInterval`
+		 *   seconds apart, after an initial `phase2.windUp` seconds of
+		 *   visible spin-up (the telegraph). Every one of those 10 seeds
+		 *   independently swells and detonates into its own spiral fan on the
+		 *   usual `seed.spreadDelay` clock — see NovaBoss._fireVolley. Patrol
+		 *   movement never pauses for this, same as Tetra.
+		 */
+		nova: Object.freeze({
+			name: "NOVA",
+			size: 44, // vp — pentagon hull radius
+			health: 500,
+			healthPerLevel: 65,
+			color: "#FFD23D", // warm gold — distinct from every other boss (red/violet/amber/green/blue) and evocative of a burst of light
+			fillColor: "#241a00",
+			lineWidth: 3,
+			glowBlur: 18,
+			hitGlowBlur: 30,
+			hitRadius: 46, // vp
+
+			entrySpeed: 150,
+			restY: 240, // vp — where the entry glide ends and patrolling begins
+
+			// Continuous bouncing patrol, same DVD-logo bounce technique as
+			// Tetra's `_updatePatrol` — CONFINED TO THE TOP HALF of the arena
+			// (Config.virtual.height is 960, so 480 is the true half-line;
+			// both bounds sit comfortably above it, with boundYMax leaving a
+			// clear margin rather than grazing the line).
+			moveSpeed: 80, // vp/sec
+			boundMarginX: 90, // vp from each side edge
+			boundYMin: 140, // vp — kept clear of the boss health bar above it
+			boundYMax: 380, // vp — comfortably inside the top half (< 480)
+
+			// How long phase 1 lasts before looping into phase 2's bullet-hell
+			// burst — see class doc. There's no separate `phase2Duration`
+			// field (unlike Tetra) — phase 2's own length falls straight out
+			// of `phase2`'s windUp/volleyCount/volleyInterval/tailDuration
+			// below, so there's no second number that could drift out of
+			// sync with the actual volley timing.
+			phase1Duration: 10, // seconds of the seed/spiral-burst attack
+
+			fireInterval: 2.0, // seconds between seed-bullet launches
+
+			// The seed bullet — see class doc. Grows visibly as it nears
+			// detonation (NovaSeedBullets.render), the fairness telegraph
+			// every other delayed/charged attack in this game already gives
+			// the player (Sniper's charge orb, Boss #1's sniper phase,
+			// Drifter's lash) — here on the projectile itself since there's
+			// no separate charge-up state on the boss to hang it off of.
+			seed: Object.freeze({
+				speed: 100, // vp/sec — deliberately slow, the same "slowly" the player actually sees, not just a label
+				spreadDelay: 1.4, // seconds alive before it bursts
+				color: "#FFD23D",
+				lineWidth: 2.5,
+				glowBlur: 10,
+				radius: 6, // vp — base drawn radius
+				growthMult: 1.8, // radius multiplies up to this factor as spreadDelay approaches (see NovaSeedBullets.render)
+				// In phase 1, fireInterval (2.0s) > spreadDelay (1.4s), so at
+				// most one seed is ever in flight there. Phase 2 fires 5 at
+				// once, twice, `phase2.volleyInterval` (0.9s) apart — with
+				// spreadDelay 1.4s > volleyInterval, the two volleys' seeds
+				// briefly overlap in flight (up to 10 at once) before either
+				// batch detonates. Sized for that peak with a little headroom.
+				poolSize: 12,
+				damage: 8, // player HP lost on a direct hit, before it ever gets to burst
+			}),
+
+			// The burst fragments — see class doc for the golden-angle/
+			// speed-step spiral technique.
+			fragment: Object.freeze({
+				count: 12,
+				angleStep: 2.4, // radians (~137.5°) — the golden angle, for a natural non-repeating spiral fan rather than a static evenly-spaced ring
+				baseSpeed: 70, // vp/sec — first-launched fragment's speed
+				speedStep: 12, // vp/sec added per fragment index — later fragments outrun earlier ones, curving the fan into a spiral instead of an expanding ring
+				color: "#FFD23D",
+				lineWidth: 3.5,
+				glowBlur: 7,
+				halfLen: 5,
+				// One phase-2 volley alone can detonate 5 seeds at once (5 ×
+				// `count` = 60 fragments in a single frame), and both volleys'
+				// fragments can briefly coexist — sized well past that peak.
+				poolSize: 200,
+				damage: 6, // shared by phase 2's volley-launched seeds' own fragments too — same pool, same "these are Nova's standard bolt" damage regardless of which attack spawned them
+			}),
+
+			// Phase 2 — the bullet-hell burst — see class doc. No `burstSpeed`
+			// here: phase 2 fires SEEDS (Config.boss.nova.seed's own `speed`),
+			// not a direct fragment shot, so there's nothing of its own to tune.
+			phase2: Object.freeze({
+				windUp: 0.5, // seconds of visible spin-up before the first volley — the telegraph
+				volleyCount: 2, // fires from all 5 sides this many times
+				volleyInterval: 0.9, // seconds between each volley
+				// Long enough that the SECOND volley's seeds (fired at
+				// windUp + volleyInterval, each detonating seed.spreadDelay
+				// seconds later) have actually burst before phase 2 ends —
+				// windUp(0.5) + volleyInterval(0.9) + spreadDelay(1.4) = 2.8s
+				// after phase 2 begins; 1.6 lands just past that.
+				tailDuration: 1.6,
+				rotationSpeed: 1.4, // rad/sec while spinning — faster than a calm idle spin, sells "bullet hell" urgency
+			}),
+
+			// Pulsing core-ring glow at the center — stands in for an engine
+			// flame, same reasoning as Spiral/Tetra's own `coreGlow*` fields.
+			coreRadius: 14, // vp
+			coreGlowLineWidth: 3,
+			coreGlowBlur: 12,
+			coreGlowPulseSpeed: 3, // rad/sec — breathing pulse
+
+			sparksPerEmit: 42,
+			points: 2900,
+			gold: 145,
 			audio: Object.freeze({
 				src: "assets/audio/explosion.mp3",
 				volume: 0.8,
