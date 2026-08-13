@@ -51,17 +51,18 @@
  * boss instance the same way it builds any other group. WHICH boss is read
  * off `Config.boss.roster`, cycling once every boss has had a turn (level
  * 7 → roster[0] "scout1", 14 → roster[1] "spiral", 21 → roster[2]
- * "bouncerPrimal", 28 → roster[3] "snake", 35 → roster[0] again, ...) — see
- * the constructor's `_bossKey`/`_bossCfg` lookup and the `BOSS_CLASSES`
- * table above for the matching class construction. Every boss class shares
- * one `update(dt, playerX, playerY, ctx)` shape, where `ctx` is a bag of
- * every callback ANY boss might need — fire callbacks for the ship-family
- * bosses (`fireBullet`/`fireRocket`/`fireSniperBullet`/`fireSpiralBullet`),
+ * "bouncerPrimal", 28 → roster[3] "snake", 35 → roster[4] "tetra", 42 →
+ * roster[0] again, ...) — see the constructor's `_bossKey`/`_bossCfg` lookup
+ * and the `BOSS_CLASSES` table above for the matching class construction.
+ * Every boss class shares one `update(dt, playerX, playerY, ctx)` shape,
+ * where `ctx` is a bag of every callback ANY boss might need — fire
+ * callbacks for the ship-family bosses (`fireBullet`/`fireRocket`/
+ * `fireSniperBullet`/`fireSpiralBullet`/`fireTetraBullet`),
  * `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal,
  * and `fireDrifterProjectile` for Snake's head (`_bossContext`, built once
  * in the constructor) — each class reads only the ones it actually uses
- * (see BossEnemy.js/SpiralBoss.js/BouncerPrimalBoss.js/SnakeBoss.js's own
- * docs for their attack patterns). Every boss renders itself individually
+ * (see BossEnemy.js/SpiralBoss.js/BouncerPrimalBoss.js/SnakeBoss.js/
+ * TetraBoss.js's own docs for their attack patterns). Every boss renders itself individually
  * like Drifter/Bouncer (see `_renderIndividualEnemies`), and gets its own
  * boss-tier UI treatment — `renderBossHealthBar`, a separate method
  * GameplayScene calls from the fixed UI camera layer (not part of this
@@ -81,10 +82,12 @@ import { BossEnemy } from './BossEnemy.js';
 import { SpiralBoss } from './SpiralBoss.js';
 import { BouncerPrimalBoss } from './BouncerPrimalBoss.js';
 import { SnakeBoss } from './SnakeBoss.js';
+import { TetraBoss } from './TetraBoss.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
 import { SpiralBullets } from './SpiralBullets.js';
+import { TetraBullets } from './TetraBullets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { AudioPool } from '../core/AudioPool.js';
@@ -98,7 +101,7 @@ const SKILL_LETHAL_MULTIPLIER = 9999;
 
 // Which boss CLASS to construct for a given Config.boss.roster key — see
 // the constructor's boss-selection lookup and _spawnNext's 'boss' branch.
-const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss, snake: SnakeBoss };
+const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss, snake: SnakeBoss, tetra: TetraBoss };
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -277,6 +280,7 @@ export class WaveManager {
     this._enemyBullets  = new EnemyBullets();
     this._sniperBullets = new SniperBullets();
     this._spiralBullets = new SpiralBullets();
+    this._tetraBullets  = new TetraBullets();
     this._rockets = new Rockets({
       onDetonate: (x, y) => {
         this._rocketeerParticles.emit(x, y);
@@ -324,6 +328,7 @@ export class WaveManager {
     // default (1) applies and its shot is unaffected.
     this._fireSniperBullet = (ox, oy, tx, ty, speedMult) => this._sniperBullets.fire(ox, oy, tx, ty, speedMult);
     this._fireSpiralBullet = (ox, oy, angle) => this._spiralBullets.fire(ox, oy, angle);
+    this._fireTetraBullet = (ox, oy, angle) => this._tetraBullets.fire(ox, oy, angle);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
     // Passed into Enemy.js's repositioning so it picks a fresh rest point
     // that's already clear of other enemies, instead of a blind random one
@@ -345,6 +350,7 @@ export class WaveManager {
       fireRocket: this._fireRocket,
       fireSniperBullet: this._fireSniperBullet,
       fireSpiralBullet: this._fireSpiralBullet,
+      fireTetraBullet: this._fireTetraBullet,
       fireDrifterProjectile: this._fireDrifterProjectile,
       barrierSurfaceY: this._barrierSurfaceY,
       onBarrierHit: this._onBarrierHit,
@@ -375,6 +381,7 @@ export class WaveManager {
     this._enemyBullets.update(dt);
     this._sniperBullets.update(dt);
     this._spiralBullets.update(dt);
+    this._tetraBullets.update(dt);
     this._powerUps.update(dt);
     this._goldPickups.update(dt);
 
@@ -477,6 +484,7 @@ export class WaveManager {
     this._enemyBullets.render(renderer);
     this._sniperBullets.render(renderer);
     this._spiralBullets.render(renderer);
+    this._tetraBullets.render(renderer);
     this._rockets.render(renderer);
     this._drifterProjectiles.render(renderer);
   }
@@ -868,7 +876,10 @@ export class WaveManager {
    * GameplayScene applies it via `player.takeDamage()`. Doesn't itself
    * check invulnerability — Player.takeDamage already no-ops while
    * invulnerable, so a hit source here just gets consumed (bullet removed,
-   * etc.) even during that window, same as a real impact would be.
+   * etc.) even during that window, same as a real impact would be. The one
+   * exception is a boss's own `checkLaserHit` (currently only Tetra's phase-2
+   * beams) — nothing to consume, it's a live geometry test re-run every
+   * frame the beam is up, same as Bouncer's circle-based `contactDamage`.
    * @param {{ x: number, y: number, hitRadius: number }} player
    * @returns {number}
    */
@@ -881,6 +892,7 @@ export class WaveManager {
     if (this._enemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemyBullet.damage;
     if (this._sniperBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.sniper.bullet.damage;
     if (this._spiralBullets.checkHit(x, y, hitRadius)) damage += Config.boss.spiral.bullet.damage;
+    if (this._tetraBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.bullet.damage;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
@@ -895,6 +907,10 @@ export class WaveManager {
           damage += e.type === 'bouncer' ? Config.enemy.bouncer.contactDamage : e.contactDamage;
         }
       }
+      // A boss with a continuous beam attack (currently only Tetra's phase-2
+      // lasers) opts in by exposing `.checkLaserHit`, a live point-to-segment
+      // test rather than a circle — see TetraBoss.checkLaserHit's own doc.
+      if (e.checkLaserHit) damage += e.checkLaserHit(x, y, hitRadius);
     }
 
     return damage;
@@ -1037,7 +1053,8 @@ export class WaveManager {
       && !this._drifterProjectiles.active
       && !this._enemyBullets.active
       && !this._sniperBullets.active
-      && !this._spiralBullets.active;
+      && !this._spiralBullets.active
+      && !this._tetraBullets.active;
   }
 
   // ---------------------------------------------------------------------------

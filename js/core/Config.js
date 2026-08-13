@@ -2684,15 +2684,21 @@ export const Config = Object.freeze({
 	 * burst (`scoutPhase`), a Rocketeer-style homing-missile salvo
 	 * (`rocketeerPhase`), then a Sniper-style charge/lock/fire
 	 * (`sniperPhase`) — looping back to the first once all three have run.
-	 * Later boss encounters (level 35, 63, ... — this boss is roster[0], so
-	 * it recurs every 4th boss encounter once the roster cycles) reuse this
+	 * Later boss encounters (level 42, 77, ... — this boss is roster[0], so
+	 * it recurs every 5th boss encounter once the roster cycles) reuse this
 	 * same boss for now, scaled up via `healthPerLevel` like every regular
 	 * enemy — future reiterations (a giant Rocketeer or Sniper build) are a
 	 * later addition.
 	 */
 	boss: Object.freeze({
-		everyNLevels: 7,
-		roster: Object.freeze(['scout1', 'spiral', 'bouncerPrimal', 'snake']), // ordered — which boss spawns on the 1st/2nd/3rd/4th/... boss-level encounter (level 7→roster[0], 14→roster[1], 21→roster[2], 28→roster[3], 35→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
+		everyNLevels: 1,
+		roster: Object.freeze([
+			"tetra",
+			"scout1",
+			"spiral",
+			"bouncerPrimal",
+			"snake",
+		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/... boss-level encounter (level 7→roster[0], 14→roster[1], 21→roster[2], 28→roster[3], 35→roster[4], 42→roster[0] again, ...); see WaveManager's boss-selection lookup in its constructor
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		// Fraction of a boss's OWN max health the player's skill bomb deals
@@ -3086,6 +3092,127 @@ export const Config = Object.freeze({
 			}),
 		}),
 
+		/**
+		 * Boss #5 — "Tetra". An original rotating-square silhouette (see
+		 * TetraBoss.js's TETRA_HULL_PTS — a plain 4-sided polygon, not a
+		 * reskin of any existing enemy, same "original hull" lineage as
+		 * Spiral) that continuously spins while patrolling a slow bouncing
+		 * path around the upper arena (`moveSpeed`/`boundMarginX`/
+		 * `boundYMin`/`boundYMax` — reflects off each bound like a DVD-logo
+		 * bounce, see TetraBoss._updatePatrol) — unlike Spiral, which holds
+		 * still to fire and only relocates BETWEEN firing spells, Tetra never
+		 * stops moving.
+		 *
+		 * A repeating TIMED loop between its two phases — bullets, then
+		 * lasers, then back to bullets, for the entire fight, never settling
+		 * permanently into either one (closer to Boss #1's own
+		 * scout/rocketeer/sniper cycle than a one-way health-gated
+		 * escalation):
+		 *
+		 *   phase 1 (`phase1Duration` seconds) — fires a slow bullet from
+		 *   each of the hull's 4 sides every `bullet.fireInterval` seconds
+		 *   (same "N shots evenly spaced around the current rotation"
+		 *   mechanic as Spiral's fireDirections, just at this boss's own
+		 *   cadence/speed), spinning at `phase1RotationSpeed`.
+		 *
+		 *   phase 2 (`phase2Duration` seconds) — stops firing bullets and
+		 *   instead grows 4 continuous laser beams (`laser`), one from each
+		 *   hull side straight outward past the screen edge, rigidly
+		 *   attached to the rotating hull (see TetraBoss._laserPaths) —
+		 *   spinning faster now (`phase2RotationSpeed`) so the safe gaps
+		 *   between beams keep sweeping past the player, same "dodge through
+		 *   the rotating gap" read as a bullet-hell rotating-laser pattern.
+		 *   Every time phase 2 begins it telegraphs for `laser.warmupDuration`
+		 *   seconds first (the beams are visibly growing but deal no damage
+		 *   yet) before going live — the same fairness window every other
+		 *   telegraphed attack in this game gives the player (Sniper's
+		 *   charge, Boss #1's sniper phase, Drifter's lash), replayed fresh
+		 *   on every lap of the loop, not just the first.
+		 */
+		tetra: Object.freeze({
+			name: "TETRA",
+			size: 50, // vp — half-extent of the square hull (see TETRA_HULL_PTS)
+			health: 480,
+			healthPerLevel: 62,
+			color: "#3DA5FF", // electric blue — distinct from every other boss (red/violet/amber/green) and from the player's own cyan
+			fillColor: "#081428",
+			lineWidth: 3,
+			glowBlur: 18,
+			hitGlowBlur: 30,
+			hitRadius: 50, // vp — matches `size`, same convention as Spiral's hitRadius
+
+			entrySpeed: 150,
+			restY: 260, // vp — where the entry glide ends and patrolling begins
+
+			phase1RotationSpeed: 0.6, // rad/sec
+			phase2RotationSpeed: 1.3, // rad/sec — faster once enraged, so the safe gaps between beams sweep past more urgently
+
+			// Continuous bouncing patrol — reflects off each bound like a
+			// DVD-logo bounce (see TetraBoss._updatePatrol). Never stops,
+			// through both phases and regardless of firing state.
+			moveSpeed: 85, // vp/sec
+			boundMarginX: 90, // vp from each side edge
+			boundYMin: 200, // vp — kept clear of the boss health bar above it
+			boundYMax: 430,
+
+			// How long each phase lasts before looping to the other — see
+			// class doc. Phase 2's duration comfortably exceeds
+			// `laser.warmupDuration` so the beams spend real time fully live
+			// (dealing damage), not just telegraphing, before looping back.
+			phase1Duration: 8, // seconds of bullets
+			phase2Duration: 6, // seconds of lasers (including the warmup telegraph)
+
+			// Phase 1 — dedicated slow-bullet pool (TetraBullets.js), fired
+			// from each of the 4 hull sides on every tick, same shape as
+			// Spiral's own `bullet`/`fireDirections` pattern just at this
+			// boss's own slower pace/speed.
+			bullet: Object.freeze({
+				fireInterval: 0.5, // seconds between ticks — more aggressive mid-fast rate, still well below Spiral's near-continuous 0.12s tick
+				speed: 110, // vp/sec — deliberately slow
+				color: "#3DA5FF",
+				lineWidth: 4,
+				glowBlur: 8,
+				halfLen: 6,
+				poolSize: 80,
+				damage: 10,
+			}),
+
+			// Phase 2 — 4 continuous rotating laser beams, rigidly attached to
+			// the hull sides. Collision is a live point-to-segment test
+			// (vectorMath.distanceToSegment) against the player each frame,
+			// not a pooled projectile — see TetraBoss.checkLaserHit, read
+			// generically by WaveManager.checkPlayerHit the same optional-hook
+			// way a regular Bouncer's `contactDamage` already is.
+			laser: Object.freeze({
+				warmupDuration: 1.0, // seconds the beams are visible but harmless right after phase 2 begins
+				length: 1300, // vp — comfortably longer than the virtual canvas's own diagonal (~1101vp) from anywhere within the patrol bounds, so a beam always reaches past every edge regardless of the boss's current position
+				halfWidth: 6, // vp — collision half-thickness (added to the player's own hitRadius)
+				damage: 14, // player HP lost per overlapping frame — throttled by Config.player.invulnDuration same as any other contact damage
+				color: "#3DA5FF",
+				coreColor: "#ffffff", // bright white inner line, laid over the colored outer glow for a "hot" beam core
+				lineWidth: 10, // outer glow stroke width
+				coreLineWidth: 3,
+				glowBlur: 16,
+			}),
+
+			// Pulsing core-ring glow at the center — stands in for an engine
+			// flame, same reasoning as Spiral's own `coreGlow*` fields (a
+			// rotating turret has no thruster).
+			coreRadius: 16, // vp
+			coreGlowLineWidth: 3,
+			coreGlowBlur: 12,
+			coreGlowPulseSpeed: 3, // rad/sec — breathing pulse
+
+			sparksPerEmit: 42,
+			points: 2700,
+			gold: 135,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.8,
+				poolSize: 3,
+			}),
+		}),
+
 		// Boss health bar — top-center, wider/more prominent than the
 		// player's own health bar (Config.hud.health), positioned to clear
 		// that bar/label sitting right above it.
@@ -3418,8 +3545,12 @@ export const Config = Object.freeze({
 		// rely on tapping "through" or "behind" it to dismiss. Same circle+
 		// glyph shape as Config.codex.button, just smaller.
 		closeButton: Object.freeze({
-			x: 500, y: 45, radius: 18,
-			color: "#4DEFFF", lineWidth: 2, glowBlur: 7,
+			x: 500,
+			y: 45,
+			radius: 18,
+			color: "#4DEFFF",
+			lineWidth: 2,
+			glowBlur: 7,
 			font: '400 18px "Audiowide", "Courier New", monospace',
 		}),
 
