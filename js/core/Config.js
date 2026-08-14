@@ -1641,7 +1641,12 @@ export const Config = Object.freeze({
 		// health-restore glyph.
 		health: Object.freeze({
 			color: "#4DFF8A",
-			fillColor: "#0a2a16",
+			// A solid saturated green body instead of the old near-black wash
+			// (#0a2a16, ~1.3:1 against Config.colors.void — invisible) — matches
+			// the fully-vivid-body treatment Config.gold's fillColor already
+			// uses. ~4.6:1 against void and ~4.3:1 against iconFillColor's
+			// cross glyph, both clearing the WCAG 1.4.11 non-text 3:1 minimum.
+			fillColor: "#178A45",
 			healAmount: 25, // player HP restored — see Config.player.maxHealth
 		}),
 		// Same cyan as Barrier/its SHIELD readout on purpose — this pickup
@@ -1651,7 +1656,10 @@ export const Config = Object.freeze({
 		// "this restores THAT".
 		shield: Object.freeze({
 			color: "#4DEFFF",
-			fillColor: "#0a2530",
+			// Solid saturated teal body, same near-black-wash fix as health's
+			// fillColor above — ~3.7:1 against void, ~4.1:1 against
+			// iconFillColor's diamond glyph.
+			fillColor: "#0E86A8",
 			healAmount: 20, // Barrier HP restored — see Config.barrier.maxHealth
 		}),
 		// Warm gold — reads as "energy/attack", distinct from every enemy hue
@@ -1664,7 +1672,10 @@ export const Config = Object.freeze({
 		// (either additively or multiplicatively) with it.
 		fireBoost: Object.freeze({
 			color: "#FFD24D",
-			fillColor: "#2a2005",
+			// Solid saturated amber body, same near-black-wash fix as health's
+			// fillColor above — ~4.8:1 against void, ~4.1:1 against
+			// iconFillColor's bolt glyph.
+			fillColor: "#B36A00",
 			multiplier: 1.25, // +25% player bullet damage AND fire rate while active — flat, never compounds; a repeat pickup only refreshes `duration` below, it never stacks a second multiplier on top
 			duration: 25, // seconds
 		}),
@@ -1680,7 +1691,11 @@ export const Config = Object.freeze({
 		// no-stacking rule as fireBoost.
 		invincible: Object.freeze({
 			color: "#E8F6FF",
-			fillColor: "#182430",
+			// Solid saturated blue body, same near-black-wash fix as health's
+			// fillColor above — ~3.7:1 against void. invincible's hex glyph is
+			// stroke-only (not filled with iconFillColor, see class doc), so
+			// what matters here is `color` read against THIS fill: ~5.0:1.
+			fillColor: "#2A6DA3",
 			duration: 15, // seconds of full damage immunity
 			bubbleRadius: 30, // vp — encases the ship's ~32x40vp silhouette (Config.player width/height at scale 0.5)
 			bubbleLineWidth: 2,
@@ -1738,7 +1753,7 @@ export const Config = Object.freeze({
 		color: "#FFDE59",       // bright rim/glint — distinct from Config.powerUps.fireBoost's warm-gold (#FFD24D)
 		fillColor: "#E7B740",   // solid coin body
 		highlightColor: "#FFF6DC", // pale specular shine, drifts slowly across the face
-		shadeColor: "#8A5A12",  // dark antique-gold — stamped star emblem + inner emboss
+		shadeColor: "#6B4610",  // dark antique-gold — stamped star emblem + inner emboss; darkened from #8A5A12 so the emblem clears WCAG 1.4.11's 3:1 non-text contrast against fillColor with real margin (was ~3.2:1, now ~4.5:1)
 	}),
 
 	/**
