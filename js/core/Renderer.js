@@ -124,29 +124,36 @@ export class Renderer {
    * (prompts, menus). Alignment/baseline default to centring on `(x, y)`
    * so callers can position labels without measuring text themselves.
    * `alpha` (0–1) optionally fades the glyph, e.g. for letter-by-letter
-   * reveal/dismiss effects — same opt-in convention as `drawImage`.
+   * reveal/dismiss effects — same opt-in convention as `drawImage`. `scale`
+   * (default 1) grows/shrinks the glyph about `(x, y)` — the seam a
+   * celebratory "pop" text effect (e.g. entities/ComboBanner.js) scales
+   * into view through, without needing its own transform handling.
    * @param {string} text @param {number} x @param {number} y
-   * @param {{font: string, color: string, align?: CanvasTextAlign, baseline?: CanvasTextBaseline, alpha?: number}} style
+   * @param {{font: string, color: string, align?: CanvasTextAlign, baseline?: CanvasTextBaseline, alpha?: number, scale?: number}} style
    */
-  drawText(text, x, y, { font, color, align = 'center', baseline = 'middle', alpha = 1, glowBlur = 0, glowColor }) {
+  drawText(text, x, y, { font, color, align = 'center', baseline = 'middle', alpha = 1, glowBlur = 0, glowColor, scale = 1 }) {
     const { ctx } = this;
     ctx.font = font;
     ctx.fillStyle = color;
     ctx.textAlign = align;
     ctx.textBaseline = baseline;
-    if (alpha >= 1 && glowBlur === 0) {
+    if (alpha >= 1 && glowBlur === 0 && scale === 1) {
       ctx.fillText(text, x, y);
       return;
     }
-    const prevAlpha = ctx.globalAlpha;
+    ctx.save();
+    if (scale !== 1) {
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      x = 0; y = 0;
+    }
     if (alpha < 1) ctx.globalAlpha = alpha;
     if (glowBlur > 0) {
       ctx.shadowColor = glowColor ?? color;
       ctx.shadowBlur = this._glow(glowBlur);
     }
     ctx.fillText(text, x, y);
-    ctx.globalAlpha = prevAlpha;
-    if (glowBlur > 0) ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
   /**

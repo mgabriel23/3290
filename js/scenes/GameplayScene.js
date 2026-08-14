@@ -144,6 +144,7 @@ import { ScreenShake } from '../core/ScreenShake.js';
 import { consumeLuckyDrop, consumeShieldStart } from '../core/DailyReward.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
+import { ComboBanner } from '../entities/ComboBanner.js';
 import { EnemyCodex } from '../entities/EnemyCodex.js';
 import { FloatingText } from '../entities/FloatingText.js';
 import { HUD } from '../entities/HUD.js';
@@ -235,6 +236,12 @@ export class GameplayScene {
     // to 0 the instant a hit actually lands (see _checkPlayerHit). Drives
     // _comboMultiplier() — see Config.combo and _checkCollisions.
     this._comboCount = 0;
+    // Highest tier (see _comboTierIndex) already announced via the banner/
+    // sound below, so a tier-up only fires once instead of every kill
+    // inside it — reset alongside _comboCount in _checkPlayerHit.
+    this._comboAnnouncedTier = 0;
+    this._comboBanner = new ComboBanner();
+    this._streakAudio = new AudioPool(Config.combo.audioSrc, Config.combo.audioPoolSize, Config.combo.audioVolume);
 
     // Game-over overlay — see class doc's "Player damage" note.
     this._isGameOver  = false;
@@ -313,6 +320,7 @@ export class GameplayScene {
     this.player.update(effectiveDt);
     this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
     this._floatingText.update(effectiveDt);
+    this._comboBanner.update(effectiveDt);
     this._playerSkill.update(effectiveDt);
     this._updateMusicDuck(effectiveDt);
 
@@ -393,6 +401,7 @@ export class GameplayScene {
     this.hud.render(this.renderer, this.player.health, this._fireBoostTimer, this.player.invincibleTimer, this._comboMultiplier());
     this._waveManager?.renderBossHealthBar(this.renderer);
     this._playerSkill.render(this.renderer);
+    this._comboBanner.render(this.renderer); // no-op when inactive — cheap to always call, same as _floatingText above
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
     // Codex, then shop, then playback controls — all three must sit on top
@@ -573,6 +582,12 @@ export class GameplayScene {
    * `handleBulletHit` directly instead of this method, so they neither
    * benefit from nor build the combo — otherwise one skill tap could both
    * cash in and inflate a streak the player didn't earn by shooting.
+   *
+   * Crossing into a new combo tier additionally fires the big "hype"
+   * banner + streak sting + an extra screen-shake jolt (`_comboAnnouncedTier`
+   * tracks the highest tier already announced, so this fires once per tier
+   * rather than on every kill inside it) — see Config.combo.banner and
+   * ComboBanner.js.
    * @param {number} [damageMultiplier]  see update()'s fireBoostMultiplier
    */
   _checkCollisions(damageMultiplier = 1) {
@@ -588,9 +603,30 @@ export class GameplayScene {
           const trauma = e.type === 'boss' ? Config.boss.killTrauma : Config.screenShake.killTrauma;
           this._screenShake.trigger(trauma);
           this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);
+
+          const tier = this._comboTierIndex(this._comboCount);
+          if (tier > this._comboAnnouncedTier) {
+            this._comboAnnouncedTier = tier;
+            this._comboBanner.trigger(tier, this._comboMultiplier());
+            this._streakAudio.play();
+            this._screenShake.trigger(Config.screenShake.comboTierTrauma);
+          }
         }
       }
     }
+  }
+
+  /**
+   * Which combo tier (1-based; 0 = none yet) `count` kills-without-damage
+   * has reached, per `Config.combo.step` — the same tiering `_comboMultiplier()`
+   * derives the score multiplier from, just as an integer index rather than
+   * the multiplier value itself, for indexing `Config.combo.banner.labels`.
+   * @param {number} count
+   */
+  _comboTierIndex(count) {
+    const { step, incrementPerStep, maxMultiplier } = Config.combo;
+    const maxTier = Math.round((maxMultiplier - 1) / incrementPerStep);
+    return Math.min(maxTier, Math.floor(count / step));
   }
 
   /**
@@ -620,6 +656,7 @@ export class GameplayScene {
     if (damage <= 0) return;
     if (!this.player.takeDamage(damage)) return; // invulnerable — hit source still consumed, no further effect
     this._comboCount = 0;
+    this._comboAnnouncedTier = 0;
 
     if (this.player.health <= 0) {
       this._triggerGameOver();

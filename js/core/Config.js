@@ -345,6 +345,7 @@ export const Config = Object.freeze({
 		killTrauma: 0.18, // added per enemy kill — a burst of rapid kills stacks up further (capped at 1)
 		barrierTrauma: 0.28, // added per barrier impact — stronger than a kill; it's your defense taking a hit
 		playerHitTrauma: 0.35, // added when the player takes damage — the strongest shake in the game; it's the thing you're trying not to let happen
+		comboTierTrauma: 0.4, // added on a combo-streak tier-up, alongside that kill's own killTrauma — a deliberately strong jolt so the moment reads as a reward, not just another kill (see Config.combo.banner)
 	}),
 
 	/**
@@ -840,7 +841,8 @@ export const Config = Object.freeze({
 		}),
 		luckyDrop: Object.freeze({
 			name: "LUCKY DROP",
-			description: "Your next run gets boosted power-up and gold drop odds.",
+			description:
+				"Your next run gets boosted power-up and gold drop odds.",
 			// Multiplies Config.powerUps.dropChance (0.1 -> 0.25) AND
 			// Config.gold.dropChance (0.8 -> effectively guaranteed) for one
 			// entire run — see WaveManager's constructor-injected
@@ -850,7 +852,8 @@ export const Config = Object.freeze({
 		}),
 		shieldStart: Object.freeze({
 			name: "SHIELD START",
-			description: "Your next run begins with a few seconds of invincibility.",
+			description:
+				"Your next run begins with a few seconds of invincibility.",
 			duration: 5, // seconds — shorter than a real invincible PowerUp's 15s (Config.powerUps.invincible.duration); this is a head-start grace period, not a full buff
 			color: "#E8F6FF", // matches Config.powerUps.invincible.color
 		}),
@@ -1643,6 +1646,51 @@ export const Config = Object.freeze({
 		step: 5, // kills-without-damage per multiplier tier
 		incrementPerStep: 0.5, // multiplier added per tier
 		maxMultiplier: 4, // hard cap — reached at 30 kills into an unbroken streak
+
+		// Plays once per tier-up (not per kill) — see GameplayScene._checkCollisions.
+		// No shipped clip yet; AudioPool degrades silently until one exists at this path.
+		audioSrc: "assets/audio/streak.mp4",
+		audioVolume: 0.7,
+		audioPoolSize: 4,
+
+		/**
+		 * Loud, hard-to-miss "hype" banner fired once per tier-up (see
+		 * entities/ComboBanner.js) — the big-and-brief counterpart to the
+		 * small always-on "COMBO ×N" HUD readout (Config.hud.combo), which
+		 * is easy to miss mid-fight. `labels` escalate with the tier just
+		 * reached (index 0 = the first tier, 5 kills); its length (6)
+		 * intentionally matches the number of tiers `step`/`incrementPerStep`/
+		 * `maxMultiplier` above produce (30 kills / 5 = 6), so every tier
+		 * gets its own word without ever falling off the end of the array.
+		 */
+		banner: Object.freeze({
+			labels: Object.freeze([
+				"NICE!",
+				"GREAT!",
+				"AWESOME!",
+				"UNSTOPPABLE!",
+				"GODLIKE!",
+				"LEGENDARY!",
+			]),
+			posY: 380, // vp — clear of the HUD panels above and every enemy type's resting height (~210-290), so it never visually collides with either
+			font: '400 40px "Audiowide", "Courier New", monospace',
+			subFont: '400 18px "Audiowide", "Courier New", monospace',
+			color: "#FF7A45", // same hot-streak orange as Config.hud.combo — one consistent "combo" color across both the small readout and this banner
+			glowBlur: 18,
+			subOffsetY: 34, // vp below the main line, for the "×N COMBO" line
+			popDuration: 0.22, // seconds — bounce-in (see core/animation.js's easeOutBack)
+			popOvershoot: 2.4, // easeOutBack overshoot factor — a punchier bounce than easeOutBack's own 1.7 default, since this is a celebration cue
+			holdDuration: 0.85, // seconds at full scale before fading
+			fadeOutDuration: 0.35,
+			// Same "weak transmission" flicker technique as Config.level's own
+			// hold phase (see core/animation.js's flickerAlpha), tuned faster/
+			// shallower so it reads as "crackling with energy" rather than
+			// "signal barely holding together."
+			flickerFreqs: Object.freeze([9.1, 17.3, 26.7]),
+			flickerPhases: Object.freeze([1.3, 0.5]),
+			flickerBase: 0.9,
+			flickerDepth: 0.5,
+		}),
 	}),
 
 	/**
@@ -2864,7 +2912,7 @@ export const Config = Object.freeze({
 		// the front) — canonical shipped values are `everyNLevels: 7` and
 		// roster starting with 'scout1'; revert before shipping. `nova` is
 		// appended at the end regardless, so it's in rotation either way.
-		everyNLevels: 1,
+		everyNLevels: 3,
 		roster: Object.freeze([
 			"zigzag",
 			"pulsor",
