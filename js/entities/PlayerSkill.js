@@ -1,8 +1,9 @@
 /**
  * PlayerSkill.js
  * The player's single special skill button: a "bomb" that instantly kills
- * every regular enemy currently on screen, and deals a heavy but capped
- * (never-lethal) hit to a boss instead (see WaveManager.triggerSkillBomb),
+ * every regular enemy currently on screen, deals a heavy but capped
+ * (never-lethal) hit to a boss instead, and wipes every enemy projectile
+ * on screen (see WaveManager.triggerSkillBomb/_clearEnemyProjectiles),
  * sitting bottom-right just above the barrier, on a flat cooldown after
  * use — see Config.playerSkill.
  *

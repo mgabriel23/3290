@@ -1035,8 +1035,16 @@ export class WaveManager {
    * `_applySkillBombToBoss`) and lives to keep fighting. "On screen" is a
    * plain bounds check against Config.virtual — an enemy still off-screen
    * (mid entry-glide, or a Drifter clone that hasn't reached the play area
-   * yet, see DrifterEnemy's own `_visible`) is untouched, and so are any
-   * already-fired enemy projectiles (this clears enemies, not bullets).
+   * yet, see DrifterEnemy's own `_visible`) is untouched.
+   *
+   * Every already-fired enemy projectile (bullets, rockets, drifter orbs,
+   * every boss's own bullet pool) is also wiped via `_clearEnemyProjectiles`
+   * — same "screen-clearing bomb" read as the enemy wipe, and it's what
+   * actually saves the player from an unavoidable wall of bullets left
+   * behind by enemies that just died. Gated behind the same "did the bomb
+   * actually do something" check as the cooldown/shake below, so tapping it
+   * at a genuinely empty screen can't be used to free-clear bullets without
+   * spending the cooldown.
    *
    * `damage` is an arbitrarily large multiplier on `_playerDamage` rather
    * than reading each enemy's own health field directly — every enemy type
@@ -1068,7 +1076,31 @@ export class WaveManager {
       }
       if (this.handleBulletHit(e, SKILL_LETHAL_MULTIPLIER)) killCount++;
     }
+    if (killCount > 0 || hitBoss) this._clearEnemyProjectiles();
     return { killCount, hitBoss };
+  }
+
+  /**
+   * Wipes every enemy projectile pool at once — every enemy bullet/rocket/
+   * orb type in the game, including each boss's own bullet pool — by
+   * dropping its pool's `_count` to 0 via `clear()` (see each pool class,
+   * e.g. Rockets.js/EnemyBullet.js). Bullets simply vanish rather than
+   * detonating in place (no per-projectile `onDetonate`/particle burst);
+   * a screen-clearing bomb reads as "the threat is gone", not another wave
+   * of small explosions layered on top of the boss/enemy-kill feedback that
+   * already just fired. Only called from `triggerSkillBomb`.
+   */
+  _clearEnemyProjectiles() {
+    this._enemyBullets.clear();
+    this._sniperBullets.clear();
+    this._spiralBullets.clear();
+    this._tetraBullets.clear();
+    this._novaBullets.clear();
+    this._novaSeedBullets.clear();
+    this._pulsorBullets.clear();
+    this._zigzagBullets.clear();
+    this._rockets.clear();
+    this._drifterProjectiles.clear();
   }
 
   /**
@@ -1076,7 +1108,13 @@ export class WaveManager {
    * capped so it can never be the killing blow — reuses handleBulletHit
    * (so a boss's own on-hit mechanics, e.g. Bouncer Primal's summon roll,
    * still fire normally) by expressing the capped raw damage as an
-   * equivalent `_playerDamage` multiplier.
+   * equivalent `_playerDamage` multiplier. Since handleBulletHit only emits
+   * its explosion/SFX feedback on an actually-fatal hit (see its `killed`
+   * branch) and this hit is deliberately never fatal, that feedback is
+   * reproduced here by hand — same `_bossParticles` shockwave-rings-plus-
+   * sparks burst and explosion SFX a real kill gets, at the boss's current
+   * position — so a quarter of its health vanishing reads as a real,
+   * violent impact rather than the bar silently dropping.
    * @returns {boolean} true if any damage was actually dealt (false only
    *   if the boss was already down to 1 health, an edge case the normal
    *   bullet-kill path will finish off next hit)
@@ -1087,6 +1125,8 @@ export class WaveManager {
     const damage = Math.min(Config.boss.skillBombDamageFrac * maxHealth, currentHealth - 1);
     if (damage <= 0) return false;
     this.handleBulletHit(boss, damage / this._playerDamage);
+    this._bossParticles.emit(boss.x, boss.y);
+    this._playExplosionSfx(this._bossCfg.audio.volume);
     return true;
   }
 

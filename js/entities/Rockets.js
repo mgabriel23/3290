@@ -264,4 +264,7 @@ export class Rockets {
 
   /** True while any rocket is still in flight — used by WaveManager.isDone. */
   get active() { return this._count > 0; }
+
+  /** Instantly discards every in-flight rocket — used by the player's skill bomb (WaveManager.triggerSkillBomb). */
+  clear() { this._count = 0; }
 }

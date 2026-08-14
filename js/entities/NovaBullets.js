@@ -71,6 +71,9 @@ export class NovaBullets {
   /** True while any fragment is still in flight — used by WaveManager.isDone. */
   get active() { return this._count > 0; }
 
+  /** Instantly discards every in-flight fragment — used by the player's skill bomb (WaveManager.triggerSkillBomb). */
+  clear() { this._count = 0; }
+
   /**
    * Test whether any active fragment is within `radius` virtual px of
    * `(px, py)`. If one is found, remove it (compact swap) and return

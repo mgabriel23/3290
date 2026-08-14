@@ -4500,8 +4500,12 @@ export const Config = Object.freeze({
 	 * its own max health) instead of dying outright, so the button stays a
 	 * strong assist rather than a fight-skipping button.
 	 * Enemies still off-screen (mid entry-glide, or a Drifter clone that
-	 * hasn't reached the play area yet) are untouched, and so are any
-	 * already-fired enemy projectiles — this clears enemies, not bullets.
+	 * hasn't reached the play area yet) are untouched. Every already-fired
+	 * enemy projectile on screen (bullets, rockets, drifter orbs, every
+	 * boss's own bullet pool) is also wiped — see
+	 * WaveManager._clearEnemyProjectiles — so the bomb doubles as a panic
+	 * button against an unavoidable wall of enemy fire, not just a kill
+	 * button.
 	 * PlayerSkill.js owns just the button/cooldown itself (mirrors
 	 * PlaybackControls' buttons); GameplayScene decides what happens when
 	 * it's actually tapped.

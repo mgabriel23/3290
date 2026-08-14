@@ -69,6 +69,9 @@ export class PulsorBullets {
   /** True while any pulse is still in flight — used by WaveManager.isDone. */
   get active() { return this._count > 0; }
 
+  /** Instantly discards every in-flight pulse — used by the player's skill bomb (WaveManager.triggerSkillBomb). */
+  clear() { this._count = 0; }
+
   /**
    * Test whether any active pulse is within `radius` virtual px of `(px, py)`.
    * If one is found, remove it (compact swap) and return `true` — same

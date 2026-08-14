@@ -120,6 +120,9 @@ export class NovaSeedBullets {
   /** True while any seed is still in flight — used by WaveManager.isDone. */
   get active() { return this._count > 0; }
 
+  /** Instantly discards every in-flight seed — used by the player's skill bomb (WaveManager.triggerSkillBomb). */
+  clear() { this._count = 0; }
+
   /**
    * Test whether any active seed is within `radius` virtual px of `(px, py)`
    * — a direct hit consumes it (no burst) — same swap-remove-on-hit shape
