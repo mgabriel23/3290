@@ -28,6 +28,7 @@
  * reasoning as PowerUps.js's own class doc.
  */
 import { Config } from '../core/Config.js';
+import { starPath } from '../core/shapes.js';
 
 const MAX = Config.gold.poolSize;
 
@@ -40,6 +41,10 @@ export class GoldPickups {
     this._age   = new Float32Array(MAX);
     this._value = new Float32Array(MAX);
     this._count = 0;
+
+    // Stamped star emblem, local-space, centered on the origin — repositioned
+    // onto each coin at render time via fillStrokePaths' own {x, y} transform.
+    this._starPath = starPath(0, 0, Config.gold.radius * 0.48, Config.gold.radius * 0.2);
   }
 
   /**
@@ -134,21 +139,40 @@ export class GoldPickups {
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
     if (this._count === 0) return;
-    const { radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, maxLife, expireFadeDuration, color, fillColor } = Config.gold;
+    const {
+      radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, maxLife, expireFadeDuration,
+      color, fillColor, highlightColor, shadeColor,
+    } = Config.gold;
     for (let i = 0; i < this._count; i++) {
       const x = this._x[i], y = this._y[i];
-      const pulseAlpha = 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._age[i] * pulseSpeed));
+      const age = this._age[i];
       // Fades to fully transparent over the last `expireFadeDuration` seconds
       // before despawn — a visible "about to vanish" cue instead of an
       // abrupt pop once `update` culls it at maxLife.
-      const timeLeft = maxLife - this._age[i];
+      const timeLeft = maxLife - age;
       const expireAlpha = timeLeft < expireFadeDuration ? Math.max(0, timeLeft / expireFadeDuration) : 1;
-      const alpha = pulseAlpha * expireAlpha;
+      // Only the rim glints/pulses (see Config.gold.pulseSpeed's own comment)
+      // — the coin body itself stays solid so it reads as a physical object,
+      // not a breathing magic orb like PowerUps.
+      const rimAlpha = expireAlpha * (1 - pulseDepth * (0.5 + 0.5 * Math.sin(age * pulseSpeed)));
 
-      renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor, alpha });
-      renderer.strokeCircle(x, y, radius, { color, lineWidth, glowBlur, alpha });
-      // Inner bezel ring — reads as a coin at a glance, distinct from every PowerUps icon.
-      renderer.strokeCircle(x, y, radius * 0.55, { color, lineWidth, alpha });
+      // Solid metallic body.
+      renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor, alpha: expireAlpha });
+      // Stamped star emblem — dark antique-gold engraving, unmistakably
+      // "coin" rather than the plain concentric ring this used to be.
+      renderer.fillStrokePaths([this._starPath], {
+        x, y, fillColor: shadeColor, strokeColor: shadeColor, lineWidth: 1, alpha: expireAlpha,
+      });
+      // Glossy specular highlight, slowly drifting across the face — like
+      // light catching a softly tumbling coin.
+      const hlAngle = age * pulseSpeed * 0.4;
+      renderer.fillEllipse(
+        Math.cos(hlAngle) * radius * 0.32, Math.sin(hlAngle) * radius * 0.32,
+        radius * 0.3, radius * 0.2,
+        { x, y, fillColor: highlightColor, alpha: expireAlpha * 0.5 },
+      );
+      // Bright glinting rim + glow — the "pick me up" silhouette against a busy starfield.
+      renderer.strokeCircle(x, y, radius, { color, lineWidth, glowBlur, alpha: rimAlpha });
     }
   }
 }

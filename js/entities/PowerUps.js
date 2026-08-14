@@ -3,9 +3,10 @@
  * Pool of collectible pickups left behind by a percentage of enemy kills
  * (see WaveManager.handleBulletHit/_maybeDropPowerUp) — small falling orbs
  * the player flies through to restore health, either their own or the
- * barrier's. Only two kinds exist, distinguished by color and an inner icon:
- * a "+" cross for a player-health pickup, the same diamond emblem Barrier.js
- * draws at its own peak for a shield pickup (see Config.powerUps).
+ * barrier's. Only two kinds exist, distinguished by color and a filled inner
+ * icon badge: a "+" cross for a player-health pickup, the same diamond
+ * emblem Barrier.js draws at its own peak for a shield pickup (see
+ * Config.powerUps).
  *
  * Each pickup launches from its spawn point at a random angle/speed that
  * decays via drag (same burst-then-settle shape as Particles.js' spark
@@ -33,10 +34,11 @@
  * buffs rather than an instant restore — this pool only spawns/falls/gets
  * collected like the other two; PowerUps.js itself has no notion of
  * "temporary," it's PowerUps-agnostic about what collecting one actually
- * does. fireBoost's icon is a small lightning-bolt zigzag; invincible's is
- * a small hexagon ring, echoing the bubble shape it actually draws around
- * the player (see Player._renderInvincibleBubble) — both distinct from
- * health's cross and shield's diamond.
+ * does. fireBoost's icon is a filled lightning-bolt badge; invincible's is
+ * a hexagon ring (deliberately left unfilled — see Config.powerUps.
+ * iconFillColor), echoing the bubble shape it actually draws around the
+ * player (see Player._renderInvincibleBubble) — both distinct from health's
+ * cross and shield's diamond.
  */
 import { Config } from '../core/Config.js';
 import { diamondPath } from '../core/shapes.js';
@@ -54,18 +56,31 @@ export class PowerUps {
     this._count = 0;
 
     // Local-space icon paths, centered on the origin — repositioned onto
-    // each pickup at render time via strokePaths' own {x, y} transform.
+    // each pickup at render time via fillStrokePaths'/strokePaths' own
+    // {x, y} transform. Cross/diamond/bolt are filled closed polygons (not
+    // thin stroked lines) — a bold, solid glyph reads far better at the
+    // small size these render at than an outline does, especially against
+    // a busy starfield. See Config.powerUps.iconFillColor for why they all
+    // share one fill tone.
     const d = Config.powerUps.radius * 0.45;
-    this._crossPaths = [
-      { points: [[-d, 0], [d, 0]], closed: false },
-      { points: [[0, -d], [0, d]], closed: false },
-    ];
+    // A filled plus/cross badge — the standard 12-point "medkit" cross outline.
+    const t = d * 0.35; // half-thickness of each arm
+    this._crossPath = {
+      points: [
+        [-t, -d], [t, -d], [t, -t],
+        [d, -t], [d, t], [t, t],
+        [t, d], [-t, d], [-t, t],
+        [-d, t], [-d, -t], [-t, -t],
+      ],
+    };
     this._diamondPath = diamondPath(0, 0, Config.powerUps.radius * 0.5);
-    // A small lightning-bolt zigzag, top to bottom.
-    this._boltPath = [{
-      points: [[-d * 0.3, -d], [d * 0.35, -d * 0.1], [-d * 0.1, d * 0.15], [d * 0.3, d]],
-      closed: false,
-    }];
+    // A filled lightning-bolt badge, top to bottom.
+    this._boltPath = {
+      points: [
+        [d * 0.15, -d], [-d * 0.55, d * 0.05], [-d * 0.05, d * 0.05],
+        [-d * 0.15, d], [d * 0.55, -d * 0.05], [d * 0.05, -d * 0.05],
+      ],
+    };
     // A small hexagon ring — six points evenly spaced around the origin.
     const hexPts = [];
     for (let i = 0; i < 6; i++) {
@@ -167,7 +182,7 @@ export class PowerUps {
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
     if (this._count === 0) return;
-    const { radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, maxLife, expireFadeDuration, health, shield, fireBoost, invincible } = Config.powerUps;
+    const { radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, maxLife, expireFadeDuration, iconFillColor, health, shield, fireBoost, invincible } = Config.powerUps;
     for (let i = 0; i < this._count; i++) {
       const type  = this._type[i];
       const cfg   = type === 'shield' ? shield : type === 'fireBoost' ? fireBoost : type === 'invincible' ? invincible : health;
@@ -184,13 +199,17 @@ export class PowerUps {
       renderer.strokeCircle(x, y, radius, { color: cfg.color, lineWidth, glowBlur, alpha });
 
       if (type === 'shield') {
-        renderer.strokePaths([this._diamondPath], { x, y, color: cfg.color, lineWidth, alpha });
+        renderer.fillStrokePaths([this._diamondPath], { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
       } else if (type === 'fireBoost') {
-        renderer.strokePaths(this._boltPath, { x, y, color: cfg.color, lineWidth, alpha, lineCap: 'round' });
+        renderer.fillStrokePaths([this._boltPath], { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
       } else if (type === 'invincible') {
-        renderer.strokePaths([this._hexPath], { x, y, color: cfg.color, lineWidth, alpha });
+        // Left as an outline-only ring (not filled, unlike the other three)
+        // — see Config.powerUps.iconFillColor's own comment for why — with a
+        // slightly bolder stroke + soft glow so it still reads with equal
+        // visual weight next to the filled badges.
+        renderer.strokePaths([this._hexPath], { x, y, color: cfg.color, lineWidth: lineWidth * 1.4, glowBlur: glowBlur * 0.5, alpha });
       } else {
-        renderer.strokePaths(this._crossPaths, { x, y, color: cfg.color, lineWidth, alpha });
+        renderer.fillStrokePaths([this._crossPath], { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
       }
     }
   }

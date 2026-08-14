@@ -24,6 +24,21 @@ export function diamondPath(cx, cy, d) {
 }
 
 /**
+ * A five-pointed star centered at (cx, cy), alternating `outerR`/`innerR`
+ * radii per vertex — a stamped-emblem glyph that reads as "valuable" at a
+ * glance. Used as the gold coin's engraved face (see GoldPickups.render).
+ */
+export function starPath(cx, cy, outerR, innerR) {
+  const points = [];
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const a = (Math.PI / 5) * i - Math.PI / 2;
+    points.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+  }
+  return { points };
+}
+
+/**
  * A small heartbeat/ECG pulse trace centered at (cx, cy), spanning roughly
  * ±d — reads as "life restored," distinct from every other HUD/PowerUps
  * icon glyph. Used by GameplayScene's REVIVE button medallion.

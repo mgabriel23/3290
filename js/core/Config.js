@@ -1626,27 +1626,36 @@ export const Config = Object.freeze({
 		glowBlur: 10,
 		pulseSpeed: 3.0, // rad/sec — gentle "alive" breathing alpha, distinct from the low-health warning pulses (faster/deeper elsewhere)
 		pulseDepth: 0.25,
+		// Every icon glyph below (cross/diamond/bolt) fills with this single
+		// near-white tone rather than each type's own hue — "colored orb +
+		// white glyph" reads far more clearly at small mobile sizes than a
+		// thin same-hue-on-same-hue outline did, and keeps the glyph SHAPE
+		// (what it does) legible independent of the orb's color (which type
+		// it is). invincible's hex stays an outline-only ring on purpose —
+		// see its own comment below — so it doesn't use this.
+		iconFillColor: "#F5FFFA",
 
 		// Soft green — deliberately distinct from Diver's neon green
 		// (#39ff14) and every other enemy hue, so a pickup never reads as
-		// another threat. Icon: a "+" cross, the universal health-restore glyph.
+		// another threat. Icon: a filled "+" cross badge, the universal
+		// health-restore glyph.
 		health: Object.freeze({
 			color: "#4DFF8A",
 			fillColor: "#0a2a16",
 			healAmount: 25, // player HP restored — see Config.player.maxHealth
 		}),
 		// Same cyan as Barrier/its SHIELD readout on purpose — this pickup
-		// visually reads as "the barrier's own color" at a glance. Icon: the
-		// same diamond emblem Barrier draws at its own peak (see
-		// core/shapes.js's diamondPath) — a deliberate echo of "this restores
-		// THAT".
+		// visually reads as "the barrier's own color" at a glance. Icon: a
+		// filled version of the same diamond emblem Barrier draws at its own
+		// peak (see core/shapes.js's diamondPath) — a deliberate echo of
+		// "this restores THAT".
 		shield: Object.freeze({
 			color: "#4DEFFF",
 			fillColor: "#0a2530",
 			healAmount: 20, // Barrier HP restored — see Config.barrier.maxHealth
 		}),
 		// Warm gold — reads as "energy/attack", distinct from every enemy hue
-		// and the other two pickups. Icon: a small lightning-bolt zigzag.
+		// and the other two pickups. Icon: a filled lightning-bolt badge.
 		// Temporary, not an instant restore: boosts both player bullet damage
 		// (WaveManager._playerDamage) and Bullets' fire rate by the same
 		// `multiplier` for `duration` seconds — see GameplayScene's
@@ -1660,9 +1669,11 @@ export const Config = Object.freeze({
 			duration: 25, // seconds
 		}),
 		// Pale ice-white — reads as "protective energy field," distinct from
-		// every enemy hue and the other three pickups. Icon: a small hexagon
-		// ring, echoing the bubble shape the effect actually draws around the
-		// ship (see Player._renderInvincibleBubble). Temporary, not an instant
+		// every enemy hue and the other three pickups. Icon: a hexagon RING
+		// (unlike the other three, deliberately left unfilled — see
+		// iconFillColor's own comment above), echoing the bubble shape the
+		// effect actually draws around the ship (see
+		// Player._renderInvincibleBubble). Temporary, not an instant
 		// effect: while `Player._invincibleTimer` is running, takeDamage
 		// ignores every hit outright (see Player.activateInvincibility) — a
 		// repeat pickup REFRESHES that timer back to the full duration, same
@@ -1711,15 +1722,23 @@ export const Config = Object.freeze({
 		radius: 12, // vp — outer circle size, slightly smaller than a powerUp orb so a swarm of coins doesn't visually compete with them
 		lineWidth: 2,
 		glowBlur: 10,
-		pulseSpeed: 3.0, // same gentle "alive" breathing alpha as Config.powerUps
+		// Unlike Config.powerUps' pulse (which breathes the WHOLE orb's alpha —
+		// right for a magic energy effect), only the rim glint pulses here — see
+		// GoldPickups.render. A physical coin shouldn't flicker in and out like a
+		// spell effect, so pulseSpeed/pulseDepth below drive just that glint.
+		pulseSpeed: 3.0,
 		pulseDepth: 0.25,
 
-		// Bright coin-gold, distinct enough from Config.powerUps.fireBoost's
-		// warm-gold (#FFD24D) to tell apart at a glance despite both reading
-		// "gold" — this one's icon (a concentric inner ring, see
-		// GoldPickups.render) is a coin, not a lightning bolt.
-		color: "#FFD700",
-		fillColor: "#332504",
+		// A proper metallic gold palette instead of a single flat hue — a solid
+		// mid-gold body, a brighter glinting rim, a pale specular highlight, and
+		// a deep antique-bronze for the stamped emblem/emboss. This is what
+		// actually reads as "gold coin" at a glance rather than "colored orb"
+		// (the old fillColor was a near-black wash, so only the thin outline
+		// carried any gold color at all — see GoldPickups.render).
+		color: "#FFDE59",       // bright rim/glint — distinct from Config.powerUps.fireBoost's warm-gold (#FFD24D)
+		fillColor: "#E7B740",   // solid coin body
+		highlightColor: "#FFF6DC", // pale specular shine, drifts slowly across the face
+		shadeColor: "#8A5A12",  // dark antique-gold — stamped star emblem + inner emboss
 	}),
 
 	/**
