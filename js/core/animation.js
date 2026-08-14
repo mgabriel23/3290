@@ -16,6 +16,18 @@ export function easeInCubic(t) {
 }
 
 /**
+ * Ease-out back: overshoots past 1 before settling — a "pop" a plain
+ * ease-out reads as flat, used for reveal/celebration UI (e.g. a reward
+ * card scaling in) rather than gameplay motion. Standard easings.net
+ * formula; `overshoot` controls how far past 1 the curve swings before
+ * settling back.
+ */
+export function easeOutBack(t, overshoot = 1.7) {
+  const c3 = overshoot + 1;
+  return 1 + c3 * (t - 1) ** 3 + overshoot * (t - 1) ** 2;
+}
+
+/**
  * Three incommensurate sine/cosine waves summed together — their
  * interference produces quasi-random "signal-drop" dips without any
  * per-frame randomness (deterministic given `t`, so no extra state is

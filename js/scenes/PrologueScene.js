@@ -64,6 +64,7 @@ import { flickerAlpha } from '../core/animation.js';
 import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { cornerBracketPath, diamondPath } from '../core/shapes.js';
 import { AudioPool } from '../core/AudioPool.js';
+import { DailyRewardPanel } from '../entities/DailyRewardPanel.js';
 
 /** One path-factory per spawnable portal-creature variant — see _spawnCreature. */
 const _CREATURE_PATH_FACTORIES = {
@@ -123,6 +124,14 @@ export class PrologueScene {
     this._blipPool = new AudioPool(Config.prologue.briefing.blip.src, 8, Config.prologue.briefing.blip.volume);
 
     this._initTitleGeometry(); // pre-allocate all title-beat paths and bounds — see _initTitleGeometry
+
+    // Once-a-day reward popup, gated to the 'title' beat below (see
+    // update/handleTap/render's 'title' cases) — constructed up front like
+    // every other piece of this scene rather than lazily on first reaching
+    // that beat, so a devSkipToTitle boot (or SKIP) sees it immediately.
+    // Its own `isOpen` is false from construction if today's reward is
+    // already claimed, so this is a no-op on every visit after the first.
+    this._dailyRewardPanel = new DailyRewardPanel(renderer);
   }
 
   /** Advance whichever beat is current; each one decides for itself when it's done. */
@@ -144,7 +153,10 @@ export class PrologueScene {
       case 'portals': return this._updatePortals();
       case 'briefing': return this._updateBriefing(dt);
       case 'fadeOut': return this._updateFadeOut();
-      case 'title': return; // waits for a tap on PLAY — see handleTap
+      // Waits for a tap on PLAY (or the daily-reward CLAIM button, if one is
+      // showing) — see handleTap. The panel only has anything to animate
+      // (its fade-in/CLAIM pulse) while it's actually open.
+      case 'title': return this._dailyRewardPanel.update(dt);
       case 'skipFade': return this._updateSkipFade();
       case 'exitFade': return this._updateExitFade();
     }
@@ -152,11 +164,15 @@ export class PrologueScene {
 
   /**
    * The two mode buttons are the only interactive elements once the title
-   * beat arrives. Before that, SKIP is live on every beat — see
-   * `_canSkip`/`_isInsideSkipButton`.
+   * beat arrives — EXCEPT while the daily-reward popup is still open, which
+   * sits on top of them and must claim the tap itself (same "explicit
+   * button only" dismissal Shop.js uses) rather than letting it fall
+   * through to a mode button underneath. Before the title beat, SKIP is
+   * live on every beat — see `_canSkip`/`_isInsideSkipButton`.
    */
   handleTap(x, y) {
     if (this._beat === 'title') {
+      if (this._dailyRewardPanel.isOpen) { this._dailyRewardPanel.handleTap(x, y); return; }
       let mode = null;
       if (this._isInsideMissionButton(x, y)) mode = 'mission';
       else if (this._isInsideSurvivalButton(x, y)) mode = 'survival';
@@ -183,7 +199,15 @@ export class PrologueScene {
       case 'portals':  this._renderPortals();  return this._renderSkipButton();
       case 'briefing': this._renderBriefing(); return this._renderSkipButton();
       case 'fadeOut':  this._renderFadeOut();  return this._renderSkipButton();
-      case 'title': return this._renderTitle();
+      // Mutually exclusive with the title/mode buttons — see
+      // DailyRewardPanel's class doc for why this is its own full screen
+      // rather than a modal drawn on top of them. Once claimed (this
+      // session or a previous one today), the title renders normally plus
+      // a small reminder that a fresh reward is waiting tomorrow.
+      case 'title':
+        if (this._dailyRewardPanel.isOpen) return this._dailyRewardPanel.render(this.renderer);
+        this._renderTitle();
+        return this._renderDailyRewardBadge();
       case 'skipFade': return this._renderSkipFade();
       case 'exitFade': return this._renderExitFade();
     }
@@ -695,6 +719,20 @@ export class PrologueScene {
 
     this.renderer.strokePaths(this._survivalButtonPaths, { color, lineWidth, glowBlur, alpha: btnAlpha });
     this.renderer.drawText(survivalLabel, this._buttonCX, this._survivalButtonCY, { font, color, alpha: btnAlpha });
+  }
+
+  /**
+   * Small always-dim reminder that today's reward is already claimed —
+   * without this, a returning player who claimed earlier today would have
+   * no on-screen sign the daily-reward system exists at all until
+   * tomorrow's popup happens to catch them. Drawn UNDER the mode buttons'
+   * own vertical space (see Config.dailyReward.claimedBadge.y), low alpha
+   * so it reads as a footnote, not a competing control.
+   */
+  _renderDailyRewardBadge() {
+    const cfg = Config.dailyReward.claimedBadge;
+    const { width: vW } = Config.virtual;
+    this.renderer.drawText(cfg.text, vW / 2, cfg.y, { font: cfg.font, color: cfg.color, alpha: cfg.alpha });
   }
 
   // --- Beat 6: exit fade (a mode button tapped → black → onContinue) -----------------

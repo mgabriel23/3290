@@ -183,10 +183,12 @@ export class WaveManager {
    * @param {import('../core/ScreenShake.js').ScreenShake} screenShake  triggered on barrier impacts — see the onBarrierHit closure below; kill-triggered shake/hit-stop instead lives in GameplayScene, driven by handleBulletHit's return value
    * @param {import('./PowerUps.js').PowerUps} powerUps  owned by GameplayScene, not this class — a fresh WaveManager is constructed every level, but an uncollected pickup shouldn't vanish with the old one, so the SAME pool instance is handed to each new WaveManager across level transitions. See GoldPickups' own param for why.
    * @param {import('./GoldPickups.js').GoldPickups} goldPickups  same cross-level-survival reasoning as `powerUps` above
+   * @param {number} [dropChanceMultiplier]  multiplies both Config.powerUps.dropChance and Config.gold.dropChance for this WaveManager's whole lifetime — see _maybeDropPowerUp/_maybeDropGold. Defaults to 1 (no change); GameplayScene passes a boosted value for a run that claimed a Lucky Drop daily reward (see Config.dailyReward.luckyDrop, core/DailyReward.js's consumeLuckyDrop).
    */
-  constructor(level, barrier, hud, screenShake, powerUps, goldPickups) {
+  constructor(level, barrier, hud, screenShake, powerUps, goldPickups, dropChanceMultiplier = 1) {
     this._hud     = hud;
     this._barrier = barrier; // direct reference — needed by checkPowerUpPickup to heal it outside the onBarrierHit closure below
+    this._dropChanceMultiplier = dropChanceMultiplier;
 
     this._resolveLevelAndBoss(level);
     this._buildBarrierCallbacks(barrier, screenShake);
@@ -840,7 +842,7 @@ export class WaveManager {
    * failing to intercept it, not a kill worth rewarding.
    */
   _maybeDropPowerUp(x, y) {
-    if (Math.random() >= Config.powerUps.dropChance) return;
+    if (Math.random() >= Config.powerUps.dropChance * this._dropChanceMultiplier) return;
     this._spawnRandomPowerUp(x, y);
   }
 
@@ -853,7 +855,7 @@ export class WaveManager {
    * @param {number} x @param {number} y @param {number} value  gold amount from _rewardFor
    */
   _maybeDropGold(x, y, value) {
-    if (Math.random() >= Config.gold.dropChance) return;
+    if (Math.random() >= Config.gold.dropChance * this._dropChanceMultiplier) return;
     this._goldPickups.spawn(x, y, value);
   }
 

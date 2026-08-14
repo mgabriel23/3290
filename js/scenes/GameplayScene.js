@@ -141,6 +141,7 @@ import { flickerAlpha } from '../core/animation.js';
 import { AudioPool } from '../core/AudioPool.js';
 import { cornerBracketPath } from '../core/shapes.js';
 import { ScreenShake } from '../core/ScreenShake.js';
+import { consumeLuckyDrop, consumeShieldStart } from '../core/DailyReward.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
 import { EnemyCodex } from '../entities/EnemyCodex.js';
@@ -195,6 +196,13 @@ export class GameplayScene {
     this.starfield = new Starfield();
     this.barrier = new Barrier();
     this.player = new Player();
+    // Daily-reward one-shot flags, each consumed (cleared) exactly once
+    // here — see core/DailyReward.js's own doc. Both are no-ops (false)
+    // unless the player claimed that specific reward on today's title
+    // card, and clearing on read means a restart via onGameOver (a brand
+    // new GameplayScene, same as this one) never re-applies either bonus.
+    if (consumeShieldStart()) this.player.activateInvincibility(Config.dailyReward.shieldStart.duration);
+    this._dropChanceMultiplier = consumeLuckyDrop() ? Config.dailyReward.luckyDrop.dropChanceMultiplier : 1;
     this.bullets = new Bullets();
     this.hud = new HUD();
     // Owned here, not by WaveManager, even though only WaveManager spawns
@@ -298,7 +306,7 @@ export class GameplayScene {
     // Transition from intro → active once the indicator animation is done
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
       this._levelState  = 'active';
-      this._waveManager = new WaveManager(this._level, this.barrier, this.hud, this._screenShake, this._powerUps, this._goldPickups);
+      this._waveManager = new WaveManager(this._level, this.barrier, this.hud, this._screenShake, this._powerUps, this._goldPickups, this._dropChanceMultiplier);
     }
 
     this.barrier.update(effectiveDt);

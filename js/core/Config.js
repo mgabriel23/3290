@@ -689,6 +689,174 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * Daily Reward — a once-a-day random bonus (see entities/DailyRewardPanel.js
+	 * and core/DailyReward.js for the roll/persistence logic; PrologueScene
+	 * composes the panel and gates it to its 'title' beat). Exactly one of
+	 * three kinds is rolled per calendar day (local time, not UTC — this is
+	 * "today" from the player's own clock): an instant gold credit straight
+	 * to the persistent wallet, a "lucky drop" that raises the player's NEXT
+	 * run's power-up/gold drop odds, or a "shield start" that opens the NEXT
+	 * run with a few seconds of invincibility already active (reusing
+	 * Player.activateInvincibility, the same effect the `invincible` PowerUp
+	 * grants).
+	 *
+	 * Deliberately its own full-screen reveal rather than a modal drawn on
+	 * top of the title card — PrologueScene renders EITHER this OR the
+	 * title/mode buttons for the 'title' beat, never both, so the two never
+	 * visually compete or invite a mis-tap through a dimmed button
+	 * underneath. Closing is only via the explicit CLAIM button (no
+	 * background dismiss), same principle as Shop's popup.
+	 *
+	 * Juice, so the moment actually reads as "a reward" rather than a
+	 * settings dialog: the whole screen rises up out of a black veil on
+	 * entrance (`entranceDuration` — the exact same clear-with-alpha
+	 * technique PrologueScene's own fadeOut/skipFade beats use to dissolve
+	 * TO black, just run in reverse, so this reads as a continuation of the
+	 * same cinematic language rather than an unrelated screen just
+	 * appearing) and drops back behind its own short veil on CLAIM
+	 * (`exitDuration`) rather than an instant cut to the title card. The
+	 * card and CLAIM button scale-pop in with an overshoot bounce
+	 * (core/animation.js's easeOutBack, CLAIM staggered slightly behind the
+	 * card), a soft pulsing color halo breathes behind the card, and a
+	 * one-shot colored spark burst (entities/Particles.js — the same pooled
+	 * effect every enemy death already uses) fires the instant the screen
+	 * appears. Each reward also gets its own small vector icon (see
+	 * DailyRewardPanel._renderIcon) instead of relying on text alone to
+	 * tell the three kinds apart at a glance.
+	 */
+	dailyReward: Object.freeze({
+		fadeInDuration: 0.3,
+		entranceDuration: 0.6, // seconds for the black veil to lift on arrival
+		exitDuration: 0.4, // seconds for the veil to fall again once CLAIM is tapped, before control returns to the title card
+		popInDuration: 0.5, // seconds for the card/icon/CLAIM button's ease-out-back scale pop
+		popInOvershoot: 1.7, // core/animation.js's easeOutBack overshoot factor — how far past full size the pop bounces before settling
+		claimStagger: 0.18, // seconds after the card starts popping in before CLAIM starts its own — a small "beat 2" instead of everything landing at once
+
+		titleText: "DAILY LOGIN REWARD",
+		titleFont: '400 24px "Audiowide", "Courier New", monospace',
+		titleColor: "#4DEFFF",
+		titleY: 190,
+		titleGlowBlur: 12,
+
+		// Tells the player up front that this isn't a one-off — the whole
+		// point of "inform that daily login can have rewards."
+		subtitleText: "COME BACK EVERY DAY FOR A NEW BONUS",
+		subtitleFont: '400 13px "Courier New", monospace',
+		subtitleColor: "#aab4d4",
+		subtitleY: 226,
+
+		// Faint decorative rules bracketing the whole reveal, same HRule+
+		// diamond chrome vocabulary as the title card's own (see
+		// Config.prologue.title) so this still reads as part of the same
+		// game — just its own dedicated moment, not a popup fighting the
+		// title/mode buttons for space underneath it.
+		chromeColor: "#4DEFFF",
+		chromeAlpha: 0.35,
+		chromeLineWidth: 1,
+		chromeMarginX: 60,
+		topRuleY: 130,
+		bottomRuleY: 860,
+
+		// Corner-bracket-framed card (same chrome motif as Shop's item cards),
+		// its OWN paths built in local (center-relative) coordinates — see
+		// DailyRewardPanel._buildCardPaths — specifically so the pop-in scale
+		// animation can transform it around its true center via
+		// Renderer.strokePaths' {x, y, scale} rather than the canvas origin.
+		cardWidth: 360,
+		cardHeight: 220,
+		cardCenterY: 520,
+		cardLegSize: 18,
+		cardLineWidth: 2,
+		cardGlowBlur: 10,
+
+		// A soft, slow-breathing halo behind the card in the reward's own
+		// color — several concentric rings rather than one, since a single
+		// stroked circle at low alpha reads as a thin ring, not a glow.
+		haloRingCount: 3,
+		haloBaseRadius: 130,
+		haloRingSpacing: 26,
+		haloPulseSpeed: 1.4,
+		haloAlpha: 0.1,
+
+		// The reward's icon "medallion" — a filled+stroked circle straddling
+		// the card's top edge (like an achievement badge), tinted to the
+		// rolled reward's own color, with a small glyph inside distinguishing
+		// which of the 3 it is — see DailyRewardPanel._renderIcon.
+		iconBadge: Object.freeze({
+			radius: 42,
+			lineWidth: 2.5,
+			glowBlur: 14,
+			fillAlpha: 0.18,
+		}),
+
+		nameFont: '400 20px "Audiowide", "Courier New", monospace',
+		valueFont: '400 18px "Audiowide", "Courier New", monospace',
+		descFont: '400 13px "Courier New", monospace',
+		descColor: "#aab4d4",
+		descLineHeight: 18, // vp between wrapped description lines — see DailyRewardPanel's wrapText use
+
+		// Celebratory spark burst (see entities/Particles.js) fired once the
+		// moment this screen appears — same pooled shockwave-ring+spark
+		// effect every enemy death already uses, just centered on the card
+		// instead of an explosion, and tinted to the rolled reward's color.
+		burstSparkCount: 30,
+
+		claimButton: Object.freeze({
+			label: "CLAIM",
+			width: 200,
+			height: 54,
+			legSize: 14,
+			offsetY: 150, // vp below cardCenterY
+			font: '400 18px "Audiowide", "Courier New", monospace',
+			color: "#4DFF8A", // soft green — same "yes, go" read as Config.gameOver.continue's affordable color
+			lineWidth: 2,
+			glowBlur: 12,
+			pulseSpeed: 2.2, // rad/sec — same breathing-alpha idea as Config.prologue.title.modeButtons, so this reads as "the" tappable control on screen
+			pulseDepth: 0.22,
+		}),
+
+		// A small persistent reminder shown ON the title card once today's
+		// reward has already been claimed (see PrologueScene's 'title'
+		// render) — without this, a player who already claimed has no
+		// on-screen cue the daily-reward system exists at all until
+		// tomorrow's popup happens to catch them again.
+		claimedBadge: Object.freeze({
+			text: "DAILY REWARD CLAIMED — COME BACK TOMORROW",
+			font: '400 11px "Courier New", monospace',
+			color: "#aab4d4",
+			alpha: 0.55,
+			y: 900,
+		}),
+
+		// The three possible rolls — REWARD_TYPES in DailyReward.js iterates
+		// this same set of keys, so adding a fourth kind here is the only
+		// change needed to widen the pool (plus whatever consumes its flag).
+		gold: Object.freeze({
+			name: "GOLD BONUS",
+			description: "Instant gold, credited straight to your wallet.",
+			minAmount: 50,
+			maxAmount: 150,
+			color: "#FFD700", // matches Config.gold.color — this reward IS that wallet
+		}),
+		luckyDrop: Object.freeze({
+			name: "LUCKY DROP",
+			description: "Your next run gets boosted power-up and gold drop odds.",
+			// Multiplies Config.powerUps.dropChance (0.1 -> 0.25) AND
+			// Config.gold.dropChance (0.8 -> effectively guaranteed) for one
+			// entire run — see WaveManager's constructor-injected
+			// `dropChanceMultiplier` and GameplayScene's consumeLuckyDrop() call.
+			dropChanceMultiplier: 2.5,
+			color: "#4DFF8A", // soft green — reads as "buff," same as Shop's OWNED color
+		}),
+		shieldStart: Object.freeze({
+			name: "SHIELD START",
+			description: "Your next run begins with a few seconds of invincibility.",
+			duration: 5, // seconds — shorter than a real invincible PowerUp's 15s (Config.powerUps.invincible.duration); this is a head-start grace period, not a full buff
+			color: "#E8F6FF", // matches Config.powerUps.invincible.color
+		}),
+	}),
+
+	/**
 	 * Scout enemy — the first enemy type. Enters from the top, glides to a
 	 * random resting position in the upper third, then fires aimed shots at
 	 * the player on a fixed reload cycle.
