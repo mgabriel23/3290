@@ -22,3 +22,22 @@ export function cornerBracketPath(x, y, dx, dy, legSize) {
 export function diamondPath(cx, cy, d) {
   return { points: [[cx, cy - d], [cx + d, cy], [cx, cy + d], [cx - d, cy]] };
 }
+
+/**
+ * A small heartbeat/ECG pulse trace centered at (cx, cy), spanning roughly
+ * ±d — reads as "life restored," distinct from every other HUD/PowerUps
+ * icon glyph. Used by GameplayScene's REVIVE button medallion.
+ */
+export function heartbeatPath(cx, cy, d) {
+  return {
+    points: [
+      [cx - d, cy],
+      [cx - d * 0.45, cy],
+      [cx - d * 0.2, cy - d * 0.85],
+      [cx + d * 0.05, cy + d * 0.85],
+      [cx + d * 0.3, cy - d * 0.35],
+      [cx + d, cy],
+    ],
+    closed: false,
+  };
+}

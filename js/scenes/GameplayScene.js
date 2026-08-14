@@ -139,7 +139,7 @@
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
 import { AudioPool } from '../core/AudioPool.js';
-import { cornerBracketPath } from '../core/shapes.js';
+import { cornerBracketPath, heartbeatPath } from '../core/shapes.js';
 import { ScreenShake } from '../core/ScreenShake.js';
 import { consumeLuckyDrop, consumeShieldStart } from '../core/DailyReward.js';
 import { Barrier } from '../entities/Barrier.js';
@@ -246,7 +246,12 @@ export class GameplayScene {
     // Game-over overlay — see class doc's "Player damage" note.
     this._isGameOver  = false;
     this._gameOverAge = 0; // seconds since death — drives the explosion delay, overlay fade-in, and the restart-tap debounce
-    this._continuesUsed = 0; // paid revives used THIS run — drives _continueCost()'s escalating price, see _tryRevive
+    this._continuesUsed = 0; // paid revives used THIS run — drives _continueCost()'s escalating price and the maxRevives cap, see _tryRevive
+    // REVIVE button's heartbeat-medallion icon — local-space, centered on
+    // the origin, repositioned onto the button at render time via
+    // strokePaths' own {x, y} transform (same convention as HUD's
+    // _boltPath/_hexIconPath).
+    this._reviveIconPath = heartbeatPath(0, 0, Config.gameOver.continue.iconRadius * 0.55);
     this._playerParticles = new Particles(Config.gameOver.explosionColor, Config.gameOver.explosionSparksPerEmit);
     this._deathExplosionAudio = new AudioPool(Config.gameOver.explosionAudioSrc, 4, Config.gameOver.explosionVolume);
     this._gameOverAudio = new AudioPool(Config.gameOver.audioSrc, 4, Config.gameOver.audioVolume);
@@ -500,8 +505,11 @@ export class GameplayScene {
    * reinterpreted as input; mission-complete has no equivalent guard since
    * nothing fatal just happened. Once past that delay, game-over's REVIVE
    * button (see `_tryRevive`) wins if tapped — resuming THIS run in place —
-   * otherwise any other tap restarts, same as before; mission-complete has
-   * no such button, any tap just continues (`onMissionComplete`). Otherwise:
+   * a near-miss just outside it (`_isNearReviveButton`'s padding, see
+   * Config.gameOver.continue.deadZonePadding) is swallowed rather than
+   * read as "restart," so a fat-fingered tap at the CTA can't accidentally
+   * end the run; any OTHER tap restarts, same as before. Mission-complete
+   * has no such button, any tap just continues (`onMissionComplete`). Otherwise:
    * mute always wins next — it never opens an overlay, so it's always safe
    * to toggle. Pause, the Codex, and the Shop are mutually exclusive
    * full-screen overlays: opening any one of them is ignored while another
@@ -515,6 +523,7 @@ export class GameplayScene {
     if (this._isGameOver) {
       if (this._gameOverAge < Config.gameOver.minRestartDelay) return;
       if (this._isInsideReviveButton(x, y)) { this._tryRevive(); return; }
+      if (this._isNearReviveButton(x, y)) return; // near-miss on the CTA — absorbed, not read as "restart"
       this._onGameOver?.();
       return;
     }
@@ -707,10 +716,10 @@ export class GameplayScene {
     this._levelAudio.play();
   }
 
-  /** Gold cost of the NEXT revive this run — rises with each one already used. See Config.gameOver.continue. */
+  /** Gold cost of the NEXT revive this run — doubles with each one already used, up to `maxRevives`. See Config.gameOver.continue. */
   _continueCost() {
-    const { baseCost, costStep } = Config.gameOver.continue;
-    return baseCost + this._continuesUsed * costStep;
+    const { baseCost, costMultiplier } = Config.gameOver.continue;
+    return Math.round(baseCost * costMultiplier ** this._continuesUsed);
   }
 
   /** @returns {boolean} true if (x, y) is inside the GAME OVER overlay's REVIVE button. */
@@ -722,15 +731,31 @@ export class GameplayScene {
   }
 
   /**
+   * @returns {boolean} true if (x, y) is within `deadZonePadding` of the
+   * REVIVE button — a wider net than `_isInsideReviveButton` itself, used
+   * only by `handleTap` to swallow a near-miss tap instead of letting it
+   * fall through to "restart." See Config.gameOver.continue's own doc.
+   */
+  _isNearReviveButton(x, y) {
+    const { width: vW, height: vH } = Config.virtual;
+    const cfg = Config.gameOver.continue;
+    const cy = vH / 2 + cfg.offsetY;
+    return Math.abs(x - vW / 2) <= cfg.width / 2 + cfg.deadZonePadding
+        && Math.abs(y - cy) <= cfg.height / 2 + cfg.deadZonePadding;
+  }
+
+  /**
    * Spend gold to resume THIS run in place instead of restarting from level
    * 1 — classic arcade "continue?" pacing (see Config.gameOver.continue's
-   * own doc). Silently does nothing if unaffordable, same convention as
-   * Shop's own disabled buy buttons. Full health/barrier restore (a paid
-   * second chance should feel like one, not a half-measure that immediately
-   * fails again) plus a brief immunity window so the swarm that just killed
-   * the player can't instantly re-kill them.
+   * own doc). Silently does nothing if unaffordable OR if `maxRevives` paid
+   * revives have already been used this run, same convention as Shop's own
+   * disabled buy buttons. Full health/barrier restore (a paid second chance
+   * should feel like one, not a half-measure that immediately fails again)
+   * plus a brief immunity window so the swarm that just killed the player
+   * can't instantly re-kill them.
    */
   _tryRevive() {
+    if (this._continuesUsed >= Config.gameOver.continue.maxRevives) return;
     const cost = this._continueCost();
     if (this.hud.gold < cost) return;
     this.hud.gold -= cost;
@@ -815,6 +840,13 @@ export class GameplayScene {
    * camera already reset to (0,0) (the UI layer's state at the point
    * render() calls this), so the dim rect is always full-screen and fixed
    * regardless of the world's current pan.
+   *
+   * The restart prompt deliberately lags the REVIVE button's own reveal
+   * (`promptRevealDelay`) and stays dimmer (`promptDimAlpha`) for as long
+   * as a revive is still on the table (`revivesLeft > 0`) — see
+   * Config.gameOver.continue's own doc for why: the CTA should read first.
+   * Once revives are exhausted there's nothing left to protect it from, so
+   * the prompt reverts to full prominence/timing.
    */
   _renderGameOver() {
     const { width: vW, height: vH } = Config.virtual;
@@ -824,12 +856,18 @@ export class GameplayScene {
     if (alpha <= 0) return; // still inside explosionDelay — let the explosion read clearly first
 
     this.renderer.clear(Config.colors.void, cfg.dimAlpha * alpha);
-    this.renderer.drawText(cfg.titleText, vW / 2, vH / 2, {
+    this.renderer.drawText(cfg.titleText, vW / 2, vH / 2 + cfg.titleOffsetY, {
       font: cfg.titleFont, color: cfg.titleColor, alpha, glowBlur: cfg.titleGlowBlur,
     });
     this._renderReviveButton(alpha);
+
+    const revivesLeft   = Config.gameOver.continue.maxRevives - this._continuesUsed;
+    const promptDelay   = revivesLeft > 0 ? cfg.promptRevealDelay : 0;
+    const promptRevealAge = Math.max(0, revealAge - promptDelay);
+    const promptAlpha   = Math.min(promptRevealAge / cfg.fadeInDuration, 1) * alpha
+      * (revivesLeft > 0 ? cfg.promptDimAlpha : 1);
     this.renderer.drawText(cfg.promptText, vW / 2, vH / 2 + cfg.promptOffsetY, {
-      font: cfg.promptFont, color: cfg.promptColor, alpha,
+      font: cfg.promptFont, color: cfg.promptColor, alpha: promptAlpha,
     });
   }
 
@@ -857,27 +895,92 @@ export class GameplayScene {
 
   /**
    * REVIVE button — always drawn once the overlay is visible, dimmed
-   * (rather than hidden) when unaffordable so the option and its rising
-   * cost are never a surprise. Same corner-bracket framing as Shop's own
-   * item cards.
+   * (rather than hidden) when unaffordable or exhausted so the option (and
+   * its rising cost, or the fact it's gone) is never a surprise. Same
+   * corner-bracket framing as Shop's own item cards, plus a heartbeat-icon
+   * medallion floating clear above the box (same "medallion over a
+   * bracket-framed card" language as DailyRewardPanel's own reward icon,
+   * just with a real gap instead of straddling the edge — see
+   * Config.gameOver.continue's `iconGap` — so it never collides with
+   * `label` underneath it) and a slow pulsing glow (mirrors
+   * DailyRewardPanel's CLAIM button) — both only while a revive is
+   * actually buyable, so the pulse reads as "tap this" only when that's
+   * true, not while it's merely unaffordable or gone. Every internal row
+   * (icon / label / cost / pips) is positioned off the box's own `top`
+   * edge at a fixed offset (Config's `row1OffsetY`/`row2OffsetY`/
+   * `pipsOffsetY`) rather than off font metrics, so nothing can ever drift
+   * into overlapping as those numbers get tuned.
    */
   _renderReviveButton(alpha) {
     const { width: vW, height: vH } = Config.virtual;
     const cfg = Config.gameOver.continue;
+    const revivesLeft = cfg.maxRevives - this._continuesUsed;
     const cost = this._continueCost();
-    const color = this.hud.gold >= cost ? cfg.affordableColor : cfg.unaffordableColor;
+    const affordable = revivesLeft > 0 && this.hud.gold >= cost;
+    const color = affordable ? cfg.affordableColor : cfg.unaffordableColor;
+
     const cy = vH / 2 + cfg.offsetY;
     const left = vW / 2 - cfg.width / 2, right = vW / 2 + cfg.width / 2;
     const top  = cy - cfg.height / 2,   bottom = cy + cfg.height / 2;
+
+    const pulse = affordable
+      ? 1 - cfg.pulseDepth * (0.5 + 0.5 * Math.sin(this._gameOverAge * cfg.pulseSpeed))
+      : 1;
+    const glowBlur = affordable ? 10 * pulse : 4;
 
     this.renderer.strokePaths([
       cornerBracketPath(left,  top,    1,  1, cfg.legSize),
       cornerBracketPath(right, top,   -1,  1, cfg.legSize),
       cornerBracketPath(left,  bottom, 1, -1, cfg.legSize),
       cornerBracketPath(right, bottom,-1, -1, cfg.legSize),
-    ], { color, lineWidth: 1.5, glowBlur: 5, alpha });
-    this.renderer.drawText(`${cfg.label} — ${cost} GOLD`, vW / 2, cy, {
-      font: cfg.font, color, alpha,
+    ], { color, lineWidth: affordable ? 2 : 1.5, glowBlur, alpha: alpha * pulse });
+
+    // Heartbeat medallion, floating clear above the box — see class doc.
+    const iconY = top - cfg.iconRadius - cfg.iconGap;
+    this.renderer.fillEllipse(0, 0, cfg.iconRadius, cfg.iconRadius, {
+      x: vW / 2, y: iconY, fillColor: color, alpha: alpha * 0.18,
     });
+    this.renderer.strokeCircle(vW / 2, iconY, cfg.iconRadius, {
+      color, lineWidth: 1.5, glowBlur: glowBlur * 0.5, alpha: alpha * pulse,
+    });
+    this.renderer.strokePaths([this._reviveIconPath], {
+      x: vW / 2, y: iconY, color, lineWidth: 1.5, alpha, lineCap: 'round',
+    });
+
+    this._renderRevivePips(top + cfg.pipsOffsetY, revivesLeft, color, alpha);
+
+    if (revivesLeft <= 0) {
+      this.renderer.drawText(cfg.lockedLabel, vW / 2, top + cfg.row1OffsetY, { font: cfg.font, color, alpha });
+      return;
+    }
+
+    this.renderer.drawText(cfg.label, vW / 2, top + cfg.row1OffsetY, { font: cfg.font, color, alpha });
+    this.renderer.drawText(`${cost} GOLD`, vW / 2, top + cfg.row2OffsetY, { font: cfg.costFont, color, alpha });
+  }
+
+  /**
+   * One pip per `Config.gameOver.continue.maxRevives`, left-to-right in the
+   * order they get spent — bright+filled while still available (same
+   * `color` as the button/icon at that moment, so it dims along with
+   * everything else once revives run out), dim+hollow once spent this run.
+   * Always drawn (even in the locked state, where every pip reads hollow)
+   * so "how many uses do I have left" is a glance rather than mental math
+   * off the cost number — see `_renderReviveButton`.
+   */
+  _renderRevivePips(y, revivesLeft, color, alpha) {
+    const { width: vW } = Config.virtual;
+    const { maxRevives, pipRadius, pipSpacing, unaffordableColor } = Config.gameOver.continue;
+    const usedCount = maxRevives - revivesLeft;
+    const startX = vW / 2 - ((maxRevives - 1) * pipSpacing) / 2;
+
+    for (let i = 0; i < maxRevives; i++) {
+      const x = startX + i * pipSpacing;
+      if (i < usedCount) {
+        this.renderer.strokeCircle(x, y, pipRadius, { color: unaffordableColor, lineWidth: 1.5, alpha: alpha * 0.6 });
+      } else {
+        this.renderer.fillEllipse(0, 0, pipRadius, pipRadius, { x, y, fillColor: color, alpha });
+        this.renderer.strokeCircle(x, y, pipRadius, { color, lineWidth: 1.5, alpha });
+      }
+    }
   }
 }

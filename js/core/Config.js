@@ -257,34 +257,86 @@ export const Config = Object.freeze({
 		titleFont: '400 56px "Audiowide", "Courier New", monospace',
 		titleColor: "#ff3b3b", // matches Config.player.lowHealth.color — this is the ultimate low-health state
 		titleGlowBlur: 16,
+		titleOffsetY: -20, // vp above vH/2 — nudges the title up off the REVIVE button's medallion/icon (Config.gameOver.continue.offsetY) so its glow has clear air above the CTA instead of crowding it
 		promptText: "TAP TO RESTART",
 		promptFont: '400 18px "Audiowide", "Courier New", monospace',
 		promptColor: "#aab4d4",
-		promptOffsetY: 150, // vp below the title — pushed down from 60 to clear the REVIVE button (see `continue` below) sitting between it and the title
+		// Pushed well clear of the REVIVE button + its cost line (see `continue`
+		// below) — deliberately more breathing room than the button's own
+		// height needs, so a reflex tap near the CTA can't land here instead.
+		promptOffsetY: 200,
+		promptDimAlpha: 0.7, // extra alpha multiplier while REVIVE is still a live option (see _renderGameOver) — keeps this from visually competing with the CTA
+		promptRevealDelay: 0.4, // seconds AFTER the overlay's own fade-in before this prompt starts appearing, same reasoning — see _renderGameOver
 
 		/**
 		 * Gold-cost revive — tap this button (instead of anywhere else, which
 		 * still restarts as before) to resume the CURRENT run in place rather
 		 * than starting over from level 1: full health/barrier restore plus a
 		 * brief immunity window (see GameplayScene._tryRevive), same shape as
-		 * an 'invincible' PowerUp. Cost rises with each use THIS run
-		 * (`baseCost + continuesUsed*costStep`) and resets to `baseCost` only
-		 * on an actual restart (a fresh GameplayScene) — classic arcade
-		 * "continue?" pacing. Always drawn, dimmed when unaffordable rather
-		 * than hidden, so the option (and its cost) is never a surprise.
+		 * an 'invincible' PowerUp. Capped at `maxRevives` uses per run (see
+		 * GameplayScene._continuesUsed) — past that the button goes into a
+		 * permanent locked state (`lockedLabel`, no cost shown) and
+		 * `_tryRevive` is a no-op. Cost DOUBLES with each use THIS run
+		 * (`baseCost * costMultiplier ** continuesUsed`, see `_continueCost`)
+		 * and resets to `baseCost` only on an actual restart (a fresh
+		 * GameplayScene) — classic arcade "continue?" pacing, steep enough
+		 * that leaning on it repeatedly really costs something.
+		 *
+		 * Deliberately the loud, unmissable choice on the GAME OVER screen —
+		 * a pulsing glow plus a heartbeat-icon medallion straddling its top
+		 * edge (same "medallion over a bracket-framed card" language as
+		 * DailyRewardPanel's own reward icon/CLAIM button — see
+		 * GameplayScene._renderReviveButton) — bigger and louder than
+		 * promptText beneath it, so a player who just died sees REVIVE first
+		 * and has to consciously look past it to restart instead of losing a
+		 * viable continue to a reflex tap. `deadZonePadding` backs that up
+		 * structurally: a tap just outside the button but still within the
+		 * padding is swallowed rather than read as "restart" (see
+		 * GameplayScene.handleTap), so a near-miss on the CTA can't
+		 * accidentally end the run. Always drawn, dimmed when unaffordable
+		 * rather than hidden, so the option (and its rising cost, or the fact
+		 * it's gone) is never a surprise.
 		 */
 		continue: Object.freeze({
-			baseCost: 100,
-			costStep: 50,
+			baseCost: 150,
+			costMultiplier: 2, // each revive costs this many times the previous one's cost — see _continueCost
+			maxRevives: 3, // paid revives allowed per run
 			invincibleDuration: 3, // seconds of immunity granted immediately on revive — see Player.activateInvincibility
-			offsetY: 75, // vp below the title, above the restart prompt
-			width: 220,
-			height: 46,
+			offsetY: 100, // vp below the title, above the restart prompt
+			width: 240,
+			height: 74,
 			legSize: 12,
+			deadZonePadding: 22, // vp of extra hit-test margin around the button that absorbs taps instead of restarting — see GameplayScene.handleTap
+
+			// Heartbeat medallion floats entirely ABOVE the box (see
+			// GameplayScene._renderReviveButton) rather than straddling its top
+			// edge — `iconGap` is the clear space between the icon's own bottom
+			// edge and the box, so it never overlaps `label` below it.
+			iconRadius: 15,
+			iconGap: 6,
+			// Row y-offsets, each measured from the box's OWN top edge (same
+			// "fixed row spacing from a shared anchor" convention as HUD's
+			// score panel) — keeps label/cost/pips from ever colliding
+			// regardless of font metrics.
+			row1OffsetY: 20, // REVIVE / lockedLabel
+			row2OffsetY: 41, // cost line
+			pipsOffsetY: 60, // remaining-use pips
+
+			// One pip per `maxRevives`, bright+filled while still available,
+			// dim+hollow once spent this run — see `_renderRevivePips` — so
+			// "how many uses do I have left" is always a glance, not a
+			// subtraction the player has to do off the cost number.
+			pipRadius: 4,
+			pipSpacing: 15,
+
 			label: "REVIVE",
-			font: '400 16px "Audiowide", "Courier New", monospace',
+			lockedLabel: "NO REVIVES LEFT",
+			font: '400 17px "Audiowide", "Courier New", monospace',
+			costFont: '400 14px "Audiowide", "Courier New", monospace',
 			affordableColor: "#4DFF8A", // soft green — same "yes, go" read as Config.powerUps.health / Shop's OWNED color
 			unaffordableColor: "#4a5570", // dim — reads as disabled, same as Shop's own unaffordable color
+			pulseSpeed: 3.2, // rad/sec — same gentle "alive" breathing pulse DailyRewardPanel's CLAIM button already uses
+			pulseDepth: 0.3,
 		}),
 
 		// Death explosion — reuses the same shared explosion.mp3 every enemy
