@@ -142,6 +142,26 @@ export const Config = Object.freeze({
 			flickerAmplitudes: Object.freeze([8, 4]), // two summed sine waves = an organic flicker
 			flickerSpeeds: Object.freeze([9, 21]), // radians / second
 		}),
+
+		/**
+		 * Magnet pull — GoldPickups/PowerUps within `radius` of the player
+		 * accelerate toward it instead of just falling, so a near-miss still
+		 * gets collected (see GoldPickups.update/PowerUps.update, both folding
+		 * this straight into their existing burst-velocity/drag fields rather
+		 * than adding a separate speed cap — the pull naturally settles at
+		 * `pullAccel / burstDrag`). Deliberately weak at launch (`levels[0]`):
+		 * a small radius and a gentle pull, just enough to rescue a coin or
+		 * pickup that grazes the player rather than yanking anything in from
+		 * across the screen. `levels` IS the upgrade path — Player._magnetLevel
+		 * indexes into it, so a future upgrade (e.g. a Shop purchase) only
+		 * needs to append a stronger entry here and bump that index; nothing
+		 * else about the pull mechanism changes.
+		 */
+		magnet: Object.freeze({
+			levels: Object.freeze([
+				Object.freeze({ radius: 70, pullAccel: 700 }), // level 1 — starting strength
+			]),
+		}),
 	}),
 
 	/**

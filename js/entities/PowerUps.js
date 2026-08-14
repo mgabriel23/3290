@@ -14,6 +14,13 @@
  * scattering pickups outward from the kill, and keeps a same-frame gold
  * coin and PowerUp from spawning stacked on top of each other.
  *
+ * Magnet pull: while a pickup sits within the player's `magnetRadius` (see
+ * Player.magnetRadius/magnetPullAccel and Config.player.magnet), `update`
+ * steers it toward the player by adding acceleration into the SAME vx/vy
+ * used for the spawn burst above — it decays via the same `burstDrag`, so
+ * the pull speed naturally settles at `pullAccel / burstDrag` rather than
+ * needing its own separate cap. Same shape in GoldPickups.js.
+ *
  * Same pre-allocated-typed-array pooling shape as EnemyBullet.js: swap-
  * remove on cull (falls off the bottom of the screen or outlives `maxLife`)
  * or on pickup. Owned by GameplayScene, not WaveManager, even though only
@@ -86,13 +93,28 @@ export class PowerUps {
     this._type[i] = type;
   }
 
-  /** @param {number} dt */
-  update(dt) {
+  /**
+   * @param {number} dt
+   * @param {number} playerX @param {number} playerY  magnet pull target — see class doc
+   * @param {number} magnetRadius  vp — pickups within this distance of the player accelerate toward it
+   * @param {number} magnetPullAccel  vp/sec^2 applied toward the player while inside magnetRadius
+   */
+  update(dt, playerX, playerY, magnetRadius, magnetPullAccel) {
     const { fallSpeed, maxLife, burstDrag } = Config.powerUps;
     const { height: vH } = Config.virtual;
     const drag = 1 - dt * burstDrag;
+    const magnetR2 = magnetRadius * magnetRadius;
     let w = 0;
     for (let i = 0; i < this._count; i++) {
+      const dx = playerX - this._x[i];
+      const dy = playerY - this._y[i];
+      const distSq = dx * dx + dy * dy;
+      if (distSq < magnetR2 && distSq > 1) {
+        const dist = Math.sqrt(distSq);
+        const pull = magnetPullAccel * dt;
+        this._vx[i] += (dx / dist) * pull;
+        this._vy[i] += (dy / dist) * pull;
+      }
       this._x[i]   += this._vx[i] * dt;
       this._y[i]   += (fallSpeed + this._vy[i]) * dt;
       this._vx[i]  *= drag;

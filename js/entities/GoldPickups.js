@@ -13,6 +13,13 @@
  * drift — same burst-then-settle motion as PowerUps.js, see its class doc
  * and Config.gold.burstSpeedMin/Max/burstDrag.
  *
+ * Magnet pull: while a coin sits within the player's `magnetRadius` (see
+ * Player.magnetRadius/magnetPullAccel and Config.player.magnet), `update`
+ * steers it toward the player by adding acceleration into the SAME vx/vy
+ * used for the spawn burst above — it decays via the same `burstDrag`, so
+ * the pull speed naturally settles at `pullAccel / burstDrag` rather than
+ * needing its own separate cap. Same shape in PowerUps.js.
+ *
  * Same pre-allocated-typed-array pooling shape as PowerUps.js: swap-remove
  * on cull (falls off the bottom of the screen or outlives `maxLife`) or on
  * pickup. A deliberately separate pool and drop roll from PowerUps — see
@@ -53,13 +60,28 @@ export class GoldPickups {
     this._value[i] = value;
   }
 
-  /** @param {number} dt */
-  update(dt) {
+  /**
+   * @param {number} dt
+   * @param {number} playerX @param {number} playerY  magnet pull target — see class doc
+   * @param {number} magnetRadius  vp — coins within this distance of the player accelerate toward it
+   * @param {number} magnetPullAccel  vp/sec^2 applied toward the player while inside magnetRadius
+   */
+  update(dt, playerX, playerY, magnetRadius, magnetPullAccel) {
     const { fallSpeed, maxLife, burstDrag } = Config.gold;
     const { height: vH } = Config.virtual;
     const drag = 1 - dt * burstDrag;
+    const magnetR2 = magnetRadius * magnetRadius;
     let w = 0;
     for (let i = 0; i < this._count; i++) {
+      const dx = playerX - this._x[i];
+      const dy = playerY - this._y[i];
+      const distSq = dx * dx + dy * dy;
+      if (distSq < magnetR2 && distSq > 1) {
+        const dist = Math.sqrt(distSq);
+        const pull = magnetPullAccel * dt;
+        this._vx[i] += (dx / dist) * pull;
+        this._vy[i] += (dy / dist) * pull;
+      }
       this._x[i]   += this._vx[i] * dt;
       this._y[i]   += (fallSpeed + this._vy[i]) * dt;
       this._vx[i]  *= drag;

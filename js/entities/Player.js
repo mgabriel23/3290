@@ -46,6 +46,13 @@
  * state rather than the same quick post-hit blink. A repeat pickup
  * refreshes `_invincibleTimer` back to the full duration rather than
  * stacking with whatever's left of a previous one.
+ *
+ * Magnet: `magnetRadius`/`magnetPullAccel` read off `Config.player.magnet
+ * .levels[_magnetLevel - 1]` and are handed to WaveManager.update each
+ * frame, which forwards them into GoldPickups/PowerUps so nearby drops
+ * accelerate toward the ship instead of just falling. `_magnetLevel` starts
+ * at 1 (the weak default) — see Config.player.magnet's own doc for how a
+ * future upgrade bumps it.
  */
 import { Config } from '../core/Config.js';
 import { easeOutCubic } from '../core/animation.js';
@@ -133,6 +140,9 @@ export class Player {
     this._invulnTimer = 0; // seconds remaining of post-hit grace, during which takeDamage is a no-op
     this._invincibleTimer = 0; // seconds remaining of PowerUp-driven full damage immunity — see activateInvincibility
 
+    // Magnet — index into Config.player.magnet.levels (1-based). See class doc.
+    this._magnetLevel = 1;
+
     // Low-health danger blip — see class doc.
     const { warningAudioSrc, warningVolume } = Config.player.lowHealth;
     this._warningAudio = new AudioPool(warningAudioSrc, 4, warningVolume);
@@ -149,6 +159,12 @@ export class Player {
 
   /** Seconds remaining on an active 'invincible' PowerUp, 0 if inactive — read by GameplayScene to feed HUD's indicator badge. */
   get invincibleTimer() { return this._invincibleTimer; }
+
+  /** vp — current magnet pull radius, read by WaveManager.update and forwarded into GoldPickups/PowerUps. See class doc. */
+  get magnetRadius() { return Config.player.magnet.levels[this._magnetLevel - 1].radius; }
+
+  /** vp/sec^2 — current magnet pull strength. See class doc. */
+  get magnetPullAccel() { return Config.player.magnet.levels[this._magnetLevel - 1].pullAccel; }
 
   /**
    * Apply `amount` damage unless still within the post-hit grace window or

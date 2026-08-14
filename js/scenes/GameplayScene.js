@@ -333,7 +333,7 @@ export class GameplayScene {
     if (this._levelState === 'active') {
       const fireBoostMultiplier = this._fireBoostTimer > 0 ? Config.powerUps.fireBoost.multiplier : 1;
       this.bullets.update(effectiveDt, this.player, fireBoostMultiplier);
-      this._waveManager.update(effectiveDt, this.player.x, this.player.y);
+      this._waveManager.update(effectiveDt, this.player.x, this.player.y, this.player.magnetRadius, this.player.magnetPullAccel);
       this._checkCollisions(fireBoostMultiplier);
       this._checkPlayerHit();
       const pickup = this._waveManager.checkPowerUpPickup(this.player);
