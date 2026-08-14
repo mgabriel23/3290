@@ -1583,11 +1583,23 @@ export const Config = Object.freeze({
 		shieldDropWeight: 0.3,
 		fireBoostDropWeight: 0.3,
 		invincibleDropWeight: 0.15,
-		fallSpeed: 90, // vp/sec, straight down — same for every kind
+		fallSpeed: 30, // vp/sec, straight down — same for every kind (dropped from 90 for a much slower drift)
 		maxLife: 6, // seconds an uncollected pickup survives before despawning
 		expireFadeDuration: 1.5, // seconds before despawn during which the pickup fades to transparent — a visible "about to vanish" cue instead of an abrupt pop, see PowerUps.render
 		hitRadius: 16, // vp — collision radius against the player, added to Player.hitRadius
 		poolSize: 8,
+		// A gold coin (Config.gold.dropChance 0.8) rolls independently of a
+		// PowerUp (dropChance 0.1) on the same kill, so both can land on the
+		// same frame — a static spawn-position offset just teleported them
+		// apart with no motion to sell it, so instead each pickup launches
+		// outward from the exact death point at a random angle/speed and
+		// decelerates (same drag-based burst shape as Config.particles'
+		// spark burst) before settling into its normal `fallSpeed` drift —
+		// see PowerUps.spawn/update. This both reads as an "explosion" and
+		// keeps a same-frame coin+PowerUp from stacking on top of each other.
+		burstSpeedMin: 200, // vp/sec — slowest possible launch speed
+		burstSpeedMax: 450, // vp/sec — fastest possible launch speed
+		burstDrag: 5, // per-second drag coefficient, same value as Config.particles.sparkDrag for a consistent "pop" feel
 
 		radius: 14, // vp — outer circle size
 		lineWidth: 2,
@@ -1665,11 +1677,16 @@ export const Config = Object.freeze({
 	 */
 	gold: Object.freeze({
 		dropChance: 0.8, // fraction of real kills that drop a coin — much higher than Config.powerUps.dropChance (0.1) on purpose, see class doc above
-		fallSpeed: 90, // vp/sec, straight down — same as Config.powerUps
+		fallSpeed: 30, // vp/sec, straight down — same as Config.powerUps (dropped from 90 for a much slower drift)
 		maxLife: 6, // seconds an uncollected coin survives before despawning
 		expireFadeDuration: 1.5, // seconds before despawn during which the coin fades to transparent — a visible "about to vanish" cue instead of an abrupt pop, see GoldPickups.render
 		hitRadius: 16, // vp — collision radius against the player, added to Player.hitRadius
 		poolSize: 24, // higher than powerUps' 8 — dropChance is 8x higher, and triggerSkillBomb can kill many enemies (many coins) in one frame
+		// See Config.powerUps' matching fields' own comment — same burst-and-settle
+		// launch, same values, so a coin and a PowerUp scatter by a comparable amount.
+		burstSpeedMin: 200,
+		burstSpeedMax: 450,
+		burstDrag: 5,
 
 		radius: 12, // vp — outer circle size, slightly smaller than a powerUp orb so a swarm of coins doesn't visually compete with them
 		lineWidth: 2,

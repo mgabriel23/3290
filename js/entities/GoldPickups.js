@@ -8,6 +8,11 @@
  * own `gold` field) always specified — see WaveManager._rewardFor — so this
  * only changes HOW gold is delivered, not how much any given enemy is worth.
  *
+ * Each coin launches from its spawn point at a random angle/speed that
+ * decays via drag before settling into the shared straight-down `fallSpeed`
+ * drift — same burst-then-settle motion as PowerUps.js, see its class doc
+ * and Config.gold.burstSpeedMin/Max/burstDrag.
+ *
  * Same pre-allocated-typed-array pooling shape as PowerUps.js: swap-remove
  * on cull (falls off the bottom of the screen or outlives `maxLife`) or on
  * pickup. A deliberately separate pool and drop roll from PowerUps — see
@@ -23,6 +28,8 @@ export class GoldPickups {
   constructor() {
     this._x     = new Float32Array(MAX);
     this._y     = new Float32Array(MAX);
+    this._vx    = new Float32Array(MAX); // burst velocity — decays to 0 via drag, see update()
+    this._vy    = new Float32Array(MAX);
     this._age   = new Float32Array(MAX);
     this._value = new Float32Array(MAX);
     this._count = 0;
@@ -34,24 +41,34 @@ export class GoldPickups {
    */
   spawn(x, y, value) {
     if (this._count >= MAX || value <= 0) return;
+    const { burstSpeedMin, burstSpeedMax } = Config.gold;
     const i = this._count++;
+    const angle = Math.random() * Math.PI * 2;
+    const speed = burstSpeedMin + Math.random() * (burstSpeedMax - burstSpeedMin);
     this._x[i]     = x;
     this._y[i]     = y;
+    this._vx[i]    = Math.cos(angle) * speed;
+    this._vy[i]    = Math.sin(angle) * speed;
     this._age[i]   = 0;
     this._value[i] = value;
   }
 
   /** @param {number} dt */
   update(dt) {
-    const { fallSpeed, maxLife } = Config.gold;
+    const { fallSpeed, maxLife, burstDrag } = Config.gold;
     const { height: vH } = Config.virtual;
+    const drag = 1 - dt * burstDrag;
     let w = 0;
     for (let i = 0; i < this._count; i++) {
-      this._y[i]   += fallSpeed * dt;
+      this._x[i]   += this._vx[i] * dt;
+      this._y[i]   += (fallSpeed + this._vy[i]) * dt;
+      this._vx[i]  *= drag;
+      this._vy[i]  *= drag;
       this._age[i] += dt;
       if (this._age[i] < maxLife && this._y[i] < vH + 30) {
         if (w !== i) {
           this._x[w] = this._x[i]; this._y[w] = this._y[i];
+          this._vx[w] = this._vx[i]; this._vy[w] = this._vy[i];
           this._age[w] = this._age[i]; this._value[w] = this._value[i];
         }
         w++;
@@ -83,6 +100,7 @@ export class GoldPickups {
         this._count--;
         if (i < this._count) {
           this._x[i] = this._x[this._count]; this._y[i] = this._y[this._count];
+          this._vx[i] = this._vx[this._count]; this._vy[i] = this._vy[this._count];
           this._age[i] = this._age[this._count]; this._value[i] = this._value[this._count];
         }
         return value;

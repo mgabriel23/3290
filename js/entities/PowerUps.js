@@ -7,6 +7,13 @@
  * a "+" cross for a player-health pickup, the same diamond emblem Barrier.js
  * draws at its own peak for a shield pickup (see Config.powerUps).
  *
+ * Each pickup launches from its spawn point at a random angle/speed that
+ * decays via drag (same burst-then-settle shape as Particles.js' spark
+ * burst, see Config.powerUps.burstSpeedMin/Max/burstDrag) before settling
+ * into the shared straight-down `fallSpeed` drift — reads as an "explosion"
+ * scattering pickups outward from the kill, and keeps a same-frame gold
+ * coin and PowerUp from spawning stacked on top of each other.
+ *
  * Same pre-allocated-typed-array pooling shape as EnemyBullet.js: swap-
  * remove on cull (falls off the bottom of the screen or outlives `maxLife`)
  * or on pickup. Owned by GameplayScene, not WaveManager, even though only
@@ -33,6 +40,8 @@ export class PowerUps {
   constructor() {
     this._x     = new Float32Array(MAX);
     this._y     = new Float32Array(MAX);
+    this._vx    = new Float32Array(MAX); // burst velocity — decays to 0 via drag, see update()
+    this._vy    = new Float32Array(MAX);
     this._age   = new Float32Array(MAX);
     this._type  = new Array(MAX).fill('health'); // 'health' | 'shield' | 'fireBoost' | 'invincible'
     this._count = 0;
@@ -65,24 +74,34 @@ export class PowerUps {
    */
   spawn(x, y, type) {
     if (this._count >= MAX) return;
+    const { burstSpeedMin, burstSpeedMax } = Config.powerUps;
     const i = this._count++;
+    const angle = Math.random() * Math.PI * 2;
+    const speed = burstSpeedMin + Math.random() * (burstSpeedMax - burstSpeedMin);
     this._x[i]    = x;
     this._y[i]    = y;
+    this._vx[i]   = Math.cos(angle) * speed;
+    this._vy[i]   = Math.sin(angle) * speed;
     this._age[i]  = 0;
     this._type[i] = type;
   }
 
   /** @param {number} dt */
   update(dt) {
-    const { fallSpeed, maxLife } = Config.powerUps;
+    const { fallSpeed, maxLife, burstDrag } = Config.powerUps;
     const { height: vH } = Config.virtual;
+    const drag = 1 - dt * burstDrag;
     let w = 0;
     for (let i = 0; i < this._count; i++) {
-      this._y[i]   += fallSpeed * dt;
+      this._x[i]   += this._vx[i] * dt;
+      this._y[i]   += (fallSpeed + this._vy[i]) * dt;
+      this._vx[i]  *= drag;
+      this._vy[i]  *= drag;
       this._age[i] += dt;
       if (this._age[i] < maxLife && this._y[i] < vH + 30) {
         if (w !== i) {
           this._x[w] = this._x[i]; this._y[w] = this._y[i];
+          this._vx[w] = this._vx[i]; this._vy[w] = this._vy[i];
           this._age[w] = this._age[i]; this._type[w] = this._type[i];
         }
         w++;
@@ -114,6 +133,7 @@ export class PowerUps {
         this._count--;
         if (i < this._count) {
           this._x[i] = this._x[this._count]; this._y[i] = this._y[this._count];
+          this._vx[i] = this._vx[this._count]; this._vy[i] = this._vy[this._count];
           this._age[i] = this._age[this._count]; this._type[i] = this._type[this._count];
         }
         return type;
