@@ -21,6 +21,7 @@ import { MissionSelectScene } from '../scenes/MissionSelectScene.js';
 import { GameplayScene } from '../scenes/GameplayScene.js';
 import { completeMission } from './MissionProgress.js';
 import { hasSeenPrologue } from './PrologueProgress.js';
+import { hasSeenTutorial, markTutorialSeen } from './TutorialProgress.js';
 
 export class Game {
   /**
@@ -168,14 +169,31 @@ export class Game {
    * `_prologueFader`/`_tick`) rather than an abrupt `.pause()` — the
    * fader's own `onComplete` is what actually pauses the element, once
    * it's already faded down to silence.
+   *
+   * The tutorial itself only plays once per mode (see TutorialProgress.js):
+   * Mission Mode's first-ever attempt is always Level 1 (missions unlock
+   * sequentially, so nothing else is reachable yet), and Survival Mode's
+   * first-ever attempt is that mode's own first game — `hasSeenTutorial`
+   * skips straight to `_afterTutorial` on every later play of that same
+   * mode instead of rebuilding a `TutorialScene` that would just replay hints
+   * the player has already sat through.
    * @param {'mission'|'survival'} mode  which button was tapped — carried
    *   through (via closure, not stored on `this`) to `_afterTutorial` once
-   *   the tutorial itself finishes.
+   *   the tutorial itself finishes (or immediately, if already seen).
    */
   _startTutorial(mode) {
     this._prologueFader?.rampTo(0, Config.audio.prologueFadeOutDuration, () => this._prologueAudio?.pause());
+    if (hasSeenTutorial(mode)) {
+      this._afterTutorial(mode);
+      return;
+    }
     try {
-      this.scene = new TutorialScene(this.renderer, { onContinue: () => this._afterTutorial(mode) });
+      this.scene = new TutorialScene(this.renderer, {
+        onContinue: () => {
+          markTutorialSeen(mode);
+          this._afterTutorial(mode);
+        },
+      });
     } catch (err) {
       console.error('Failed to start the tutorial:', err);
       this._showFatalError(err);
@@ -183,9 +201,11 @@ export class Game {
   }
 
   /**
-   * Routes to the right next screen once the tutorial's last hint is
-   * dismissed, based on which mode button was tapped back on the title
-   * card. Survival Mode goes straight into gameplay, same as the single
+   * Routes to the right next screen once the tutorial is done with —
+   * either its last hint was just dismissed, or `_startTutorial` skipped it
+   * outright because this mode's tutorial has already been seen before —
+   * based on which mode button was tapped back on the title card. Survival
+   * Mode goes straight into gameplay, same as the single
    * PLAY button always did. Mission Mode goes to the mission-select screen
    * first, since (unlike Survival Mode) there's a choice of which level to
    * play — gameplay itself only starts once a specific mission is picked
