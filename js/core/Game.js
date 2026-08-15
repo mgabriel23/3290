@@ -20,6 +20,7 @@ import { TutorialScene } from '../scenes/TutorialScene.js';
 import { MissionSelectScene } from '../scenes/MissionSelectScene.js';
 import { GameplayScene } from '../scenes/GameplayScene.js';
 import { completeMission } from './MissionProgress.js';
+import { hasSeenPrologue } from './PrologueProgress.js';
 
 export class Game {
   /**
@@ -30,7 +31,7 @@ export class Game {
     this.stage = stage;
     this.renderer = new Renderer(canvas);
     this.scene = new IntroScene(this.renderer, {
-      onContinue: () => this._startPrologue(),
+      onContinue: () => this._startPrologue(hasSeenPrologue()),
       onSwipeDetected: () => this._startPrologueMusic(),
     });
     this._lastTimestamp = 0;
@@ -106,10 +107,13 @@ export class Game {
    * instead, so a transition failure reads as "something broke" rather
    * than "the game froze."
    * @param {boolean} [devSkipToTitle]  forwarded to PrologueScene — starts
-   *   straight on the title/mode-button card instead of replaying the whole
-   *   cinematic. Passed `true` by `_startMissionSelect`'s "back" navigation
-   *   (see MissionSelectScene) so returning to the title screen doesn't
-   *   force the player back through the opening cinematic every time.
+   *   straight on the title/mode-button card instead of playing the
+   *   (unskippable) cinematic. Two call sites pass `true`: the constructor
+   *   above, once `hasSeenPrologue()` says this player already sat through
+   *   it on a previous visit, and `_startMissionSelect`'s "back" navigation
+   *   (see MissionSelectScene), so returning to the title screen never
+   *   replays the cinematic either. `false` (the default) is only ever
+   *   actually reached the very first time a given player boots the game.
    */
   _startPrologue(devSkipToTitle = false) {
     try {

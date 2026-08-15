@@ -13,7 +13,7 @@
  * Juice: the whole screen rises up out of a black veil on arrival and sinks
  * back into one on CLAIM (Config.dailyReward.entranceDuration/exitDuration —
  * the exact same Renderer.clear-with-alpha technique PrologueScene's own
- * fadeOut/skipFade beats use to dissolve TO black, just run in reverse on
+ * fadeOut beat uses to dissolve TO black, just run in reverse on
  * the way in). On top of that, the card and CLAIM button scale-pop in with an overshoot bounce
  * (core/animation.js's easeOutBack — CLAIM staggered slightly behind the
  * card so they don't land in the same instant), a slow color halo breathes

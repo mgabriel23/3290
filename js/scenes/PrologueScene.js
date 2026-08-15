@@ -24,14 +24,15 @@
  *               year the story is set in — appears with a PLAY button,
  *               which is the actual gate into gameplay
  *
- * A small "SKIP ▶▶" control (see Config.prologue.skip) is drawn on top of
- * every beat before `title` — tapping it doesn't cut straight to the title
- * card (that would read as a glitch); it hands off to one more beat,
- * `skipFade`, which freezes whatever beat was on screen and dissolves it
- * to black exactly like `fadeOut` does, just shorter, before landing on
- * `title`. The mandatory-feeling briefing still always plays in full for
- * anyone who doesn't tap it — SKIP is an escape hatch, not a redesign of
- * the story beat itself.
+ * The full cinematic (`yearCard` → `fadeOut`) is deliberately unskippable —
+ * no SKIP control exists on any beat — but per core/PrologueProgress.js it
+ * only ever plays once per player: `_updateFadeOut` calls `markPrologueSeen`
+ * the moment the cinematic finishes, and every later `Game._startPrologue`
+ * call reads that flag and boots straight to `title` instead (the same
+ * `devSkipToTitle` constructor option "back" navigation from
+ * MissionSelectScene already used for a different reason — see its own doc
+ * below). So a returning player never sees these beats again at all, rather
+ * than seeing them with an escape hatch to tap through.
  *
  * The starfield is the same Starfield entity GameplayScene composes —
  * shared rather than duplicated since both scenes need the identical
@@ -44,11 +45,12 @@
  * `title` simply waits for `handleTap` to land on PLAY and fire
  * `onContinue` — the constructor-injected completion callback `Game`
  * uses to swap in GameplayScene, following the same shape IntroScene
- * uses for its own handoff. The full cinematic (`yearCard` → `fadeOut`)
- * always plays in full on every launch — there's no "skip it if you've
- * already seen it" persistence; the constructor's `devSkipToTitle` option
- * exists purely as a manual convenience for jumping straight to the
- * title beat while testing (Game.js does not currently set it).
+ * uses for its own handoff. The `devSkipToTitle` constructor option jumps
+ * straight to the title beat, skipping the cinematic entirely — `Game.js`
+ * passes it whenever `core/PrologueProgress.js` says this player has
+ * already sat through the cinematic once before (see the class doc above),
+ * so the full `yearCard` → `fadeOut` sequence plays exactly once per player,
+ * ever, rather than replaying on every launch.
  *
  * The prologue's own background music (started by Game the instant the
  * player swipes past the intro prompt) plays continuously through this
@@ -65,6 +67,7 @@ import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { cornerBracketPath, diamondPath } from '../core/shapes.js';
 import { AudioPool } from '../core/AudioPool.js';
 import { DailyRewardPanel } from '../entities/DailyRewardPanel.js';
+import { markPrologueSeen } from '../core/PrologueProgress.js';
 
 /** One path-factory per spawnable portal-creature variant — see _spawnCreature. */
 const _CREATURE_PATH_FACTORIES = {
@@ -80,8 +83,9 @@ export class PrologueScene {
    * @param {{ onContinue: (mode: 'mission'|'survival') => void, devSkipToTitle?: boolean }} options
    *   `onContinue` fires once a mode button is tapped, passed which one —
    *   see `_renderModeButtons`/handleTap. `devSkipToTitle` starts straight
-   *   on the title/mode-button card instead of the cinematic — used both as
-   *   a manual testing convenience and by Game.js's "back" navigation from
+   *   on the title/mode-button card instead of the cinematic — Game.js
+   *   passes it once `core/PrologueProgress.js` says this player has already
+   *   seen the cinematic, and also for its own "back" navigation from
    *   MissionSelectScene (see its own doc).
    */
   constructor(renderer, { onContinue, devSkipToTitle = false }) {
@@ -128,9 +132,9 @@ export class PrologueScene {
     // Once-a-day reward popup, gated to the 'title' beat below (see
     // update/handleTap/render's 'title' cases) — constructed up front like
     // every other piece of this scene rather than lazily on first reaching
-    // that beat, so a devSkipToTitle boot (or SKIP) sees it immediately.
-    // Its own `isOpen` is false from construction if today's reward is
-    // already claimed, so this is a no-op on every visit after the first.
+    // that beat, so a devSkipToTitle boot sees it immediately. Its own
+    // `isOpen` is false from construction if today's reward is already
+    // claimed, so this is a no-op on every visit after the first.
     this._dailyRewardPanel = new DailyRewardPanel(renderer);
   }
 
@@ -157,7 +161,6 @@ export class PrologueScene {
       // showing) — see handleTap. The panel only has anything to animate
       // (its fade-in/CLAIM pulse) while it's actually open.
       case 'title': return this._dailyRewardPanel.update(dt);
-      case 'skipFade': return this._updateSkipFade();
       case 'exitFade': return this._updateExitFade();
     }
   }
@@ -167,38 +170,31 @@ export class PrologueScene {
    * beat arrives — EXCEPT while the daily-reward popup is still open, which
    * sits on top of them and must claim the tap itself (same "explicit
    * button only" dismissal Shop.js uses) rather than letting it fall
-   * through to a mode button underneath. Before the title beat, SKIP is
-   * live on every beat — see `_canSkip`/`_isInsideSkipButton`.
+   * through to a mode button underneath. No beat before `title` has
+   * anything tappable — the cinematic is deliberately unskippable (see the
+   * class doc above).
    */
   handleTap(x, y) {
-    if (this._beat === 'title') {
-      if (this._dailyRewardPanel.isOpen) { this._dailyRewardPanel.handleTap(x, y); return; }
-      let mode = null;
-      if (this._isInsideMissionButton(x, y)) mode = 'mission';
-      else if (this._isInsideSurvivalButton(x, y)) mode = 'survival';
-      if (mode) {
-        // Save the current beat age so the exit-fade can hold the title frozen
-        // at the exact frame the tap landed, rather than restarting its animation.
-        this._frozenTitleAge = this._beatAge;
-        this._chosenMode = mode;
-        this._advanceBeat('exitFade');
-      }
-      return;
-    }
-    if (this._canSkip() && this._isInsideSkipButton(x, y)) {
-      // Remember what was on screen so _renderSkipFade can keep drawing it
-      // (frozen) underneath the dissolve, rather than cutting to black instantly.
-      this._skipFromBeat = this._beat;
-      this._advanceBeat('skipFade');
+    if (this._beat !== 'title') return;
+    if (this._dailyRewardPanel.isOpen) { this._dailyRewardPanel.handleTap(x, y); return; }
+    let mode = null;
+    if (this._isInsideMissionButton(x, y)) mode = 'mission';
+    else if (this._isInsideSurvivalButton(x, y)) mode = 'survival';
+    if (mode) {
+      // Save the current beat age so the exit-fade can hold the title frozen
+      // at the exact frame the tap landed, rather than restarting its animation.
+      this._frozenTitleAge = this._beatAge;
+      this._chosenMode = mode;
+      this._advanceBeat('exitFade');
     }
   }
 
   render() {
     switch (this._beat) {
-      case 'yearCard': this._renderYearCard(); return this._renderSkipButton();
-      case 'portals':  this._renderPortals();  return this._renderSkipButton();
-      case 'briefing': this._renderBriefing(); return this._renderSkipButton();
-      case 'fadeOut':  this._renderFadeOut();  return this._renderSkipButton();
+      case 'yearCard': return this._renderYearCard();
+      case 'portals':  return this._renderPortals();
+      case 'briefing': return this._renderBriefing();
+      case 'fadeOut':  return this._renderFadeOut();
       // Mutually exclusive with the title/mode buttons — see
       // DailyRewardPanel's class doc for why this is its own full screen
       // rather than a modal drawn on top of them. Once claimed (this
@@ -208,7 +204,6 @@ export class PrologueScene {
         if (this._dailyRewardPanel.isOpen) return this._dailyRewardPanel.render(this.renderer);
         this._renderTitle();
         return this._renderDailyRewardBadge();
-      case 'skipFade': return this._renderSkipFade();
       case 'exitFade': return this._renderExitFade();
     }
   }
@@ -499,7 +494,13 @@ export class PrologueScene {
   // --- Beat 4: fade to black -----------------------------------------------------
 
   _updateFadeOut() {
-    if (this._beatAge >= Config.prologue.fadeOutDuration) this._advanceBeat('title');
+    if (this._beatAge >= Config.prologue.fadeOutDuration) {
+      // The cinematic has now played in full — record it so every future
+      // Game._startPrologue call boots straight to `title` instead (see the
+      // class doc above and core/PrologueProgress.js).
+      markPrologueSeen();
+      this._advanceBeat('title');
+    }
   }
 
   /** Redraw the briefing's final frame — sky, portals, and all — then lay an ever-darkening overlay on top — see Renderer.clear's alpha. */
@@ -511,56 +512,6 @@ export class PrologueScene {
     this._renderBriefingText(this._briefingWordCount);
 
     const overlayAlpha = Math.min(this._beatAge / Config.prologue.fadeOutDuration, 1);
-    this.renderer.clear(Config.colors.void, overlayAlpha);
-  }
-
-  // --- Skip control (live on every beat before the title card) ---------------------
-
-  /** SKIP is only offered before the title card arrives — title has PLAY, and the fade beats are already mid-transition. */
-  _canSkip() {
-    return this._beat === 'yearCard' || this._beat === 'portals'
-        || this._beat === 'briefing' || this._beat === 'fadeOut';
-  }
-
-  _skipButtonBounds() {
-    const { marginX, marginY, hitWidth, hitHeight } = Config.prologue.skip;
-    const { width: vW } = Config.virtual;
-    const right = vW - marginX;
-    const top   = marginY - hitHeight / 2;
-    return { left: right - hitWidth, top, right: right + 12, bottom: top + hitHeight };
-  }
-
-  _isInsideSkipButton(x, y) {
-    const { left, top, right, bottom } = this._skipButtonBounds();
-    return x >= left && x <= right && y >= top && y <= bottom;
-  }
-
-  _renderSkipButton() {
-    const { label, font, color, alpha, glowBlur, marginX, marginY } = Config.prologue.skip;
-    const { width: vW } = Config.virtual;
-    this.renderer.drawText(label, vW - marginX, marginY, { font, color, align: 'right', alpha, glowBlur, glowColor: color });
-  }
-
-  /**
-   * A short, generic dissolve into the title card, reached only via SKIP.
-   * Keeps redrawing whichever beat was on screen at the moment of the tap
-   * (`_skipFromBeat`, captured in handleTap) so the cut reads as "fading
-   * out what you were already watching", not a jarring swap to a
-   * different scene — the same technique `fadeOut` itself uses, just
-   * generalized to start from any beat instead of only from `briefing`.
-   */
-  _updateSkipFade() {
-    if (this._beatAge >= Config.prologue.skip.fadeOutDuration) this._advanceBeat('title');
-  }
-
-  _renderSkipFade() {
-    switch (this._skipFromBeat) {
-      case 'yearCard': this._renderYearCard(); break;
-      case 'portals':  this._renderPortals(); break;
-      case 'briefing': this._renderBriefing(); break;
-      case 'fadeOut':  this._renderFadeOut(); break;
-    }
-    const overlayAlpha = Math.min(this._beatAge / Config.prologue.skip.fadeOutDuration, 1);
     this.renderer.clear(Config.colors.void, overlayAlpha);
   }
 

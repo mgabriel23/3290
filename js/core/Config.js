@@ -233,7 +233,7 @@ export const Config = Object.freeze({
 		backColor: "#aab4d4",
 		backX: 20,
 		backY: 34,
-		backHitWidth: 90, // generous tap target, same "wider than the text itself" philosophy as Config.prologue.skip
+		backHitWidth: 90, // generous tap target, same "wider than the text itself" philosophy used throughout the game's tap targets
 		backHitHeight: 40,
 
 		tileStartY: 260,
@@ -514,13 +514,15 @@ export const Config = Object.freeze({
 	}),
 
 	/**
-	 * The opening cinematic — plays once between the intro prompt and
-	 * gameplay, structured as a fixed sequence of "beats" (see
-	 * PrologueScene): a year card sets the scene, three wireframe portals
-	 * tear open, the commander's mandatory briefing types itself out, the
-	 * whole assembly fades to black, and finally the game's title card —
-	 * "3290", deliberately doubling as the year — appears with the PLAY
-	 * button that gates entry into actual gameplay.
+	 * The opening cinematic — deliberately unskippable, and plays exactly
+	 * once per player, ever: the very first time they reach it (see
+	 * PrologueScene's class doc and core/PrologueProgress.js). Every later
+	 * launch boots straight to the title card instead. Structured as a fixed
+	 * sequence of "beats" (see PrologueScene): a year card sets the scene,
+	 * three wireframe portals tear open, the commander's mandatory briefing
+	 * types itself out, the whole assembly fades to black, and finally the
+	 * game's title card — "3290", deliberately doubling as the year —
+	 * appears with the PLAY button that gates entry into actual gameplay.
 	 */
 	prologue: Object.freeze({
 		/**
@@ -634,9 +636,8 @@ export const Config = Object.freeze({
 		 * ORDER, not screen position: `_renderBriefing`/`_renderFadeOut` call
 		 * `_renderCreatures()` before `_renderBriefingText()`, so the text is
 		 * always painted on top, even if a drifting creature passes behind it.
-		 * No per-beat skip lives here — the scene-level SKIP control (see
-		 * `skip` below) covers every beat before the title card uniformly,
-		 * rather than each beat inventing its own.
+		 * There's no skip control on this (or any) beat — the cinematic is
+		 * deliberately unskippable, see the `prologue` block's own doc above.
 		 *
 		 * Written to lean into dread rather than read as a clean tactical
 		 * status report — matches the scarier background track this beat now
@@ -693,32 +694,6 @@ export const Config = Object.freeze({
 
 		/** Beat 4: the assembled scene dissolves to black — see Renderer.clear's translucent-overlay technique. */
 		fadeOutDuration: 1.2,
-
-		/**
-		 * A small always-visible "SKIP" control, shown during every beat
-		 * before the title card (yearCard/portals/briefing/fadeOut). Tapping
-		 * it jumps straight to the title screen via a quick dissolve (its own
-		 * `skipFade` beat — see PrologueScene._renderSkipFade), not an instant
-		 * cut, so it doesn't feel like a glitch. The full cinematic (~28s) is
-		 * still the default first-time experience; this exists so a player who
-		 * has already seen it (or a dev/tester replaying the flow) isn't stuck
-		 * sitting through it again before their first tap.
-		 */
-		skip: Object.freeze({
-			label: "SKIP ▶▶",
-			// Bigger + more opaque + a touch of glow than the original quiet
-			// 13px/0.65-alpha/no-glow treatment — this is a real tappable
-			// control, not a passive label, and was easy to miss at the old size.
-			font: '400 17px "Audiowide", "Courier New", monospace',
-			color: "#aab4d4",
-			alpha: 0.85,
-			glowBlur: 6,
-			marginX: 24, // virtual px from the right edge to the text anchor
-			marginY: 28, // virtual px from the top edge to the text anchor
-			hitWidth: 116, // generous tap target — wider than the text itself; scaled up alongside the bigger font
-			hitHeight: 46,
-			fadeOutDuration: 0.5, // seconds for the quick dissolve into the title card once tapped
-		}),
 
 		/**
 		 * Beat 5: the title card. "3290" is the game's name, deliberately
@@ -799,7 +774,7 @@ export const Config = Object.freeze({
 	 * Juice, so the moment actually reads as "a reward" rather than a
 	 * settings dialog: the whole screen rises up out of a black veil on
 	 * entrance (`entranceDuration` — the exact same clear-with-alpha
-	 * technique PrologueScene's own fadeOut/skipFade beats use to dissolve
+	 * technique PrologueScene's own fadeOut beat uses to dissolve
 	 * TO black, just run in reverse, so this reads as a continuation of the
 	 * same cinematic language rather than an unrelated screen just
 	 * appearing) and drops back behind its own short veil on CLAIM
@@ -4265,7 +4240,7 @@ export const Config = Object.freeze({
 		 * Tap target for the GOLD panel itself — opens the Shop (see Shop.js,
 		 * HUD.isInsideGoldPanel, GameplayScene.handleTap). Generous, wider than
 		 * the label+value text it sits over, same "easy to hit" philosophy as
-		 * Config.prologue.skip's own hit box.
+		 * every other tap target in the game.
 		 */
 		goldButton: Object.freeze({
 			hitWidth: 120,
