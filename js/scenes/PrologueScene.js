@@ -70,6 +70,7 @@ import { DailyRewardPanel } from '../entities/DailyRewardPanel.js';
 import { previewNextReward } from '../core/DailyReward.js';
 import { markPrologueSeen } from '../core/PrologueProgress.js';
 import { SettingsPanel } from '../entities/SettingsPanel.js';
+import { AchievementsPanel } from '../entities/AchievementsPanel.js';
 
 /** One path-factory per spawnable portal-creature variant — see _spawnCreature. */
 const _CREATURE_PATH_FACTORIES = {
@@ -142,6 +143,10 @@ export class PrologueScene {
     // Settings — see SettingsPanel's own class doc for why it's gated to
     // this 'title' beat only, same as the daily-reward popup above.
     this._settingsPanel = new SettingsPanel();
+    // Achievements — same 'title'-beat-only gating and reasoning as
+    // Settings above (see Config.achievements' own doc for why it lives
+    // here rather than in gameplay's HUD button row).
+    this._achievementsPanel = new AchievementsPanel();
   }
 
   /** Advance whichever beat is current; each one decides for itself when it's done. */
@@ -168,7 +173,8 @@ export class PrologueScene {
       // only have anything to animate while they're actually open/visible.
       case 'title':
         this._dailyRewardPanel.update(dt);
-        return this._settingsPanel.update(dt);
+        this._settingsPanel.update(dt);
+        return this._achievementsPanel.update(dt);
       case 'exitFade': return this._updateExitFade();
     }
   }
@@ -185,11 +191,17 @@ export class PrologueScene {
   handleTap(x, y) {
     if (this._beat !== 'title') return;
     if (this._dailyRewardPanel.isOpen) { this._dailyRewardPanel.handleTap(x, y); return; }
-    // Same shape as GameplayScene routing taps to EnemyCodex: while open OR
-    // when the tap is the ⚙ itself, the panel claims it outright so a mode
-    // button underneath can never receive it.
+    // Same shape as GameplayScene routing taps to EnemyCodex/Shop: whichever
+    // panel is already open (or is the one whose own button was just
+    // tapped) claims the tap outright, and each guards against opening
+    // while the other is already up — same "only one full-screen overlay at
+    // a time" rule GameplayScene's Codex/Shop pair follows.
+    if (this._achievementsPanel.isOpen || this._achievementsPanel.isInsideButton(x, y)) {
+      if (!this._settingsPanel.isOpen) this._achievementsPanel.handleTap(x, y);
+      return;
+    }
     if (this._settingsPanel.isOpen || this._settingsPanel.isInsideButton(x, y)) {
-      this._settingsPanel.handleTap(x, y);
+      if (!this._achievementsPanel.isOpen) this._settingsPanel.handleTap(x, y);
       return;
     }
     let mode = null;
@@ -240,6 +252,7 @@ export class PrologueScene {
         if (this._dailyRewardPanel.isOpen) return this._dailyRewardPanel.render(this.renderer);
         this._renderTitle();
         this._settingsPanel.render(this.renderer);
+        this._achievementsPanel.render(this.renderer);
         return this._renderDailyRewardBadge();
       case 'exitFade': return this._renderExitFade();
     }

@@ -102,6 +102,7 @@ import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { AudioPool } from '../core/AudioPool.js';
 import { vibrate } from '../core/Settings.js';
+import { recordKill } from '../core/Stats.js';
 
 // Arbitrarily large multiplier on _playerDamage used by triggerSkillBomb to
 // guarantee a one-shot kill regardless of level scaling, without needing to
@@ -813,6 +814,7 @@ export class WaveManager {
 
     if (killed) {
       vibrate(Config.settings.haptics.killPatternMs);
+      recordKill(enemy.type); // lifetime stat, independent of score — see core/Stats.js
       const reward = this._rewardFor(enemy);
       this._hud.score += Math.round(reward.points * scoreMultiplier);
 
@@ -1004,23 +1006,26 @@ export class WaveManager {
    * several pickups collected in the same frame are all applied, not just
    * the first.
    * @param {{ x: number, y: number, hitRadius: number }} player
-   * @returns {{ playerHeal: number, fireBoost: boolean, invincible: boolean }}
+   * @returns {{ playerHeal: number, fireBoost: boolean, invincible: boolean, count: number }}
    *   playerHeal — total player health to restore this frame (0 if none);
    *   fireBoost/invincible — true if at least one of that kind was
-   *   collected this frame
+   *   collected this frame; count — how many PowerUps were collected this
+   *   frame, any kind (see core/Stats.js's recordPowerUpsCollected)
    */
   checkPowerUpPickup(player) {
     let playerHeal = 0;
     let fireBoost = false;
     let invincible = false;
+    let count = 0;
     let type;
     while ((type = this._powerUps.checkPickup(player.x, player.y, player.hitRadius))) {
+      count++;
       if (type === 'shield') this._barrier.heal(Config.powerUps.shield.healAmount);
       else if (type === 'fireBoost') fireBoost = true;
       else if (type === 'invincible') invincible = true;
       else playerHeal += Config.powerUps.health.healAmount;
     }
-    return { playerHeal, fireBoost, invincible };
+    return { playerHeal, fireBoost, invincible, count };
   }
 
   /**

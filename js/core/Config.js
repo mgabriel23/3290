@@ -4618,6 +4618,123 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * The Achievements button + browsable card overlay (see
+	 * entities/AchievementsPanel.js) — composed into PrologueScene's 'title'
+	 * beat only, mirroring Config.settings.button's placement but on the
+	 * OPPOSITE top corner (x:40 vs settings' x:500) so the two sit
+	 * symmetrically either side of the title card. Not reachable mid-run —
+	 * same reasoning as Settings (see SettingsPanel's own class doc): a
+	 * lifetime-stats browser isn't gameplay-critical, and gameplay's own
+	 * top-center button row (mute/codex/pause) is already at capacity.
+	 *
+	 * `overlay` reuses EnemyCodex's paginated-card layout almost exactly
+	 * (same titleY/progressY, same arrow geometry) since it's the same
+	 * "browse N items with arrows" shape, just one achievement TRACK per
+	 * card instead of one enemy. `pip` is the 3-tier progress strip inside
+	 * each card — same corner-bracket-frame technique as
+	 * DailyRewardPanel.streakStrip's 7 day-pips, just 3 wide and bigger
+	 * since there are far fewer of them to fit. `toast` tunes the
+	 * celebratory pop-up (entities/AchievementToast.js) fired the moment a
+	 * tier unlocks mid-run — same three-phase pop/hold/fade shape as
+	 * Config.combo.banner, parked lower on screen (posY 460 vs combo's 380)
+	 * so the two can never visually collide if both fire close together.
+	 */
+	achievements: Object.freeze({
+		button: Object.freeze({
+			x: 40,
+			y: 45,
+			radius: 25,
+			glyph: "🏆",
+			color: "#4DEFFF",
+			lineWidth: 2,
+			glowBlur: 7,
+			font: '400 20px "Audiowide", "Courier New", monospace',
+			pulseSpeed: 2.0,
+			pulseDepth: 0.3,
+		}),
+		tierLabels: Object.freeze(["I", "II", "III"]),
+		overlay: Object.freeze({
+			dimAlpha: 0.85,
+			fadeInDuration: 0.2,
+
+			titleFont: '400 16px "Audiowide", "Courier New", monospace',
+			titleColor: "#4DEFFF",
+			titleY: 100,
+
+			progressFont: '400 12px "Audiowide", "Courier New", monospace',
+			progressColor: "#aab4d4",
+			progressY: 130,
+
+			// The overall "N / 33 tiers unlocked" headline — distinct from
+			// progressY's per-card page index just above it, and the whole
+			// reason this screen exists: a persistent, always-visible measure
+			// of lifetime progress, not just this one card's.
+			overallFont: '400 14px "Audiowide", "Courier New", monospace',
+			overallColor: "#4DFF8A",
+			overallY: 158,
+
+			trackTitleFont: '400 26px "Audiowide", "Courier New", monospace',
+			trackTitleGlowBlur: 8,
+			trackTitleY: 240,
+
+			descFont: '400 15px "Courier New", monospace',
+			descColor: "#e8ecff",
+			descY: 285,
+			descLineHeight: 22,
+			descMaxWidth: 420,
+
+			arrowColor: "#4DEFFF",
+			arrowGlowBlur: 6,
+			arrowY: 460, // aligned with the pip strip
+			arrowMarginX: 40,
+			arrowHalfSize: 30,
+
+			footerFont: '400 11px "Audiowide", "Courier New", monospace',
+			footerColor: "#aab4d4",
+			footerY: 780,
+			footerText: "TAP ARROWS TO BROWSE · TAP 🏆 TO CLOSE",
+		}),
+		// The 3-pip tier strip inside each card — see class doc. Colors reuse
+		// the same three semantic states MissionSelect/Shop already use:
+		// unlocked = completedColor, next-up = unlockedColor, not-yet-reachable = lockedColor.
+		pip: Object.freeze({
+			y: 460,
+			size: 76,
+			legSize: 14,
+			gap: 40,
+			lineWidth: 2,
+			labelFont: '400 20px "Audiowide", "Courier New", monospace',
+			unlockedColor: "#4DFF8A",
+			currentColor: "#4DEFFF",
+			lockedColor: "#4a5570",
+			currentPulseSpeed: 2.4,
+			currentPulseDepth: 0.25,
+			checkLineWidth: 3,
+
+			valueFont: '400 15px "Audiowide", "Courier New", monospace',
+			valueY: 520, // current progress toward the next tier, or "ALL TIERS UNLOCKED"
+			thresholdsFont: '400 11px "Courier New", monospace',
+			thresholdsColor: "#aab4d4",
+			thresholdsY: 548, // dim reference line listing all 3 thresholds
+		}),
+		toast: Object.freeze({
+			posY: 460,
+			tagFont: '400 12px "Audiowide", "Courier New", monospace',
+			tagText: "ACHIEVEMENT UNLOCKED",
+			titleFont: '400 24px "Audiowide", "Courier New", monospace',
+			subFont: '400 15px "Audiowide", "Courier New", monospace',
+			color: "#4DFF8A",
+			glowBlur: 14,
+			tagOffsetY: -30,
+			subOffsetY: 30,
+			popDuration: 0.25,
+			popOvershoot: 2.0,
+			holdDuration: 1.4, // longer than Config.combo.banner's 0.85 — a rarer event, worth a beat longer to actually read
+			fadeOutDuration: 0.4,
+		}),
+	}),
+
+	/**
 	 * Playback controls — two small always-visible buttons flanking the
 	 * Enemy Codex button in the same top-center HUD gap (see entities/
 	 * PlaybackControls.js). Mute never opens an overlay, so it stays

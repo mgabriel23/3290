@@ -148,7 +148,9 @@ import { ScreenShake } from '../core/ScreenShake.js';
 import { consumeLuckyDrop, consumeShieldStart } from '../core/DailyReward.js';
 import { dangerColor } from '../core/Settings.js';
 import { recordRun, updateLastRunScore, getRunHistory } from '../core/RunHistory.js';
+import { recordGoldCollected, recordPowerUpsCollected, recordBestCombo, recordRunEnd } from '../core/Stats.js';
 import { shareScore } from '../core/Share.js';
+import { AchievementToast } from '../entities/AchievementToast.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
 import { ComboBanner } from '../entities/ComboBanner.js';
@@ -250,6 +252,17 @@ export class GameplayScene {
     this._comboAnnouncedTier = 0;
     this._comboBanner = new ComboBanner();
     this._streakAudio = new AudioPool(Config.combo.audioSrc, Config.combo.audioPoolSize, Config.combo.audioVolume);
+    // This run's best _comboCount ever reached, independent of _comboCount
+    // itself (which resets to 0 on every hit) — persisted once, at the run's
+    // real end (see handleTap's onGameOver/onMissionComplete branches), via
+    // core/Stats.js's recordBestCombo.
+    this._runBestCombo = 0;
+    // Achievements: celebratory pop-up on a mid-run tier unlock (see
+    // entities/AchievementToast.js) — polled once a frame in update(), same
+    // "poll and drain" shape WaveManager's own pickup checks use. The
+    // achievements BROWSER (AchievementsPanel) lives on PrologueScene's
+    // title card instead, not here — see Config.achievements' own doc.
+    this._achievementToast = new AchievementToast();
 
     // Game-over overlay — see class doc's "Player damage" note.
     this._isGameOver  = false;
@@ -349,6 +362,7 @@ export class GameplayScene {
     this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
     this._floatingText.update(effectiveDt);
     this._comboBanner.update(effectiveDt);
+    this._achievementToast.update(effectiveDt);
     this._playerSkill.update(effectiveDt);
     this._updateMusicDuck(effectiveDt);
 
@@ -363,11 +377,18 @@ export class GameplayScene {
       if (pickup.playerHeal > 0) this.player.heal(pickup.playerHeal);
       if (pickup.fireBoost) this._fireBoostTimer = Config.powerUps.fireBoost.duration;
       if (pickup.invincible) this.player.activateInvincibility(Config.powerUps.invincible.duration);
+      recordPowerUpsCollected(pickup.count);
       const goldCollected = this._waveManager.checkGoldPickup(this.player);
       if (goldCollected > 0) {
         this.hud.gold += goldCollected;
         this._floatingText.spawn(this.player.x, this.player.y - 30, `+${goldCollected} GOLD`, Config.gold.color);
+        recordGoldCollected(goldCollected);
       }
+      // Lifetime-stats-derived achievement tiers only ever change from a
+      // kill (WaveManager.handleBulletHit) or a pickup (just above) — both
+      // already happened this frame by this point, so checking once here
+      // catches everything without re-deriving progress per event.
+      this._achievementToast.checkForUnlocks();
       if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
       // Wave cleared AND all death effects finished → Survival Mode begins
@@ -431,6 +452,7 @@ export class GameplayScene {
     this._waveManager?.renderBossHealthBar(this.renderer);
     this._playerSkill.render(this.renderer);
     this._comboBanner.render(this.renderer); // no-op when inactive — cheap to always call, same as _floatingText above
+    this._achievementToast.render(this.renderer); // no-op when inactive — same convention
     // Level intro overlays everything — rendered last so it always reads clearly
     if (this._levelState === 'intro') this._renderLevelIntro();
     // Codex, then shop, then playback controls — all three must sit on top
@@ -563,10 +585,12 @@ export class GameplayScene {
       if (this._isInsideReviveButton(x, y)) { this._tryRevive(); return; }
       if (this._isNearReviveButton(x, y)) return; // near-miss on the CTA — absorbed, not read as "restart"
       if (this._isInsideShareButton(x, y)) { this._shareScore(); return; }
+      this._commitLifetimeStats();
       this._onGameOver?.();
       return;
     }
     if (this._missionComplete) {
+      this._commitLifetimeStats();
       this._onMissionComplete?.();
       return;
     }
@@ -648,6 +672,7 @@ export class GameplayScene {
         const killed = this._waveManager.handleBulletHit(e, damageMultiplier, this._comboMultiplier(), this._comboDropBonus());
         if (killed) {
           this._comboCount++;
+          if (this._comboCount > this._runBestCombo) this._runBestCombo = this._comboCount;
           // Boss kills get a bigger shake than an ordinary kill — matches
           // Config.gameOver.deathTrauma, the only other moment this strong.
           const trauma = e.type === 'boss' ? Config.boss.killTrauma : Config.screenShake.killTrauma;
@@ -748,6 +773,22 @@ export class GameplayScene {
    * either way, rather than needing a second visual for "the barrier failed
    * instead."
    */
+  /**
+   * Commits this run's lifetime-stats tally (core/Stats.js) — called exactly
+   * once, from `handleTap`'s `onGameOver`/`onMissionComplete` branches, the
+   * two points a GameplayScene instance is torn down for good (Game.js
+   * constructs a brand-new one right after). Deliberately NOT called from
+   * `_triggerGameOver` itself — a paid revive (`_tryRevive`) can send THIS
+   * SAME instance through `_triggerGameOver` more than once while the run
+   * continues, and runsPlayed/playtime/bestCombo should only ever count once
+   * per run, not once per death within it. Kill/gold/PowerUp counts don't
+   * need this guard — they're recorded live, per event, as they happen.
+   */
+  _commitLifetimeStats() {
+    recordRunEnd(this._age);
+    recordBestCombo(this._runBestCombo);
+  }
+
   _triggerGameOver() {
     this._isGameOver  = true;
     this._gameOverAge = 0;
