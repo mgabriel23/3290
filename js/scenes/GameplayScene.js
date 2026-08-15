@@ -617,7 +617,9 @@ export class GameplayScene {
    * banner + streak sting + an extra screen-shake jolt (`_comboAnnouncedTier`
    * tracks the highest tier already announced, so this fires once per tier
    * rather than on every kill inside it) — see Config.combo.banner and
-   * ComboBanner.js.
+   * ComboBanner.js. Every kill's gold/PowerUp drop rolls also get a slight
+   * boost from the streak (`_comboDropBonus()`), same "earned by not getting
+   * hit" spirit as the score multiplier.
    * @param {number} [damageMultiplier]  see update()'s fireBoostMultiplier
    */
   _checkCollisions(damageMultiplier = 1) {
@@ -625,7 +627,7 @@ export class GameplayScene {
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       if (this.bullets.checkHit(e.x, e.y, e.hitRadius)) {
-        const killed = this._waveManager.handleBulletHit(e, damageMultiplier, this._comboMultiplier());
+        const killed = this._waveManager.handleBulletHit(e, damageMultiplier, this._comboMultiplier(), this._comboDropBonus());
         if (killed) {
           this._comboCount++;
           // Boss kills get a bigger shake than an ordinary kill — matches
@@ -650,7 +652,10 @@ export class GameplayScene {
    * Which combo tier (1-based; 0 = none yet) `count` kills-without-damage
    * has reached, per `Config.combo.step` — the same tiering `_comboMultiplier()`
    * derives the score multiplier from, just as an integer index rather than
-   * the multiplier value itself, for indexing `Config.combo.banner.labels`.
+   * the multiplier value itself, used both for indexing `Config.combo.banner.labels`
+   * (clamped separately in ComboBanner.trigger once the streak outgrows the
+   * array) and for scaling `_comboDropBonus()`. Uncapped — `Config.combo.maxMultiplier`
+   * is `Infinity`, so this climbs for as long as the streak does.
    * @param {number} count
    */
   _comboTierIndex(count) {
@@ -661,15 +666,29 @@ export class GameplayScene {
 
   /**
    * Current score-combo multiplier, derived from `_comboCount` — tiered in
-   * steps of `Config.combo.step` kills, each worth `+incrementPerStep`,
-   * capped at `maxMultiplier`. Applied to kill POINTS only (see
-   * WaveManager.handleBulletHit's `scoreMultiplier` param); read here for
-   * both scoring (`_checkCollisions`) and the HUD's "COMBO ×N" readout
-   * (`render`).
+   * steps of `Config.combo.step` kills, each worth `+incrementPerStep`, with
+   * no ceiling (`Config.combo.maxMultiplier` is `Infinity` by design — see
+   * its own doc). Applied to kill POINTS only (see WaveManager.handleBulletHit's
+   * `scoreMultiplier` param); read here for both scoring (`_checkCollisions`)
+   * and the HUD's "COMBO ×N" readout (`render`).
    */
   _comboMultiplier() {
     const { step, incrementPerStep, maxMultiplier } = Config.combo;
     return Math.min(maxMultiplier, 1 + Math.floor(this._comboCount / step) * incrementPerStep);
+  }
+
+  /**
+   * Extra gold/PowerUp drop-chance multiplier earned by the current combo
+   * streak — passed into WaveManager.handleBulletHit alongside the score
+   * multiplier so a long streak also means better drop luck, not just more
+   * points. Grows with the same tier index as the banner/score (see
+   * `_comboTierIndex`), scaled by `Config.combo.dropBonusPerTier` and capped
+   * by `maxDropBonus` so an extreme streak still can't approach a
+   * guaranteed drop.
+   */
+  _comboDropBonus() {
+    const { dropBonusPerTier, maxDropBonus } = Config.combo;
+    return 1 + Math.min(maxDropBonus, this._comboTierIndex(this._comboCount) * dropBonusPerTier);
   }
 
   /**

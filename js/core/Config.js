@@ -969,7 +969,8 @@ export const Config = Object.freeze({
 				jackpot: true,
 				name: "WEEK JACKPOT",
 				color: "#FF9F1C",
-				description: "A full week of logins, claimed — the biggest gold bonus in the cycle.",
+				description:
+					"A full week of logins, claimed — the biggest gold bonus in the cycle.",
 			}),
 		]),
 
@@ -1827,10 +1828,10 @@ export const Config = Object.freeze({
 		// actually reads as "gold coin" at a glance rather than "colored orb"
 		// (the old fillColor was a near-black wash, so only the thin outline
 		// carried any gold color at all — see GoldPickups.render).
-		color: "#FFDE59",       // bright rim/glint — distinct from Config.powerUps.fireBoost's warm-gold (#FFD24D)
-		fillColor: "#E7B740",   // solid coin body
+		color: "#FFDE59", // bright rim/glint — distinct from Config.powerUps.fireBoost's warm-gold (#FFD24D)
+		fillColor: "#E7B740", // solid coin body
 		highlightColor: "#FFF6DC", // pale specular shine, drifts slowly across the face
-		shadeColor: "#6B4610",  // dark antique-gold — stamped star emblem + inner emboss; darkened from #8A5A12 so the emblem clears WCAG 1.4.11's 3:1 non-text contrast against fillColor with real margin (was ~3.2:1, now ~4.5:1)
+		shadeColor: "#6B4610", // dark antique-gold — stamped star emblem + inner emboss; darkened from #8A5A12 so the emblem clears WCAG 1.4.11's 3:1 non-text contrast against fillColor with real margin (was ~3.2:1, now ~4.5:1)
 	}),
 
 	/**
@@ -1841,11 +1842,24 @@ export const Config = Object.freeze({
 	 * glance (HUD just shows "COMBO ×N") — see Config.hud.combo for the
 	 * display side. Skill-bomb kills (triggerSkillBomb) deliberately don't
 	 * feed this — see GameplayScene._checkCollisions' own doc for why.
+	 *
+	 * Also nudges drop luck: each tier-up slightly raises the roll chance
+	 * for both the gold and PowerUp drops on that same kill (see
+	 * `dropBonusPerTier`/`maxDropBonus` below and GameplayScene._comboDropBonus).
 	 */
 	combo: Object.freeze({
 		step: 5, // kills-without-damage per multiplier tier
 		incrementPerStep: 0.5, // multiplier added per tier
-		maxMultiplier: 4, // hard cap — reached at 30 kills into an unbroken streak
+		maxMultiplier: Infinity, // uncapped by design — the streak (and its score payoff) climbs for as long as the player stays unhit
+
+		// Extra roll-chance multiplier for gold/PowerUp drops, scaled by the
+		// current tier index (see GameplayScene._comboDropBonus) — e.g. tier 3
+		// with 0.08 below multiplies both Config.gold.dropChance and
+		// Config.powerUps.dropChance by 1.24. `maxDropBonus` caps the bonus
+		// itself (not the tier) so an extreme streak still can't approach a
+		// guaranteed drop.
+		dropBonusPerTier: 0.08,
+		maxDropBonus: 1, // i.e. drop chance can at most double (1 + 1)
 
 		// Plays once per tier-up (not per kill) — see GameplayScene._checkCollisions.
 		// No shipped clip yet; AudioPool degrades silently until one exists at this path.
@@ -1858,10 +1872,10 @@ export const Config = Object.freeze({
 		 * entities/ComboBanner.js) — the big-and-brief counterpart to the
 		 * small always-on "COMBO ×N" HUD readout (Config.hud.combo), which
 		 * is easy to miss mid-fight. `labels` escalate with the tier just
-		 * reached (index 0 = the first tier, 5 kills); its length (6)
-		 * intentionally matches the number of tiers `step`/`incrementPerStep`/
-		 * `maxMultiplier` above produce (30 kills / 5 = 6), so every tier
-		 * gets its own word without ever falling off the end of the array.
+		 * reached (index 0 = the first tier, 5 kills); the streak is now
+		 * uncapped, so tiers beyond the array's length (6) reuse the last
+		 * label ("LEGENDARY!") — see ComboBanner.trigger's clamp — while the
+		 * ×N multiplier shown on the sub-line keeps climbing underneath it.
 		 */
 		banner: Object.freeze({
 			labels: Object.freeze([
@@ -3113,7 +3127,7 @@ export const Config = Object.freeze({
 		// the front) — canonical shipped values are `everyNLevels: 7` and
 		// roster starting with 'scout1'; revert before shipping. `nova` is
 		// appended at the end regardless, so it's in rotation either way.
-		everyNLevels: 3,
+		everyNLevels: 5,
 		roster: Object.freeze([
 			"zigzag",
 			"pulsor",

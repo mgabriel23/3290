@@ -783,9 +783,13 @@ export class WaveManager {
    *   multiplier here (see Config.combo, GameplayScene._checkCollisions), 1
    *   otherwise (e.g. triggerSkillBomb's kills, which deliberately don't
    *   feed or benefit from the combo — see that method's own doc).
+   * @param {number} [dropChanceBonus]  multiplies both the gold and PowerUp
+   *   drop rolls below — GameplayScene passes its current combo streak's
+   *   drop bonus here (see Config.combo.dropBonusPerTier,
+   *   GameplayScene._comboDropBonus), 1 otherwise (no bonus).
    * @returns {boolean} true if this hit was fatal — GameplayScene uses this to trigger kill-feedback (screen shake, hit-stop)
    */
-  handleBulletHit(enemy, damageMultiplier = 1, scoreMultiplier = 1) {
+  handleBulletHit(enemy, damageMultiplier = 1, scoreMultiplier = 1, dropChanceBonus = 1) {
     const killed = enemy.hit(this._playerDamage * damageMultiplier);
 
     // Bouncer Primal (and any future boss with its own summon-on-hit
@@ -837,8 +841,8 @@ export class WaveManager {
         this._particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
       }
-      this._maybeDropPowerUp(enemy.x, enemy.y);
-      this._maybeDropGold(enemy.x, enemy.y, reward.gold);
+      this._maybeDropPowerUp(enemy.x, enemy.y, dropChanceBonus);
+      this._maybeDropGold(enemy.x, enemy.y, reward.gold, dropChanceBonus);
     }
     return killed;
   }
@@ -849,9 +853,10 @@ export class WaveManager {
    * destroyed by reaching the barrier (routed through _onDrifterBarrierHit
    * instead, which never calls this) can't drop one — that's the player
    * failing to intercept it, not a kill worth rewarding.
+   * @param {number} [dropChanceBonus]  see handleBulletHit's own doc
    */
-  _maybeDropPowerUp(x, y) {
-    if (Math.random() >= Config.powerUps.dropChance * this._dropChanceMultiplier) return;
+  _maybeDropPowerUp(x, y, dropChanceBonus = 1) {
+    if (Math.random() >= Config.powerUps.dropChance * this._dropChanceMultiplier * dropChanceBonus) return;
     this._spawnRandomPowerUp(x, y);
   }
 
@@ -862,9 +867,10 @@ export class WaveManager {
    * higher rate than the rare PowerUps pool). Same "only real kills"
    * restriction as _maybeDropPowerUp applies here too.
    * @param {number} x @param {number} y @param {number} value  gold amount from _rewardFor
+   * @param {number} [dropChanceBonus]  see handleBulletHit's own doc
    */
-  _maybeDropGold(x, y, value) {
-    if (Math.random() >= Config.gold.dropChance * this._dropChanceMultiplier) return;
+  _maybeDropGold(x, y, value, dropChanceBonus = 1) {
+    if (Math.random() >= Config.gold.dropChance * this._dropChanceMultiplier * dropChanceBonus) return;
     this._goldPickups.spawn(x, y, value);
   }
 
