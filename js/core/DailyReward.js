@@ -1,79 +1,115 @@
 /**
  * DailyReward.js
- * Persistence and roll logic for the once-a-day reward (see Config.dailyReward
- * for the three possible kinds and their tuning; DailyRewardPanel.js is the
- * popup that renders whatever this module resolves; PrologueScene.js composes
- * that panel into its title beat). Exactly one reward kind is rolled per
- * calendar day, keyed off the player's own local date (not UTC, and not a
- * rolling 24h window from last claim) — "today" should match what the
- * player's clock says today is. The roll (and its concrete gold amount, for
- * a 'gold' reward) is persisted the moment a new day is first observed, not
- * re-rolled on every call, so reloading the page before claiming can't hand
- * out a different prize than the one already shown.
+ * Persistence and roll logic for the daily reward — a 7-day streak calendar
+ * (Config.dailyReward.calendar) rather than a flat random pick: claiming on
+ * consecutive local calendar days advances `streakDay` (1-7), missing a day
+ * resets it to 1, and day 7 loops back to day 1 the day after. See
+ * entities/DailyRewardPanel.js for the popup that renders whatever this
+ * module resolves, and scenes/PrologueScene.js for both the panel's
+ * composition into the title beat and the post-claim footer that reads
+ * previewNextReward().
  *
- * Gold is credited immediately on claim, straight to the same 'gold' Storage
- * key HUD's own wallet reads (see HUD.js) — no HUD instance needs to exist
- * yet for this to work, since HUD just loads whatever that key holds the
- * next time one is constructed. luckyDrop/shieldStart instead set a one-shot
- * "pending" flag, consumed exactly once by the next GameplayScene via
- * consumeLuckyDrop()/consumeShieldStart() — see that scene's constructor.
+ * "Today" is always the player's own local date (not UTC, not a rolling 24h
+ * window from last claim) — see localDayNumber(). A day's slot (and its
+ * rolled gold amount, for a 'gold' entry) is resolved once, the first time
+ * that day is observed, and persisted immediately — see ensureRolled — so
+ * reloading the page before claiming can't hand out a different prize, or
+ * silently re-roll the streak, than what's already showing.
+ *
+ * Gold is credited immediately on claim, straight to the same 'gold'
+ * Storage key HUD's own wallet reads (see HUD.js) — no HUD instance needs
+ * to exist yet for this to work. luckyDrop/shieldStart instead set a
+ * one-shot "pending" flag, consumed exactly once by the next GameplayScene
+ * via consumeLuckyDrop()/consumeShieldStart() — see that scene's
+ * constructor. This contract is unchanged from before the streak rework.
  */
 import { Config } from './Config.js';
 import { loadNumber, saveNumber, loadBool, saveBool } from './Storage.js';
 
-const REWARD_TYPES = ['gold', 'luckyDrop', 'shieldStart'];
+const CALENDAR = Config.dailyReward.calendar;
 
-/** Today's date as a single comparable integer (YYYYMMDD), in the player's local timezone. */
-function todayKey() {
+/**
+ * Today as a count of local calendar days since the epoch — unlike a
+ * YYYYMMDD int, this is diffable across month/year boundaries, which
+ * ensureRolled's "was yesterday claimed?" check depends on.
+ */
+function localDayNumber() {
   const d = new Date();
-  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86400000);
+}
+
+/** Merges a calendar slot's own overrides (day 7's jackpot name/color/description) over its type's default display config (Config.dailyReward[type]). */
+function resolveDisplay(entry) {
+  const base = Config.dailyReward[entry.type];
+  return {
+    name: entry.name ?? base.name,
+    color: entry.color ?? base.color,
+    description: entry.description ?? base.description,
+  };
 }
 
 /**
- * Ensures today's reward has been rolled (rolling it once, the first time
- * today is seen), then returns it. Safe to call repeatedly — only the first
- * call each day actually rolls anything.
- * @returns {{ type: 'gold'|'luckyDrop'|'shieldStart', amount: number }}
- *   `amount` is only meaningful for 'gold'.
+ * Ensures today's slot has been rolled — advancing or resetting the streak
+ * exactly once per newly-observed day — then persists it. Safe to call
+ * repeatedly; only the first call each day actually rolls anything (guarded
+ * by `dailyReward.rolledDay`).
  */
-function currentReward() {
-  const today = todayKey();
-  if (loadNumber('dailyReward.day', 0) !== today) {
-    const type = REWARD_TYPES[Math.floor(Math.random() * REWARD_TYPES.length)];
-    let amount = 0;
-    if (type === 'gold') {
-      const { minAmount, maxAmount } = Config.dailyReward.gold;
-      amount = Math.round((minAmount + Math.random() * (maxAmount - minAmount)) / 5) * 5;
-    }
-    saveNumber('dailyReward.day', today);
-    saveNumber('dailyReward.type', REWARD_TYPES.indexOf(type));
-    saveNumber('dailyReward.amount', amount);
-    saveBool('dailyReward.claimed', false);
+function ensureRolled() {
+  const today = localDayNumber();
+  if (loadNumber('dailyReward.rolledDay', -1) === today) return;
+
+  const lastClaim = loadNumber('dailyReward.lastClaimDay', -1);
+  const prevStreak = loadNumber('dailyReward.streakDay', 0);
+  const streakDay = lastClaim === today - 1
+    ? (prevStreak >= 7 ? 1 : prevStreak + 1) // claimed yesterday — streak continues (or loops past day 7)
+    : 1; // missed a day, or this is the very first roll ever — start the cycle over
+
+  const entry = CALENDAR[streakDay - 1];
+  let amount = 0;
+  if (entry.type === 'gold') {
+    amount = Math.round((entry.amountMin + Math.random() * (entry.amountMax - entry.amountMin)) / 5) * 5;
   }
-  return {
-    type: REWARD_TYPES[loadNumber('dailyReward.type', 0)],
-    amount: loadNumber('dailyReward.amount', 0),
-  };
+
+  saveNumber('dailyReward.rolledDay', today);
+  saveNumber('dailyReward.streakDay', streakDay);
+  saveNumber('dailyReward.amount', amount);
+  saveBool('dailyReward.claimed', false);
 }
 
 /** True if today's reward hasn't been claimed yet — DailyRewardPanel checks this once at construction. */
 export function hasPendingReward() {
-  currentReward();
+  ensureRolled();
   return !loadBool('dailyReward.claimed', false);
 }
 
-/** Today's rolled reward. Only meaningful while hasPendingReward() is true. */
+/**
+ * Today's rolled reward, resolved for display/claim. Only meaningful while
+ * hasPendingReward() is true.
+ * @returns {{ streakDay: number, type: 'gold'|'luckyDrop'|'shieldStart', amount: number, jackpot: boolean, displayName: string, displayColor: string, displayDescription: string }}
+ */
 export function getPendingReward() {
-  return currentReward();
+  ensureRolled();
+  const streakDay = loadNumber('dailyReward.streakDay', 1);
+  const entry = CALENDAR[streakDay - 1];
+  const display = resolveDisplay(entry);
+  return {
+    streakDay,
+    type: entry.type,
+    amount: loadNumber('dailyReward.amount', 0),
+    jackpot: !!entry.jackpot,
+    displayName: display.name,
+    displayColor: display.color,
+    displayDescription: display.description,
+  };
 }
 
 /**
- * Grants today's rolled reward and marks it claimed for today. Idempotent
- * within a day (a second call would just re-set the same flags), but
- * DailyRewardPanel only ever calls this once, on the CLAIM tap.
+ * Grants today's rolled reward, marks it claimed, and stamps today as the
+ * last claim day — the value tomorrow's ensureRolled() checks to decide
+ * whether the streak continues or resets. Idempotent within a day.
  */
 export function claimReward() {
-  const reward = currentReward();
+  const reward = getPendingReward();
   if (reward.type === 'gold') {
     saveNumber('gold', loadNumber('gold', 0) + reward.amount);
   } else if (reward.type === 'luckyDrop') {
@@ -82,6 +118,7 @@ export function claimReward() {
     saveBool('dailyReward.shieldStartPending', true);
   }
   saveBool('dailyReward.claimed', true);
+  saveNumber('dailyReward.lastClaimDay', localDayNumber());
 }
 
 /**
@@ -105,4 +142,19 @@ export function consumeShieldStart() {
   const active = loadBool('dailyReward.shieldStartPending', false);
   if (active) saveBool('dailyReward.shieldStartPending', false);
   return active;
+}
+
+/**
+ * The display config for whichever slot comes AFTER today's — used by
+ * PrologueScene's post-claim footer to tease tomorrow's reward (see
+ * Config.dailyReward.claimedBadge). Always resolvable even mid-cycle since
+ * the calendar loops: day 7's "next" is day 1.
+ * @returns {{ name: string, color: string }}
+ */
+export function previewNextReward() {
+  ensureRolled();
+  const streakDay = loadNumber('dailyReward.streakDay', 1);
+  const nextDay = streakDay >= 7 ? 1 : streakDay + 1;
+  const display = resolveDisplay(CALENDAR[nextDay - 1]);
+  return { name: display.name, color: display.color };
 }

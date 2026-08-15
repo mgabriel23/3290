@@ -887,11 +887,21 @@ export const Config = Object.freeze({
 		// on-screen cue the daily-reward system exists at all until
 		// tomorrow's popup happens to catch them again.
 		claimedBadge: Object.freeze({
-			text: "DAILY REWARD CLAIMED — COME BACK TOMORROW",
+			// Line 1: plain confirmation, same dim footnote read as before.
+			text: "TODAY'S REWARD CLAIMED",
 			font: '400 13px "Courier New", monospace', // bumped from 11px for legibility at real device scale
 			color: "#aab4d4",
 			alpha: 0.55,
-			y: 900,
+			y: 884,
+
+			// Line 2: the actual "come back" hook — a colored preview of
+			// TOMORROW's reward (core/DailyReward.js's previewNextReward()),
+			// tinted with that reward's own color so it visually pops even at
+			// low alpha instead of reading as more of the same grey text.
+			nextPrefix: "TOMORROW: ",
+			nextFont: '400 13px "Courier New", monospace',
+			nextAlpha: 0.8,
+			nextY: 906,
 		}),
 
 		// The three possible rolls — REWARD_TYPES in DailyReward.js iterates
@@ -921,6 +931,80 @@ export const Config = Object.freeze({
 				"Your next run begins with a few seconds of invincibility.",
 			duration: 5, // seconds — shorter than a real invincible PowerUp's 15s (Config.powerUps.invincible.duration); this is a head-start grace period, not a full buff
 			color: "#E8F6FF", // matches Config.powerUps.invincible.color
+		}),
+
+		/**
+		 * The 7-day streak calendar — core/DailyReward.js's `ensureRolled`
+		 * advances a `streakDay` index (1-7) through this array once per
+		 * newly-observed calendar day: continuing to `streakDay + 1` if
+		 * yesterday was claimed, resetting to 1 on any missed day, and
+		 * looping back to 1 again the day after day 7 is claimed — so the
+		 * cycle repeats indefinitely rather than capping out. Each entry's
+		 * `type` still drives shape (icon, gold-credit vs pending-flag) via
+		 * the `gold`/`luckyDrop`/`shieldStart` blocks above; `amountMin`/
+		 * `amountMax` (gold entries only) give each gold day its OWN band,
+		 * escalating across the week instead of one flat range every time —
+		 * see DailyReward.js's `resolveDisplay`/`getPendingReward` for how a
+		 * slot's `name`/`color`/`description` override (day 7 only) merges
+		 * over its type's defaults above.
+		 */
+		calendar: Object.freeze([
+			Object.freeze({ type: "gold", amountMin: 40, amountMax: 60 }),
+			Object.freeze({ type: "shieldStart" }),
+			Object.freeze({ type: "gold", amountMin: 70, amountMax: 100 }),
+			Object.freeze({ type: "luckyDrop" }),
+			Object.freeze({ type: "gold", amountMin: 110, amountMax: 150 }),
+			Object.freeze({ type: "shieldStart" }),
+			// Day 7 — the payoff for a full week of consecutive logins: a
+			// visibly bigger gold band plus its own name/color (amber, not
+			// gold's usual yellow) so it reads as a distinct "jackpot" tier
+			// rather than just another same-looking gold card. `jackpot: true`
+			// is read by DailyRewardPanel to boost its icon-badge glow/halo
+			// and by the streak strip to tint this day's pip even while it's
+			// still in the future (see Config.dailyReward.streakStrip).
+			Object.freeze({
+				type: "gold",
+				amountMin: 250,
+				amountMax: 350,
+				jackpot: true,
+				name: "WEEK JACKPOT",
+				color: "#FF9F1C",
+				description: "A full week of logins, claimed — the biggest gold bonus in the cycle.",
+			}),
+		]),
+
+		/**
+		 * The 7-pip streak strip rendered above the main reward card (see
+		 * entities/DailyRewardPanel.js's _renderStreakStrip) — a day-by-day
+		 * read of the whole calendar above, not just today's roll, so a
+		 * player can see a claimed streak building AND the still-locked days
+		 * ahead (especially day 7's jackpot) in one glance — the "come back
+		 * for this" hook. Reuses the exact same 3-state semantic palette
+		 * Shop.js/MissionSelectScene.js already use for their own owned/
+		 * available/locked tiles (Config.shop.buy*Color, Config.missionSelect.
+		 * *Color) so "claimed / today / not yet" reads as the same visual
+		 * language as the rest of the game rather than a fourth color scheme.
+		 * A future pip whose calendar entry is the jackpot renders in ITS OWN
+		 * amber (Config.dailyReward.calendar[6].color) instead of the flat
+		 * futureColor grey — everything else builds anticipation toward day
+		 * 7 specifically, so its pip shouldn't blend into the rest.
+		 */
+		streakStrip: Object.freeze({
+			y: 295, // vp — pip row center. Kept clear of the halo's max breathing radius below (haloBaseRadius + 2*haloRingSpacing + 10 = 192vp from cardCenterY, i.e. down to y=328) so the two never visually overlap.
+			labelY: 252, // vp — "DAY N STREAK" label, above the row
+			labelFont: '400 15px "Audiowide", "Courier New", monospace',
+			pipSize: 50, // vp square footprint per pip (corner-bracket frame + icon)
+			pipGap: 10, // vp between adjacent pips — 7*50 + 6*10 = 410vp, well inside the 540vp virtual width
+			pipLegSize: 8,
+			pipLineWidth: 1.5,
+			iconScale: 0.42, // shrinks the same icon paths _renderIcon draws on the big badge down to pip size
+			claimedColor: "#4DFF8A", // matches Shop's buyOwnedColor / MissionSelect's completedColor
+			currentColor: "#4DEFFF", // matches Shop's buyAffordableColor / MissionSelect's unlockedColor
+			futureColor: "#4a5570", // matches Shop's buyUnaffordableColor / MissionSelect's lockedColor
+			futureIconAlpha: 0.5, // future pips still show their reward's icon, just dimmed — the preview itself
+			currentPulseSpeed: 3.2, // rad/sec — same breathing idea as Config.dailyReward.claimButton
+			currentPulseDepth: 0.25,
+			checkLineWidth: 2,
 		}),
 	}),
 

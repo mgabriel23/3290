@@ -31,6 +31,12 @@
  * than closing instantly (see `_closing`/update); `isOpen` only flips false
  * once that finishes, which is what tells PrologueScene to go back to
  * rendering the title card.
+ *
+ * Above the card, `_renderStreakStrip` draws all 7 days of DailyReward.js's
+ * calendar at once (see Config.dailyReward.streakStrip) — claimed days
+ * check off, today pulses, and future days still show their own dimmed
+ * icon rather than hiding what's coming. This is the panel's "come back
+ * tomorrow" hook: a player can see day 7's jackpot pip from day 1 onward.
  */
 import { Config } from '../core/Config.js';
 import { cornerBracketPath, diamondPath } from '../core/shapes.js';
@@ -52,6 +58,7 @@ export class DailyRewardPanel {
     this._chromePaths = this._buildChromePaths();
     this._cardPaths = this._buildCardPaths();
     this._claimButtonPaths = this._buildClaimButtonPaths();
+    this._pipFramePaths = this._buildPipFramePaths();
     this._buildIconPaths();
 
     if (this._pending) {
@@ -60,7 +67,7 @@ export class DailyRewardPanel {
       // real render, same "trigger at the moment of the thing, not on a
       // later tick" timing as every enemy-death Particles pool uses.
       const { width: vW } = Config.virtual;
-      this._particles = new Particles(Config.dailyReward[this._reward.type].color, Config.dailyReward.burstSparkCount);
+      this._particles = new Particles(this._reward.displayColor, Config.dailyReward.burstSparkCount);
       this._particles.emit(vW / 2, Config.dailyReward.cardCenterY);
     }
   }
@@ -87,10 +94,9 @@ export class DailyRewardPanel {
   }
 
   _wrapDescription(renderer) {
-    const { descFont } = Config.dailyReward;
-    const rewardCfg = Config.dailyReward[this._reward.type];
-    const maxWidth = Config.dailyReward.cardWidth - 40;
-    return wrapText(rewardCfg.description, maxWidth, (s) => renderer.measureText(s, descFont));
+    const { descFont, cardWidth } = Config.dailyReward;
+    const maxWidth = cardWidth - 40;
+    return wrapText(this._reward.displayDescription, maxWidth, (s) => renderer.measureText(s, descFont));
   }
 
   // --- One-time geometry (local/center-relative — see class doc) ---------------
@@ -133,6 +139,18 @@ export class DailyRewardPanel {
     ];
   }
 
+  /** Same local-coordinates shape as _buildCardPaths — one shared frame reused (translated via {x,y}) for all 7 streak-strip pips, since they're all the same size. */
+  _buildPipFramePaths() {
+    const { pipSize, pipLegSize } = Config.dailyReward.streakStrip;
+    const half = pipSize / 2;
+    return [
+      cornerBracketPath(-half, -half, 1, 1, pipLegSize),
+      cornerBracketPath(half, -half, -1, 1, pipLegSize),
+      cornerBracketPath(-half, half, 1, -1, pipLegSize),
+      cornerBracketPath(half, half, -1, -1, pipLegSize),
+    ];
+  }
+
   /**
    * One small glyph per reward kind, local-origin-centered like PowerUps.js's
    * own icon paths (see that file's _crossPaths/_hexPath) — gold reuses
@@ -155,6 +173,10 @@ export class DailyRewardPanel {
       hexPts.push([Math.cos(a) * g, Math.sin(a) * g]);
     }
     this._hexPath = { points: hexPts, closed: true };
+
+    // A claimed streak-strip pip's checkmark — drawn at pip-icon scale
+    // directly (no strokePaths `scale` transform needed), open polyline.
+    this._checkPath = { points: [[-7, 0], [-2, 6], [8, -8]], closed: false };
   }
 
   // --- Hit-testing (always full-size, unaffected by the pop-in animation) ------
@@ -190,6 +212,7 @@ export class DailyRewardPanel {
       font: cfg.subtitleFont, color: cfg.subtitleColor, alpha: alpha * 0.85,
     });
 
+    this._renderStreakStrip(renderer, alpha);
     this._renderHalo(renderer, alpha);
     this._particles.render(renderer);
     this._renderCard(renderer, cardScale, alpha);
@@ -208,33 +231,36 @@ export class DailyRewardPanel {
 
   _renderHalo(renderer, alpha) {
     const cfg = Config.dailyReward;
-    const rewardCfg = cfg[this._reward.type];
     const { width: vW } = Config.virtual;
     const cx = vW / 2, cy = cfg.cardCenterY;
     const breathe = 0.5 + 0.5 * Math.sin(this._age * cfg.haloPulseSpeed);
+    // Jackpot days breathe a visibly stronger halo — the biggest reward in
+    // the cycle should read as the biggest moment on screen, not identical
+    // to any other gold day.
+    const haloAlpha = cfg.haloAlpha * (this._reward.jackpot ? 1.8 : 1);
     for (let i = 0; i < cfg.haloRingCount; i++) {
       const radius = cfg.haloBaseRadius + i * cfg.haloRingSpacing + breathe * 10;
-      renderer.strokeCircle(cx, cy, radius, { color: rewardCfg.color, lineWidth: 1, alpha: alpha * cfg.haloAlpha });
+      renderer.strokeCircle(cx, cy, radius, { color: this._reward.displayColor, lineWidth: 1, alpha: alpha * haloAlpha });
     }
   }
 
   _renderCard(renderer, scale, alpha) {
     const cfg = Config.dailyReward;
-    const rewardCfg = cfg[this._reward.type];
+    const color = this._reward.displayColor;
     const { width: vW } = Config.virtual;
     const cx = vW / 2, cy = cfg.cardCenterY;
 
     renderer.strokePaths(this._cardPaths, {
-      x: cx, y: cy, scale, color: rewardCfg.color, lineWidth: cfg.cardLineWidth, glowBlur: cfg.cardGlowBlur, alpha,
+      x: cx, y: cy, scale, color, lineWidth: cfg.cardLineWidth, glowBlur: cfg.cardGlowBlur, alpha,
     });
 
-    renderer.drawText(rewardCfg.name, cx, cy - 20, {
-      font: cfg.nameFont, color: rewardCfg.color, alpha, glowBlur: 8, glowColor: rewardCfg.color,
+    renderer.drawText(this._reward.displayName, cx, cy - 20, {
+      font: cfg.nameFont, color, alpha, glowBlur: 8, glowColor: color,
     });
 
     const valueLine = this._reward.type === 'gold' ? `+${this._reward.amount} GOLD` : 'NEXT RUN';
     renderer.drawText(valueLine, cx, cy + 15, {
-      font: cfg.valueFont, color: rewardCfg.color, alpha,
+      font: cfg.valueFont, color, alpha,
     });
 
     const descStartY = cy + 45;
@@ -248,19 +274,94 @@ export class DailyRewardPanel {
   /** The reward's icon "medallion" — a filled+stroked circle straddling the card's top edge, tinted to the reward's color, with a distinguishing glyph inside. */
   _renderIcon(renderer, cx, cy, scale, alpha) {
     const cfg = Config.dailyReward.iconBadge;
-    const rewardCfg = Config.dailyReward[this._reward.type];
+    const color = this._reward.displayColor;
     const r = cfg.radius * scale;
+    // Jackpot's medallion glows harder than an ordinary day's — same signal as _renderHalo's boost.
+    const glowBlur = this._reward.jackpot ? cfg.glowBlur * 1.6 : cfg.glowBlur;
 
-    renderer.fillEllipse(0, 0, r, r, { x: cx, y: cy, fillColor: rewardCfg.color, alpha: alpha * cfg.fillAlpha });
-    renderer.strokeCircle(cx, cy, r, { color: rewardCfg.color, lineWidth: cfg.lineWidth, glowBlur: cfg.glowBlur, alpha });
+    renderer.fillEllipse(0, 0, r, r, { x: cx, y: cy, fillColor: color, alpha: alpha * cfg.fillAlpha });
+    renderer.strokeCircle(cx, cy, r, { color, lineWidth: cfg.lineWidth, glowBlur, alpha });
 
     if (this._reward.type === 'gold') {
       // Concentric coin rings — same "this reads as a coin" look GoldPickups draws.
-      renderer.strokeCircle(cx, cy, r * 0.5, { color: rewardCfg.color, lineWidth: cfg.lineWidth, alpha });
+      renderer.strokeCircle(cx, cy, r * 0.5, { color, lineWidth: cfg.lineWidth, alpha });
     } else if (this._reward.type === 'luckyDrop') {
-      renderer.strokePaths([this._sparklePath], { x: cx, y: cy, scale, color: rewardCfg.color, lineWidth: cfg.lineWidth, alpha, lineCap: 'round' });
+      renderer.strokePaths([this._sparklePath], { x: cx, y: cy, scale, color, lineWidth: cfg.lineWidth, alpha, lineCap: 'round' });
     } else {
-      renderer.strokePaths([this._hexPath], { x: cx, y: cy, scale, color: rewardCfg.color, lineWidth: cfg.lineWidth, alpha });
+      renderer.strokePaths([this._hexPath], { x: cx, y: cy, scale, color, lineWidth: cfg.lineWidth, alpha });
+    }
+  }
+
+  /**
+   * The streak strip: 7 corner-bracket "day pips" above the main card,
+   * reading the WHOLE calendar (not just today's roll) so a claimed streak
+   * and the still-locked days ahead — especially day 7's jackpot — are both
+   * visible at once. Claimed days get a checkmark; today's pip pulses;
+   * future days still show their reward's own icon, just dimmed, so a
+   * player can see what they're coming back for.
+   */
+  _renderStreakStrip(renderer, alpha) {
+    const cfg = Config.dailyReward.streakStrip;
+    const calendar = Config.dailyReward.calendar;
+    const { width: vW } = Config.virtual;
+    const streakDay = this._reward.streakDay;
+    const totalW = 7 * cfg.pipSize + 6 * cfg.pipGap;
+    const startX = vW / 2 - totalW / 2 + cfg.pipSize / 2;
+    const cy = cfg.y;
+
+    renderer.drawText(`DAY ${streakDay} STREAK`, vW / 2, cfg.labelY, {
+      font: cfg.labelFont, color: cfg.currentColor, alpha, glowBlur: 6, glowColor: cfg.currentColor,
+    });
+
+    for (let i = 0; i < 7; i++) {
+      const day = i + 1;
+      const entry = calendar[i];
+      const state = day < streakDay ? 'claimed' : day === streakDay ? 'current' : 'future';
+      const cx = startX + i * (cfg.pipSize + cfg.pipGap);
+
+      let color = cfg.futureColor;
+      let pipAlpha = alpha;
+      let glowBlur = 0;
+      if (state === 'claimed') {
+        color = cfg.claimedColor;
+      } else if (state === 'current') {
+        color = cfg.currentColor;
+        glowBlur = 6;
+        const pulse = 1 - cfg.currentPulseDepth * (0.5 + 0.5 * Math.sin(this._age * cfg.currentPulseSpeed));
+        pipAlpha = alpha * pulse;
+      } else {
+        // Future — dimmed, but the jackpot slot still tints its OWN amber
+        // rather than the flat grey every other future day uses, so it
+        // stands out as the thing worth returning for.
+        color = entry.jackpot ? entry.color : cfg.futureColor;
+        pipAlpha = alpha * cfg.futureIconAlpha;
+      }
+
+      renderer.strokePaths(this._pipFramePaths, {
+        x: cx, y: cy, color, lineWidth: cfg.pipLineWidth, glowBlur, glowColor: color, alpha: pipAlpha,
+      });
+
+      if (state === 'claimed') {
+        renderer.strokePaths([this._checkPath], {
+          x: cx, y: cy, color, lineWidth: cfg.checkLineWidth, alpha: pipAlpha, lineCap: 'round',
+        });
+      } else {
+        this._renderPipIcon(renderer, cx, cy, entry.type, color, pipAlpha);
+      }
+    }
+  }
+
+  /** A single streak-strip pip's icon — the same coin/sparkle/hex glyphs _renderIcon draws on the big badge, shrunk to `streakStrip.iconScale`. */
+  _renderPipIcon(renderer, cx, cy, type, color, alpha) {
+    const cfg = Config.dailyReward.streakStrip;
+    const r = Config.dailyReward.iconBadge.radius * 0.5 * cfg.iconScale;
+    if (type === 'gold') {
+      renderer.strokeCircle(cx, cy, r, { color, lineWidth: 1.5, alpha });
+      renderer.strokeCircle(cx, cy, r * 0.5, { color, lineWidth: 1.5, alpha });
+    } else if (type === 'luckyDrop') {
+      renderer.strokePaths([this._sparklePath], { x: cx, y: cy, scale: cfg.iconScale, color, lineWidth: 1.5, alpha, lineCap: 'round' });
+    } else {
+      renderer.strokePaths([this._hexPath], { x: cx, y: cy, scale: cfg.iconScale, color, lineWidth: 1.5, alpha });
     }
   }
 

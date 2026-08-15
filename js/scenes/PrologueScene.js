@@ -67,6 +67,7 @@ import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { cornerBracketPath, diamondPath } from '../core/shapes.js';
 import { AudioPool } from '../core/AudioPool.js';
 import { DailyRewardPanel } from '../entities/DailyRewardPanel.js';
+import { previewNextReward } from '../core/DailyReward.js';
 import { markPrologueSeen } from '../core/PrologueProgress.js';
 
 /** One path-factory per spawnable portal-creature variant — see _spawnCreature. */
@@ -679,11 +680,21 @@ export class PrologueScene {
    * tomorrow's popup happens to catch them. Drawn UNDER the mode buttons'
    * own vertical space (see Config.dailyReward.claimedBadge.y), low alpha
    * so it reads as a footnote, not a competing control.
+   *
+   * A second line beneath it names TOMORROW's reward (DailyReward.js's
+   * previewNextReward(), which resolves through the streak calendar) in
+   * that reward's own color — the actual "come back" hook, not just a
+   * confirmation that today is done.
    */
   _renderDailyRewardBadge() {
     const cfg = Config.dailyReward.claimedBadge;
     const { width: vW } = Config.virtual;
     this.renderer.drawText(cfg.text, vW / 2, cfg.y, { font: cfg.font, color: cfg.color, alpha: cfg.alpha });
+
+    const next = previewNextReward();
+    this.renderer.drawText(`${cfg.nextPrefix}${next.name}`, vW / 2, cfg.nextY, {
+      font: cfg.nextFont, color: next.color, alpha: cfg.nextAlpha,
+    });
   }
 
   // --- Beat 6: exit fade (a mode button tapped → black → onContinue) -----------------
