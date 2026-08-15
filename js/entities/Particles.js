@@ -7,9 +7,11 @@
  *   Shockwave rings — two concentric expanding circles. An inner ring (small,
  *   fast) delivers the immediate impact "pop"; an outer ring (larger, slower)
  *   is the shockwave traveling outward. Together they give a "sound wave"
- *   double-pulse that reads as force rather than just sparkle. Rings are cheap
- *   plain objects; at most one explosion per enemy per wave means the pool
- *   never holds more than ~8 live rings at once.
+ *   double-pulse that reads as force rather than just sparkle. Same
+ *   pre-allocated-typed-array, swap-compact pooling shape as the spark burst
+ *   below — a burst kill (e.g. the player's skill bomb) can emit rings for
+ *   many enemies in a single frame, so `Config.particles.maxRings` sizes the
+ *   pool well above ordinary single-explosion counts.
  *
  *   Spark burst — short glowing line segments fanning outward from the blast
  *   centre, aligned with their velocity so they look like ejected shards. All
@@ -24,7 +26,7 @@
 import { Config } from '../core/Config.js';
 
 const {
-  maxSparks: MAX, sparkHalfLength: HALF,
+  maxSparks: MAX, maxRings: MAX_RINGS, sparkHalfLength: HALF,
   sparkSpeedMin, sparkSpeedMax, sparkLifeMin, sparkLifeMax, sparkDrag,
   defaultSparksPerEmit, innerRing: INNER, outerRing: OUTER,
 } = Config.particles;
@@ -65,9 +67,16 @@ export class Particles {
       singleStroke: true,
     };
 
-    // ── Shockwave ring pool ───────────────────────────────────────────────────
-    this._rings = [];
-    this._ringColor = color;
+    // ── Shockwave ring pool (typed arrays, zero per-frame/per-emit allocation,
+    // same swap-compact shape as the spark pool above) ────────────────────────
+    this._ringX      = new Float32Array(MAX_RINGS);
+    this._ringY      = new Float32Array(MAX_RINGS);
+    this._ringAge    = new Float32Array(MAX_RINGS);
+    this._ringLife   = new Float32Array(MAX_RINGS);
+    this._ringStartR = new Float32Array(MAX_RINGS);
+    this._ringMaxR   = new Float32Array(MAX_RINGS);
+    this._ringCount  = 0;
+    this._ringColor  = color;
   }
 
   /**
@@ -77,8 +86,8 @@ export class Particles {
    */
   emit(x, y) {
     // Two rings per explosion — inner "pop" then outer shockwave
-    this._rings.push({ x, y, age: 0, ...INNER });
-    this._rings.push({ x, y, age: 0, ...OUTER });
+    this._pushRing(x, y, INNER);
+    this._pushRing(x, y, OUTER);
 
     // Sparks — faster than before so they burst through and past the inner ring
     for (let i = 0; i < this._sparksPerEmit && this._count < MAX; i++) {
@@ -97,13 +106,34 @@ export class Particles {
     }
   }
 
+  /** Append one ring at (x, y) using `template`'s life/startR/maxR — no allocation. */
+  _pushRing(x, y, template) {
+    if (this._ringCount >= MAX_RINGS) return;
+    const i = this._ringCount++;
+    this._ringX[i]      = x;
+    this._ringY[i]      = y;
+    this._ringAge[i]    = 0;
+    this._ringLife[i]   = template.life;
+    this._ringStartR[i] = template.startR;
+    this._ringMaxR[i]   = template.maxR;
+  }
+
   /** @param {number} dt */
   update(dt) {
-    // Update rings — iterate backward so splice doesn't shift unvisited indices
-    for (let i = this._rings.length - 1; i >= 0; i--) {
-      this._rings[i].age += dt;
-      if (this._rings[i].age >= this._rings[i].life) this._rings.splice(i, 1);
+    // Update rings — same swap-compact pattern as the sparks below
+    let rw = 0;
+    for (let i = 0; i < this._ringCount; i++) {
+      this._ringAge[i] += dt;
+      if (this._ringAge[i] < this._ringLife[i]) {
+        if (rw !== i) {
+          this._ringX[rw]      = this._ringX[i];      this._ringY[rw]    = this._ringY[i];
+          this._ringAge[rw]    = this._ringAge[i];     this._ringLife[rw] = this._ringLife[i];
+          this._ringStartR[rw] = this._ringStartR[i];  this._ringMaxR[rw] = this._ringMaxR[i];
+        }
+        rw++;
+      }
     }
+    this._ringCount = rw;
 
     // Update sparks
     const drag = 1 - dt * sparkDrag;
@@ -129,23 +159,23 @@ export class Particles {
 
   /** True while any spark or ring is still alive — used by WaveManager to delay level transition. */
   get active() {
-    return this._count > 0 || this._rings.length > 0;
+    return this._count > 0 || this._ringCount > 0;
   }
 
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
     // Shockwave rings — drawn behind sparks so they read as the ground layer
-    for (let i = 0; i < this._rings.length; i++) {
-      const ring   = this._rings[i];
-      const t      = ring.age / ring.life;
+    for (let i = 0; i < this._ringCount; i++) {
+      const age    = this._ringAge[i], life = this._ringLife[i];
+      const t      = age / life;
       const eased  = t * (2 - t);                  // ease-out quad: fast start, soft finish
-      const radius = ring.startR + eased * (ring.maxR - ring.startR);
+      const radius = this._ringStartR[i] + eased * (this._ringMaxR[i] - this._ringStartR[i]);
       const alpha  = 1 - t;                         // linear fade
       const lw     = 1 + (1 - t) * 2;              // 3→1 virtual px as ring expands
 
       // No glowBlur — eliminates one GPU shadow pass per ring per frame.
       // The expanding circle with fading alpha reads clearly as a shockwave without glow.
-      renderer.strokeCircle(ring.x, ring.y, radius, {
+      renderer.strokeCircle(this._ringX[i], this._ringY[i], radius, {
         color:     this._ringColor,
         lineWidth: lw,
         alpha,

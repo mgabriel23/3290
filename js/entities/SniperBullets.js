@@ -39,6 +39,7 @@ export class SniperBullets {
     this._dirY = new Float32Array(MAX);
     this._age  = new Float32Array(MAX);
     this._mult = new Float32Array(MAX); // per-bullet speed-boost multiplier — see fire()'s doc
+    this._speed = new Float32Array(MAX); // this frame's _speedAt() result — computed once in update(), reused by render()
     this._count = 0;
 
     this._pool = Array.from({ length: MAX }, () => ({
@@ -105,6 +106,7 @@ export class SniperBullets {
           this._dirX[w] = this._dirX[i]; this._dirY[w] = this._dirY[i];
           this._age[w] = this._age[i]; this._mult[w] = this._mult[i];
         }
+        this._speed[w] = speed; // cache this frame's speed — render() reuses it instead of recomputing
         w++;
       }
     }
@@ -135,6 +137,7 @@ export class SniperBullets {
           this._x[i] = this._x[this._count]; this._y[i] = this._y[this._count];
           this._dirX[i] = this._dirX[this._count]; this._dirY[i] = this._dirY[this._count];
           this._age[i] = this._age[this._count]; this._mult[i] = this._mult[this._count];
+          this._speed[i] = this._speed[this._count];
         }
         return true;
       }
@@ -149,7 +152,7 @@ export class SniperBullets {
     const speedRange = maxSpeed - startSpeed || 1;
 
     for (let i = 0; i < this._count; i++) {
-      const speed  = this._speedAt(this._age[i], this._mult[i]);
+      const speed  = this._speed[i]; // computed once in update(), reused here
       // Clamped to 1 — a boosted (mult > 1) bullet reaches the full-length
       // streak sooner and just holds there, rather than overshooting it.
       const speedT = Math.max(0, Math.min(1, (speed - startSpeed) / speedRange));

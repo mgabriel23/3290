@@ -89,8 +89,7 @@ export class Barrier {
    * used by BouncerEnemy to detect when it has landed on the barrier.
    */
   surfaceY(x) {
-    const { baseY, arcHeight } = Config.barrier;
-    return this._arcY(x, baseY, arcHeight);
+    return this._arcY(x);
   }
 
   /** Apply damage from a bounce/impact, clamped at 0. */
@@ -229,11 +228,11 @@ export class Barrier {
    * the arc's stroke out here instead of sitting cleanly under it.
    */
   _renderPower(renderer, power) {
-    const { baseY, arcHeight, healthLabelFont, healthValueFont, powerColor, healthGlowBlur, powerXRatio } =
+    const { healthLabelFont, healthValueFont, powerColor, healthGlowBlur, powerXRatio } =
       Config.barrier;
     const { width: vW } = Config.virtual;
     const x = vW * powerXRatio;
-    const y = this._arcY(x, baseY, arcHeight);
+    const y = this._arcY(x);
     renderer.drawText('PWR', x, y + 26, {
       font: healthLabelFont, color: powerColor, alpha: 0.5,
     });
@@ -248,11 +247,11 @@ export class Barrier {
    * — see its doc for why `peakY` alone isn't the right reference off-center.
    */
   _renderLevel(renderer, level) {
-    const { baseY, arcHeight, healthLabelFont, healthValueFont, levelColor, healthGlowBlur, levelXRatio } =
+    const { healthLabelFont, healthValueFont, levelColor, healthGlowBlur, levelXRatio } =
       Config.barrier;
     const { width: vW } = Config.virtual;
     const x = vW * levelXRatio;
-    const y = this._arcY(x, baseY, arcHeight);
+    const y = this._arcY(x);
     renderer.drawText('LVL', x, y + 26, {
       font: healthLabelFont, color: levelColor, alpha: 0.5,
     });
@@ -267,6 +266,16 @@ export class Barrier {
     const { baseY, arcHeight, arcSegments, innerInset, strutCount, strutDepth } = Config.barrier;
     const { width: vW, height: vH } = Config.virtual;
     const cx = vW / 2;
+
+    // Cache the main arc's circle geometry (R/cy) once — baseY/arcHeight
+    // never change after construction, but `_arcY` (built from these) is
+    // called every frame by every bouncing enemy's `surfaceY` lookup, so
+    // re-deriving R/cy from the chord/sagitta formula on every one of those
+    // calls was pure waste. Must be set before the strut loop below, which
+    // already calls `_arcY`.
+    const halfW = vW / 2;
+    this._arcR  = (halfW * halfW + arcHeight * arcHeight) / (2 * arcHeight);
+    this._arcCy = baseY - arcHeight + this._arcR;
 
     // Main arc
     this._mainPaths = [{ points: this._buildArc(baseY, arcHeight, arcSegments), closed: false }];
@@ -286,7 +295,7 @@ export class Barrier {
     const step = vW / (strutCount + 1);
     for (let i = 1; i <= strutCount; i++) {
       const x = step * i;
-      const y = this._arcY(x, baseY, arcHeight);
+      const y = this._arcY(x);
       this._detailPaths.push({ points: [[x, y], [x, y - strutDepth]], closed: false });
     }
 
@@ -319,13 +328,10 @@ export class Barrier {
     return points;
   }
 
-  /** Y coordinate on the arc at a given x — used to place strut bases. */
-  _arcY(x, baseY, height) {
+  /** Y coordinate on the main arc at a given x — used by surfaceY, the power/level readouts, and the strut bases. Uses the cached R/cy from _initGeometry (baseY/arcHeight never change after construction). */
+  _arcY(x) {
     const { width: vW } = Config.virtual;
-    const halfW = vW / 2;
-    const R  = (halfW * halfW + height * height) / (2 * height);
-    const cy = baseY - height + R;
-    const dx = x - halfW;
-    return cy - Math.sqrt(R * R - dx * dx);
+    const dx = x - vW / 2;
+    return this._arcCy - Math.sqrt(this._arcR * this._arcR - dx * dx);
   }
 }

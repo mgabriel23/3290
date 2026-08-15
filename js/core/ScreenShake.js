@@ -15,6 +15,10 @@ import { Config } from './Config.js';
 export class ScreenShake {
   constructor() {
     this._trauma = 0;
+    // Reused every frame by getOffset() (called exactly once/frame, read
+    // immediately — see that method's own doc) instead of allocating a new
+    // {x, y} object each call.
+    this._offset = { x: 0, y: 0 };
   }
 
   /** @param {number} amount 0..1 — added to current trauma, clamped at 1 */
@@ -34,12 +38,15 @@ export class ScreenShake {
    * @returns {{x: number, y: number}}
    */
   getOffset() {
-    if (this._trauma <= 0) return { x: 0, y: 0 };
+    if (this._trauma <= 0) {
+      this._offset.x = 0;
+      this._offset.y = 0;
+      return this._offset;
+    }
     const power = this._trauma * this._trauma;
     const { maxOffset } = Config.screenShake;
-    return {
-      x: (Math.random() * 2 - 1) * maxOffset * power,
-      y: (Math.random() * 2 - 1) * maxOffset * power,
-    };
+    this._offset.x = (Math.random() * 2 - 1) * maxOffset * power;
+    this._offset.y = (Math.random() * 2 - 1) * maxOffset * power;
+    return this._offset;
   }
 }

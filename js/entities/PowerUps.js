@@ -88,6 +88,13 @@ export class PowerUps {
       hexPts.push([Math.cos(a) * d, Math.sin(a) * d]);
     }
     this._hexPath = { points: hexPts, closed: true };
+
+    // Wrapper arrays reused every pickup, every frame by render() instead of
+    // allocating a fresh single-element array each call.
+    this._crossPathArr   = [this._crossPath];
+    this._diamondPathArr = [this._diamondPath];
+    this._boltPathArr    = [this._boltPath];
+    this._hexPathArr     = [this._hexPath];
   }
 
   /**
@@ -199,17 +206,17 @@ export class PowerUps {
       renderer.strokeCircle(x, y, radius, { color: cfg.color, lineWidth, glowBlur, alpha });
 
       if (type === 'shield') {
-        renderer.fillStrokePaths([this._diamondPath], { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
+        renderer.fillStrokePaths(this._diamondPathArr, { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
       } else if (type === 'fireBoost') {
-        renderer.fillStrokePaths([this._boltPath], { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
+        renderer.fillStrokePaths(this._boltPathArr, { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
       } else if (type === 'invincible') {
         // Left as an outline-only ring (not filled, unlike the other three)
         // — see Config.powerUps.iconFillColor's own comment for why — with a
         // slightly bolder stroke + soft glow so it still reads with equal
         // visual weight next to the filled badges.
-        renderer.strokePaths([this._hexPath], { x, y, color: cfg.color, lineWidth: lineWidth * 1.4, glowBlur: glowBlur * 0.5, alpha });
+        renderer.strokePaths(this._hexPathArr, { x, y, color: cfg.color, lineWidth: lineWidth * 1.4, glowBlur: glowBlur * 0.5, alpha });
       } else {
-        renderer.fillStrokePaths([this._crossPath], { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
+        renderer.fillStrokePaths(this._crossPathArr, { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
       }
     }
   }

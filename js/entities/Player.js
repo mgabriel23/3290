@@ -90,6 +90,14 @@ const SPINE = [
   [0, 30],
 ];
 
+// Pre-built once — SHIP_OUTLINE/CANOPY/SPINE never change, so render() reuses
+// this same array/path-object set every frame instead of allocating fresh ones.
+const SHIP_PATHS = [
+  { points: SHIP_OUTLINE },
+  { points: CANOPY },
+  { points: SPINE, closed: false },
+];
+
 /** Mirror every point but the first/last (which sit on the x=0 centerline). */
 function mirrorAcrossCenterline(halfOutline) {
   const mirrored = halfOutline
@@ -130,6 +138,9 @@ export class Player {
     // frame (mutated in _renderFlame), so no new arrays are created on
     // the hot path.
     this._flame = [[-6, 38], [0, 38], [6, 38]];
+    // Wrapper array reused every frame by _renderFlame — this._flame's contents
+    // are mutated in place (see _renderFlame), the array reference never changes.
+    this._flamePathArr = [{ points: this._flame }];
 
     // Health/damage — see takeDamage. `_hitFlash` and `_invulnTimer` mirror
     // the enemy hit-flash convention (EnemyCombat.applyHit) and Barrier's
@@ -259,11 +270,7 @@ export class Player {
     const alpha    = this._invulnTimer > 0 ? this._invulnBlinkAlpha() : (low ? this._lowHealthPulseAlpha() : 1);
 
     renderer.strokePaths(
-      [
-        { points: SHIP_OUTLINE },
-        { points: CANOPY },
-        { points: SPINE, closed: false },
-      ],
+      SHIP_PATHS,
       { x: this.x, y: this.y, scale, color, lineWidth, glowBlur, alpha }
     );
 
@@ -349,7 +356,7 @@ export class Player {
 
     // Same `scale` as the hull — the flame is authored in ship-local
     // coordinates too, so it must shrink and stay anchored to the tail.
-    renderer.strokePaths([{ points: this._flame }], {
+    renderer.strokePaths(this._flamePathArr, {
       x: this.x,
       y: this.y,
       scale: Config.player.scale,

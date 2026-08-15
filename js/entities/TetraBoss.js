@@ -90,6 +90,11 @@ export class TetraBoss {
     // finishes (see update()'s 'entering' branch).
     this._vx = 0;
     this._vy = 0;
+
+    // Pre-allocated laser beam path pool — mutated in place by _laserPaths(),
+    // shared by render and checkLaserHit (both called every frame during
+    // phase 2) so neither reallocates 4 path objects + nested arrays per call.
+    this._laserPathPool = Array.from({ length: 4 }, () => ({ points: [[0, 0], [0, 0]], closed: false }));
   }
 
   get type()       { return this._type; }
@@ -190,13 +195,15 @@ export class TetraBoss {
    */
   _laserPaths() {
     const cfg = this._cfg.laser;
-    const paths = [];
+    const paths = this._laserPathPool;
     for (let k = 0; k < 4; k++) {
       const a   = this._fireDirection(k);
       const cos = Math.cos(a), sin = Math.sin(a);
       const ox = this.x + cos * BS,         oy = this.y + sin * BS;
       const ex = this.x + cos * cfg.length, ey = this.y + sin * cfg.length;
-      paths.push({ points: [[ox, oy], [ex, ey]], closed: false });
+      const pts = paths[k].points;
+      pts[0][0] = ox; pts[0][1] = oy;
+      pts[1][0] = ex; pts[1][1] = ey;
     }
     return paths;
   }

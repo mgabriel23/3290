@@ -95,7 +95,14 @@ export function stepEntryGlide(enemy, cfg, dt, nextState) {
 export function renderHull(renderer, enemy, hullPts, alpha = 1) {
   const cfg   = enemy._cfg;
   const flash = enemy._hitFlash > 0;
-  renderer.fillStrokePaths([{ points: hullPts, closed: true }], {
+  // Cache the wrapper array + path object on the enemy instance — `hullPts`
+  // is a fixed per-type constant, so every boss class calling this every
+  // frame (BossEnemy, SpiralBoss, TetraBoss, NovaBoss, ZigzagBoss) reuses
+  // the same objects instead of reallocating them each call.
+  if (!enemy._hullPathArr || enemy._hullPathArr[0].points !== hullPts) {
+    enemy._hullPathArr = [{ points: hullPts, closed: true }];
+  }
+  renderer.fillStrokePaths(enemy._hullPathArr, {
     x: enemy.x, y: enemy.y, rotation: enemy._angle, alpha,
     fillColor:   flash ? '#ffffff' : cfg.fillColor,
     strokeColor: flash ? '#ffffff' : cfg.color,

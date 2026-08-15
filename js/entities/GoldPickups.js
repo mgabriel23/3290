@@ -45,6 +45,9 @@ export class GoldPickups {
     // Stamped star emblem, local-space, centered on the origin — repositioned
     // onto each coin at render time via fillStrokePaths' own {x, y} transform.
     this._starPath = starPath(0, 0, Config.gold.radius * 0.48, Config.gold.radius * 0.2);
+    // Wrapper array reused every coin, every frame by render() instead of
+    // allocating a fresh single-element array each call.
+    this._starPathArr = [this._starPath];
   }
 
   /**
@@ -160,7 +163,7 @@ export class GoldPickups {
       renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor, alpha: expireAlpha });
       // Stamped star emblem — dark antique-gold engraving, unmistakably
       // "coin" rather than the plain concentric ring this used to be.
-      renderer.fillStrokePaths([this._starPath], {
+      renderer.fillStrokePaths(this._starPathArr, {
         x, y, fillColor: shadeColor, strokeColor: shadeColor, lineWidth: 1, alpha: expireAlpha,
       });
       // Glossy specular highlight, slowly drifting across the face — like

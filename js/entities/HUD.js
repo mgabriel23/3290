@@ -43,6 +43,7 @@
 import { Config } from '../core/Config.js';
 import { cornerBracketPath } from '../core/shapes.js';
 import { loadNumber, saveNumber } from '../core/Storage.js';
+import { lerpHexColor } from '../core/color.js';
 
 export class HUD {
   constructor() {
@@ -164,12 +165,28 @@ export class HUD {
     const clamped = Math.max(0, Math.min(maxHealth, health));
     const frac    = clamped / maxHealth;
     const low     = clamped <= lowHealth.threshold;
-    const color   = low ? lowHealth.color : cfg.color;
+
+    // Graduated warning: full `cfg.color` above the caution threshold,
+    // ramping toward `lowHealth.color` as health drops through it, reaching
+    // pure red exactly at `lowHealth.threshold` (where the pulse below also
+    // kicks in) — a smooth ramp instead of a sudden binary color flip, since
+    // health is the single most important stat on screen.
+    const cautionThreshold = maxHealth * cfg.cautionThresholdRatio;
+    let color;
+    if (low) {
+      color = lowHealth.color;
+    } else if (clamped < cautionThreshold) {
+      const t = 1 - (clamped - lowHealth.threshold) / (cautionThreshold - lowHealth.threshold);
+      color = lerpHexColor(cfg.color, lowHealth.color, t);
+    } else {
+      color = cfg.color;
+    }
+
     const alpha   = low
       ? 1 - lowHealth.pulseDepth * (0.5 + 0.5 * Math.sin(this._age * lowHealth.pulseSpeed))
       : 1;
 
-    renderer.fillStrokePaths([this._healthTrackPath], {
+    renderer.fillStrokePaths(this._healthTrackPathArr, {
       fillColor: cfg.trackColor, strokeColor: cfg.trackColor, lineWidth: 1,
     });
 
@@ -178,13 +195,16 @@ export class HUD {
       const pts   = this._healthFillPath.points;
       pts[1][0] = right;
       pts[2][0] = right;
-      renderer.fillStrokePaths([this._healthFillPath], {
+      renderer.fillStrokePaths(this._healthFillPathArr, {
         fillColor: color, strokeColor: color, lineWidth: 1, alpha,
       });
     }
 
+    // Tracks the same graduated color as the bar (rather than a flat dim
+    // gray) and stays near-opaque — this is the actual "N / max" numeric
+    // readout, not a secondary caption, so it should read with real weight.
     renderer.drawText(`${Math.ceil(clamped)} / ${maxHealth}`, cfg.x, this._healthLabelY, {
-      font: cfg.labelFont, color: cfg.labelColor, alpha: 0.75,
+      font: cfg.labelFont, color, alpha: low ? alpha : 0.9,
     });
 
     if (low) {
@@ -236,7 +256,7 @@ export class HUD {
 
     renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor: pCfg.fillColor });
     renderer.strokeCircle(x, y, radius, { color: pCfg.color, lineWidth, glowBlur });
-    renderer.strokePaths([this._hexIconPath], { x, y, color: pCfg.color, lineWidth });
+    renderer.strokePaths(this._hexIconPathArr, { x, y, color: pCfg.color, lineWidth });
 
     renderer.drawText('INVULN', x, y - radius - 12, {
       font: labelFont, color: pCfg.color, alpha: 0.7,
@@ -269,6 +289,10 @@ export class HUD {
     const right  = this._healthLeft + hCfg.width;
     this._healthTrackPath = { points: [[this._healthLeft, top], [right, top], [right, bottom], [this._healthLeft, bottom]], closed: true };
     this._healthFillPath  = { points: [[this._healthLeft, top], [this._healthLeft, top], [this._healthLeft, bottom], [this._healthLeft, bottom]], closed: true };
+    // Wrapper arrays reused every frame by _renderHealthBar instead of
+    // allocating a fresh single-element array each call.
+    this._healthTrackPathArr = [this._healthTrackPath];
+    this._healthFillPathArr  = [this._healthFillPath];
     this._healthLabelY = bottom + 12;
 
     // Low-health warning icon — sits just left of the bar, vertically centered on it.
@@ -295,5 +319,7 @@ export class HUD {
       hexPts.push([Math.cos(a) * hexD, Math.sin(a) * hexD]);
     }
     this._hexIconPath = { points: hexPts, closed: true };
+    // Wrapper array reused every frame by _renderInvincibleIndicator.
+    this._hexIconPathArr = [this._hexIconPath];
   }
 }

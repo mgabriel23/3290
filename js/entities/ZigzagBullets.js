@@ -1,36 +1,33 @@
 /**
  * ZigzagBullets.js
  * Dedicated bullet pool for Zigzag boss's 'firing' turret fire (see
- * ZigzagBoss.js) — structurally the same fixed-velocity, bounds-culled,
- * swap-remove-on-hit pool every other boss bullet class uses (TetraBullets/
- * NovaBullets/PulsorBullets), with one addition: each bullet reflects off
- * the LEFT/RIGHT screen edges (not top/bottom) up to
+ * ZigzagBoss.js) — built on the same fixed-velocity, bounds-culled,
+ * swap-remove-on-hit mechanics every other boss bullet class uses (see
+ * BossBulletPool.js, shared by NovaBullets/PulsorBullets/SpiralBullets/
+ * TetraBullets too), with one addition: each bullet reflects off the
+ * LEFT/RIGHT screen edges (not top/bottom) up to
  * `Config.boss.zigzag.bullet.maxBounces` times — tracked per-bullet in
  * `_bounces` — before it's allowed to fly past that edge and get culled
  * like any other bullet. A bounce only flips the horizontal velocity
  * component; vertical velocity is untouched, so each bounce sends the
  * bullet on toward a different spot ahead rather than back the way it came.
+ *
+ * That extra per-bullet `_bounces` field is why this class writes its own
+ * `update`/`checkHit` instead of reusing BossBulletPool's generic versions
+ * (which only know about x/y/vx/vy) — it still reuses `initBossBulletPool`,
+ * `fireBossBullet`, and `renderBossBullets` for everything that doesn't
+ * need the extra field.
  */
 import { Config } from '../core/Config.js';
+import { initBossBulletPool, fireBossBullet, renderBossBullets } from './BossBulletPool.js';
 
 const MAX = Config.boss.zigzag.bullet.poolSize;
 
 export class ZigzagBullets {
   constructor() {
-    this._x  = new Float32Array(MAX); // world x
-    this._y  = new Float32Array(MAX); // world y
-    this._vx = new Float32Array(MAX); // velocity x (px/sec)
-    this._vy = new Float32Array(MAX); // velocity y (px/sec)
-    this._bounces = new Uint8Array(MAX); // side-wall bounces used so far, per bullet
-    this._count = 0;
-
-    this._pool = Array.from({ length: MAX }, () => ({
-      points: [[0, 0], [0, 0]],
-      closed: false,
-    }));
-
     const { color, lineWidth, glowBlur } = Config.boss.zigzag.bullet;
-    this._style = { color, lineWidth, glowBlur, lineCap: 'round', singleStroke: true };
+    initBossBulletPool(this, MAX, { color, lineWidth, glowBlur, lineCap: 'round', singleStroke: true });
+    this._bounces = new Uint8Array(MAX); // side-wall bounces used so far, per bullet
   }
 
   /**
@@ -39,14 +36,9 @@ export class ZigzagBullets {
    * @param {number} angle  travel direction, radians
    */
   fire(ox, oy, angle) {
-    if (this._count >= MAX) return;
     const { speed } = Config.boss.zigzag.bullet;
-    const i = this._count++;
-    this._x[i]  = ox;
-    this._y[i]  = oy;
-    this._vx[i] = Math.cos(angle) * speed;
-    this._vy[i] = Math.sin(angle) * speed;
-    this._bounces[i] = 0;
+    const i = fireBossBullet(this, ox, oy, angle, speed);
+    if (i !== undefined) this._bounces[i] = 0;
   }
 
   /** @param {number} dt */
@@ -111,19 +103,6 @@ export class ZigzagBullets {
 
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
-    if (this._count === 0) return;
-    const hLen = Config.boss.zigzag.bullet.halfLen;
-    for (let i = 0; i < this._count; i++) {
-      const vx = this._vx[i], vy = this._vy[i];
-      const spd = Math.sqrt(vx * vx + vy * vy) || 1;
-      const nx  = (vx / spd) * hLen;
-      const ny  = (vy / spd) * hLen;
-      const p   = this._pool[i];
-      p.points[0][0] = this._x[i] - nx;
-      p.points[0][1] = this._y[i] - ny;
-      p.points[1][0] = this._x[i] + nx;
-      p.points[1][1] = this._y[i] + ny;
-    }
-    renderer.strokePaths(this._pool, this._style, this._count);
+    renderBossBullets(renderer, this, Config.boss.zigzag.bullet.halfLen);
   }
 }

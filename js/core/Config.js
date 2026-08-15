@@ -233,14 +233,16 @@ export const Config = Object.freeze({
 		backColor: "#aab4d4",
 		backX: 20,
 		backY: 34,
-		backHitWidth: 90, // generous tap target, same "wider than the text itself" philosophy used throughout the game's tap targets
-		backHitHeight: 40,
+		backHitWidth: 100, // generous tap target, same "wider than the text itself" philosophy used throughout the game's tap targets
+		backHitHeight: 48, // bumped from 40 toward a real CSS-px touch-target size, not just virtual px — see Config.playbackControls' own comment for the scale math
 
 		tileStartY: 260,
 		tileSpacing: 150,
 		tileWidth: 320,
 		tileHeight: 110,
 		tileLegSize: 14,
+		tileLineWidth: 1.5, // was hardcoded inline in MissionSelectScene.js — moved here to match every other panel's convention of sourcing its own chrome from Config
+		tileGlowBlur: 4,
 
 		nameFont: '400 20px "Audiowide", "Courier New", monospace',
 		statusFont: '400 13px "Audiowide", "Courier New", monospace',
@@ -717,7 +719,7 @@ export const Config = Object.freeze({
 			subtitleText: "NO SECOND CHANCE",
 			subtitleFont: '400 15px "Audiowide", "Courier New", monospace',
 			subtitleColor: "#7af0ff", // softer cyan — reads as a secondary register below the title
-			taglineFont: '400 10px "Audiowide", "Courier New", monospace',
+			taglineFont: '400 12px "Audiowide", "Courier New", monospace', // bumped from 10px for legibility at real device scale
 			taglineColor: "#aab4d4", // same as other UI text, kept dim via alpha in render
 			chromeColor: "#4DEFFF", // decorative HUD lines and bracket ticks
 			chromeLineWidth: 1,
@@ -829,7 +831,7 @@ export const Config = Object.freeze({
 		cardWidth: 360,
 		cardHeight: 220,
 		cardCenterY: 520,
-		cardLegSize: 18,
+		cardLegSize: 16, // matches Config.codex.overlay.frameLegSize — both are the "large full-screen panel" tier
 		cardLineWidth: 2,
 		cardGlowBlur: 10,
 
@@ -855,7 +857,7 @@ export const Config = Object.freeze({
 
 		nameFont: '400 20px "Audiowide", "Courier New", monospace',
 		valueFont: '400 18px "Audiowide", "Courier New", monospace',
-		descFont: '400 13px "Courier New", monospace',
+		descFont: '400 15px "Courier New", monospace', // bumped from 13px — real reading content, not a caption
 		descColor: "#aab4d4",
 		descLineHeight: 18, // vp between wrapped description lines — see DailyRewardPanel's wrapText use
 
@@ -886,7 +888,7 @@ export const Config = Object.freeze({
 		// tomorrow's popup happens to catch them again.
 		claimedBadge: Object.freeze({
 			text: "DAILY REWARD CLAIMED — COME BACK TOMORROW",
-			font: '400 11px "Courier New", monospace',
+			font: '400 13px "Courier New", monospace', // bumped from 11px for legibility at real device scale
 			color: "#aab4d4",
 			alpha: 0.55,
 			y: 900,
@@ -1832,6 +1834,7 @@ export const Config = Object.freeze({
 	 */
 	particles: Object.freeze({
 		maxSparks: 256, // spark pool size — well above any expected burst count
+		maxRings: 64, // shockwave ring pool size (2 rings/emit) — well above any expected burst count, e.g. a skill-bomb wiping a full MAX_BATCH(20)-sized formation at once
 		sparkHalfLength: 3, // half-length of each spark line, virtual px
 		sparkSpeedMin: 140,
 		sparkSpeedMax: 380, // vp/sec — actual speed is randomized in this range
@@ -4152,7 +4155,7 @@ export const Config = Object.freeze({
 	 */
 	hud: Object.freeze({
 		margin: 20, // virtual px from screen edges to the panel anchor corner
-		labelFont: '400 10px "Audiowide", "Courier New", monospace',
+		labelFont: '400 12px "Audiowide", "Courier New", monospace', // bumped from 10px for legibility at real device scale
 		labelColor: "#aab4d4",
 		valueFont: '400 20px "Audiowide", "Courier New", monospace',
 		valueColor: "#4DEFFF",
@@ -4188,8 +4191,18 @@ export const Config = Object.freeze({
 			width: 140,
 			height: 10, // a little thicker than the original 8 — reads more clearly at a glance
 			trackColor: "#1a2035", // dim background showing the "empty" portion
-			color: "#4DEFFF", // normal (non-low-health) fill color
-			labelFont: '400 9px "Audiowide", "Courier New", monospace',
+			color: "#4DEFFF", // full-health fill color — ramps toward Config.player.lowHealth.color as health drops, see cautionThresholdRatio
+			// Fraction of maxHealth at/below which the bar's fill (and its "N / max"
+			// readout) begins ramping from `color` toward Config.player.lowHealth.color
+			// — reaching pure red exactly at lowHealth.threshold, where the existing
+			// pulse also kicks in. A graduated warning instead of a sudden binary
+			// flip, since health is the single most important stat on screen.
+			cautionThresholdRatio: 0.5,
+			// Bumped from 9px — this renders the actual "N / max" numeric readout,
+			// not a small caption, so it needs to be legible at real device scale
+			// (Config.playbackControls' own comment has the CSS-px math this was
+			// checked against).
+			labelFont: '400 13px "Audiowide", "Courier New", monospace',
 			labelColor: "#aab4d4",
 
 			// Small pulsing "!" beside the bar, only while low — same glowing-
@@ -4283,11 +4296,11 @@ export const Config = Object.freeze({
 		closeButton: Object.freeze({
 			x: 500,
 			y: 45,
-			radius: 18,
+			radius: 25, // bumped from 18 to match Config.codex.button's radius — the established accessible-touch-target baseline this game already uses for the mute/codex/pause row
 			color: "#4DEFFF",
 			lineWidth: 2,
 			glowBlur: 7,
-			font: '400 18px "Audiowide", "Courier New", monospace',
+			font: '400 22px "Audiowide", "Courier New", monospace', // bumped from 18px to match the larger circle
 		}),
 
 		// The ship renders at its real in-game position/scale (Config.player),
@@ -4392,7 +4405,7 @@ export const Config = Object.freeze({
 			tagColor: "#aab4d4",
 			tagY: 402,
 
-			descFont: '400 15px "Courier New", monospace',
+			descFont: '400 16px "Courier New", monospace', // bumped from 15px for legibility at real device scale
 			descColor: "#e8ecff",
 			descY: 452,
 			descLineHeight: 24,
@@ -4409,7 +4422,12 @@ export const Config = Object.freeze({
 			arrowGlowBlur: 6,
 			arrowY: 250, // aligned with the frame
 			arrowMarginX: 40, // vp from each screen edge
-			arrowHalfSize: 22, // vp — half-width/height of the tappable arrow hit-box
+			// vp — half-width/height of the tappable arrow hit-box. Bumped from 22:
+			// a 44-VIRTUAL-px hit box isn't the same as a 44-CSS-px one — at this
+			// game's real device scale (~0.67-0.77x, see Config.playbackControls'
+			// own comment) the old value only landed at ~29-34 CSS px. 30 lands
+			// much closer to the actual 44 CSS px target.
+			arrowHalfSize: 30,
 
 			footerFont: '400 11px "Audiowide", "Courier New", monospace',
 			footerColor: "#aab4d4",
@@ -4560,7 +4578,7 @@ export const Config = Object.freeze({
 		lineHeight: 28, // virtual px between lines of a multi-line hint
 		wordsPerSecond: 5, // typewriter reveal speed — word-at-a-time, same pattern as briefing
 		textMaxWidth: 370, // virtual px — hint text wraps at this width
-		tapFont: '400 10px "Audiowide", "Courier New", monospace',
+		tapFont: '400 13px "Audiowide", "Courier New", monospace', // bumped from 10px for legibility at real device scale
 		tapColor: "#4DEFFF",
 		overlayAlpha: 0.6, // how much the gameplay backdrop dims behind the hint text
 		// Shared accent color for both the highlight brackets (a pulsing 4-corner

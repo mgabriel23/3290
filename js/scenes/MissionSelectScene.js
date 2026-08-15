@@ -97,7 +97,7 @@ export class MissionSelectScene {
       cornerBracketPath(right, top,   -1,  1, cfg.tileLegSize),
       cornerBracketPath(left,  bottom, 1, -1, cfg.tileLegSize),
       cornerBracketPath(right, bottom,-1, -1, cfg.tileLegSize),
-    ], { color, lineWidth: 1.5, glowBlur: 4, alpha });
+    ], { color, lineWidth: cfg.tileLineWidth, glowBlur: cfg.tileGlowBlur, alpha });
 
     this.renderer.drawText(`MISSION ${level}`, vW / 2, cy - 16, {
       font: cfg.nameFont, color, alpha,

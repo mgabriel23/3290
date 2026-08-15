@@ -20,7 +20,7 @@ export function isMuted() {
 /**
  * @param {boolean} value
  */
-export function setMuted(value) {
+function setMuted(value) {
   muted = value;
   saveBool('muted', muted);
   for (const listener of listeners) listener(muted);

@@ -82,6 +82,14 @@ export function stepBouncePhysics(enemy, dt, r, barrierSurfaceY, onBarrierHit, b
   }
 }
 
+/** Local (unrotated) [x, y] offset of each of a regular `sides`-gon's vertices at `radius`, evenly spaced — see BouncerEnemy's `_localVerts`/`_localShieldVerts`. */
+function _hexVertexOffsets(sides, radius) {
+  return Array.from({ length: sides }, (_, i) => {
+    const a = (i / sides) * Math.PI * 2;
+    return [Math.cos(a) * radius, Math.sin(a) * radius];
+  });
+}
+
 /** Per-variant radius/health — everything else (gravity, spin, etc.) is shared. */
 function _variantStats(variant) {
   const cfg = Config.enemy.bouncer;
@@ -129,8 +137,18 @@ export class BouncerEnemy {
 
     // Pre-allocated world-space hulls — mutated in place each render, never reallocated.
     this._hull = { points: Array.from({ length: cfg.sides }, () => [0, 0]), closed: true };
+    this._hullArr = [this._hull]; // wrapper reused by render() instead of allocating one each frame
     if (variant === 3) {
       this._shieldHull = { points: Array.from({ length: cfg.sides }, () => [0, 0]), closed: true };
+      this._shieldHullArr = [this._shieldHull];
+    }
+
+    // Each vertex's LOCAL (unrotated) offset from center never changes —
+    // only the hexagon's rotation does — so these are computed once here
+    // instead of recomputing cos/sin per vertex, per frame, in render().
+    this._localVerts = _hexVertexOffsets(cfg.sides, this._radius);
+    if (variant === 3) {
+      this._localShieldVerts = _hexVertexOffsets(cfg.sides, cfg.shielded.shieldRadius);
     }
   }
 
@@ -221,20 +239,18 @@ export class BouncerEnemy {
     const cfg   = Config.enemy.bouncer;
     const flash = this._hitFlash > 0;
     const c = Math.cos(this._angle), s = Math.sin(this._angle);
-    const r = this._radius;
 
     if (this._variant === 3 && this._shieldHits > 0) {
       const sCfg = cfg.shielded;
       const shieldFlash = this._shieldFlash > 0;
       const shieldPts = this._shieldHull.points;
+      const localShieldVerts = this._localShieldVerts;
       for (let i = 0; i < cfg.sides; i++) {
-        const a  = (i / cfg.sides) * Math.PI * 2;
-        const lx = Math.cos(a) * sCfg.shieldRadius;
-        const ly = Math.sin(a) * sCfg.shieldRadius;
+        const lx = localShieldVerts[i][0], ly = localShieldVerts[i][1];
         shieldPts[i][0] = this.x + c * lx - s * ly;
         shieldPts[i][1] = this.y + s * lx + c * ly;
       }
-      renderer.strokePaths([this._shieldHull], {
+      renderer.strokePaths(this._shieldHullArr, {
         color: shieldFlash ? '#ffffff' : sCfg.shieldColor,
         lineWidth: cfg.lineWidth,
         alpha: 0.6,
@@ -244,15 +260,14 @@ export class BouncerEnemy {
     }
 
     const pts = this._hull.points;
+    const localVerts = this._localVerts;
     for (let i = 0; i < cfg.sides; i++) {
-      const a  = (i / cfg.sides) * Math.PI * 2;
-      const lx = Math.cos(a) * r;
-      const ly = Math.sin(a) * r;
+      const lx = localVerts[i][0], ly = localVerts[i][1];
       pts[i][0] = this.x + c * lx - s * ly;
       pts[i][1] = this.y + s * lx + c * ly;
     }
 
-    renderer.strokePaths([this._hull], {
+    renderer.strokePaths(this._hullArr, {
       color: flash ? '#ffffff' : cfg.color,
       lineWidth: cfg.lineWidth,
       glowBlur: flash ? cfg.hitGlowBlur : cfg.glowBlur,
