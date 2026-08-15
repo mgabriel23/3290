@@ -4505,7 +4505,12 @@ export const Config = Object.freeze({
 	 * boss's own bullet pool) is also wiped — see
 	 * WaveManager._clearEnemyProjectiles — so the bomb doubles as a panic
 	 * button against an unavoidable wall of enemy fire, not just a kill
-	 * button.
+	 * button. That wipe is silent on its own (no per-projectile explosion),
+	 * so it's paired with a handful of extra explosion bursts scattered at
+	 * random points across the whole screen (`burstCount`/
+	 * `burstSparksPerEmit` below, see WaveManager._emitSkillBombBursts) —
+	 * screen-wide feedback that reads as the bomb detonating, not bullets
+	 * just vanishing.
 	 * PlayerSkill.js owns just the button/cooldown itself (mirrors
 	 * PlaybackControls' buttons); GameplayScene decides what happens when
 	 * it's actually tapped.
@@ -4538,6 +4543,16 @@ export const Config = Object.freeze({
 		cooldownFont: '400 18px "Audiowide", "Courier New", monospace',
 
 		useTrauma: 0.45, // screen-shake magnitude on activation — well above an ordinary kill's (Config.screenShake.killTrauma 0.18) but below the death explosion's (Config.gameOver.deathTrauma 0.6); one shake for the whole bomb rather than per-enemy
+
+		// Extra screen-wide bursts (see WaveManager._emitSkillBombBursts),
+		// scattered at random points across the whole screen rather than tied
+		// to any enemy/projectile position. _clearEnemyProjectiles wipes every
+		// enemy bullet/rocket/orb pool with no per-projectile feedback of its
+		// own (see that method's doc), which read as bullets silently
+		// vanishing; these bursts sell that same moment as a deliberate
+		// detonation and make the bomb unmistakably the cause.
+		burstCount: 6, // how many extra bursts scatter across the screen per activation
+		burstSparksPerEmit: 8, // below Config.particles.defaultSparksPerEmit (14) — several fire at once, so each stays modest
 	}),
 
 	/**

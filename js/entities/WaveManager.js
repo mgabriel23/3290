@@ -344,6 +344,11 @@ export class WaveManager {
     this._bouncerParticles   = new Particles(Config.enemy.bouncer.color, Config.enemy.bouncer.sparksPerEmit);
     this._bossParticles      = new Particles(this._bossCfg.color, this._bossCfg.sparksPerEmit);
     this._snakeSegmentParticles = new Particles(Config.boss.snake.color, Config.boss.snake.segment.sparksPerEmit);
+    // Skill-bomb-only pool — see _emitSkillBombBursts. Colored to the skill
+    // button itself (Config.playerSkill.color) rather than any enemy palette,
+    // so the burst reads as "the bomb did this" regardless of which enemies
+    // were on screen.
+    this._skillBombParticles = new Particles(Config.playerSkill.color, Config.playerSkill.burstSparksPerEmit);
   }
 
   /** Pre-binds every fire callback (zero closures per frame) and bundles the boss-facing subset into `_bossContext`. Reads the projectile pools and barrier callbacks, so must run after both are built. */
@@ -423,6 +428,7 @@ export class WaveManager {
     this._bouncerParticles.update(dt);
     this._bossParticles.update(dt);
     this._snakeSegmentParticles.update(dt);
+    this._skillBombParticles.update(dt);
     this._rockets.update(dt, playerX, playerY);
     this._drifterProjectiles.update(dt, playerX, playerY);
     this._enemyBullets.update(dt);
@@ -734,6 +740,7 @@ export class WaveManager {
     this._weaverParticles.render(renderer);
     this._bossParticles.render(renderer);
     this._snakeSegmentParticles.render(renderer);
+    this._skillBombParticles.render(renderer);
   }
 
   /**
@@ -1041,7 +1048,10 @@ export class WaveManager {
    * every boss's own bullet pool) is also wiped via `_clearEnemyProjectiles`
    * — same "screen-clearing bomb" read as the enemy wipe, and it's what
    * actually saves the player from an unavoidable wall of bullets left
-   * behind by enemies that just died. Gated behind the same "did the bomb
+   * behind by enemies that just died. Paired with `_emitSkillBombBursts`,
+   * which scatters extra explosion bursts at random points across the whole
+   * screen at the same moment, so that wipe doesn't read as bullets just
+   * silently disappearing. Both are gated behind the same "did the bomb
    * actually do something" check as the cooldown/shake below, so tapping it
    * at a genuinely empty screen can't be used to free-clear bullets without
    * spending the cooldown.
@@ -1076,7 +1086,10 @@ export class WaveManager {
       }
       if (this.handleBulletHit(e, SKILL_LETHAL_MULTIPLIER)) killCount++;
     }
-    if (killCount > 0 || hitBoss) this._clearEnemyProjectiles();
+    if (killCount > 0 || hitBoss) {
+      this._clearEnemyProjectiles();
+      this._emitSkillBombBursts();
+    }
     return { killCount, hitBoss };
   }
 
@@ -1084,11 +1097,14 @@ export class WaveManager {
    * Wipes every enemy projectile pool at once — every enemy bullet/rocket/
    * orb type in the game, including each boss's own bullet pool — by
    * dropping its pool's `_count` to 0 via `clear()` (see each pool class,
-   * e.g. Rockets.js/EnemyBullet.js). Bullets simply vanish rather than
-   * detonating in place (no per-projectile `onDetonate`/particle burst);
-   * a screen-clearing bomb reads as "the threat is gone", not another wave
-   * of small explosions layered on top of the boss/enemy-kill feedback that
-   * already just fired. Only called from `triggerSkillBomb`.
+   * e.g. Rockets.js/EnemyBullet.js). Bullets simply vanish rather than each
+   * detonating individually in place (no per-projectile `onDetonate`/
+   * particle burst at its own position) — a screen-clearing bomb reads as
+   * "the threat is gone", not another wave of small explosions layered on
+   * top of the boss/enemy-kill feedback that already just fired. Paired
+   * with `_emitSkillBombBursts` (see `triggerSkillBomb`) for screen-wide
+   * feedback instead, so the vanish doesn't read as nothing happening. Only
+   * called from `triggerSkillBomb`.
    */
   _clearEnemyProjectiles() {
     this._enemyBullets.clear();
@@ -1101,6 +1117,25 @@ export class WaveManager {
     this._zigzagBullets.clear();
     this._rockets.clear();
     this._drifterProjectiles.clear();
+  }
+
+  /**
+   * Scatters `Config.playerSkill.burstCount` extra explosion bursts at
+   * random points across the whole screen — not tied to any enemy or
+   * projectile position, unlike every other `Particles.emit` call in this
+   * class. Only called from `triggerSkillBomb`, right alongside
+   * `_clearEnemyProjectiles`, so the moment every enemy bullet on screen
+   * silently vanishes is also the moment the screen visibly lights up —
+   * making the skill bomb unmistakably the cause, distinct from (and on top
+   * of) the real per-enemy kill explosions `handleBulletHit` already fires
+   * at each kill's own position.
+   */
+  _emitSkillBombBursts() {
+    const { width: vW, height: vH } = Config.virtual;
+    const { burstCount } = Config.playerSkill;
+    for (let i = 0; i < burstCount; i++) {
+      this._skillBombParticles.emit(Math.random() * vW, Math.random() * vH);
+    }
   }
 
   /**
@@ -1148,6 +1183,7 @@ export class WaveManager {
       && !this._bouncerParticles.active
       && !this._bossParticles.active
       && !this._snakeSegmentParticles.active
+      && !this._skillBombParticles.active
       && !this._rockets.active
       && !this._drifterProjectiles.active
       && !this._enemyBullets.active
