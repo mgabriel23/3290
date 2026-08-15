@@ -4,17 +4,25 @@
  *
  * Behaviour: enters from the top at speed, gliding diagonally to a random
  * resting position, then fires aimed shots at the player on a fixed reload
- * cycle, leading each shot by however much the player has moved since
- * `_aimStartX/Y` was sampled at the start of the cycle
- * (`Config.enemy.<type>.leadFactor` — 0 for Rocketeer, whose rocket already
- * homes continuously after launch). Each cycle can fire a BURST of multiple
- * shots, `burstCount` rounds `burstInterval` seconds apart (both optional —
- * absent/undefined means a single shot, e.g. Rocketeer's one rocket; Scout
- * fires a 3-round burst) — every round re-runs the lead formula fresh
- * against the player's position at the instant IT fires, not just once for
- * the whole burst, so a fast burst still tracks the player across its short
- * span instead of dumping every round on one now-stale point. `reloadTime`
- * is the cooldown AFTER the whole burst, not between each round of it.
+ * cycle, leading each shot by the player's recent (smoothed) velocity
+ * projected `Config.enemy.<type>.leadTime` seconds ahead — 0 for Rocketeer,
+ * whose rocket already homes continuously after launch. `_playerVX/VY` is
+ * tracked continuously every frame (see `update`'s top), regardless of
+ * state, via light exponential smoothing (`Config.enemy.leadVelocitySmoothing`)
+ * — deliberately NOT "net displacement since the aim cycle started", which
+ * used to anchor the lead to a sample up to a full `aimPause` (plus burst
+ * window) stale. A player who reverses direction inside that window would
+ * make that stale-anchor formula extrapolate the shot further in the WRONG
+ * direction than just aiming at their current position would; tracking
+ * velocity continuously means a reversal shows up within a couple of smoothed
+ * frames instead. Each cycle can fire a BURST of multiple shots, `burstCount`
+ * rounds `burstInterval` seconds apart (both optional — absent/undefined
+ * means a single shot, e.g. Rocketeer's one rocket; Scout fires a 3-round
+ * burst) — every round re-runs the lead formula fresh against the player's
+ * position/velocity at the instant IT fires, not just once for the whole
+ * burst, so a fast burst still tracks the player across its short span
+ * instead of dumping every round on one now-stale point. `reloadTime` is the
+ * cooldown AFTER the whole burst, not between each round of it.
  * After a reload, a `repositionChance` roll may send it gliding to a fresh
  * rest point (`repositioning` state, eased with `core/animation.js`'s
  * `easeOutCubic`) instead of aiming again from the same spot — so it
@@ -85,18 +93,20 @@ export class Enemy {
     this._state    = 'entering';
     this._stateAge = 0;
 
-    // Lead-prediction aim: `_aimStartX/Y` is sampled once, at the moment
-    // 'aiming' begins, and held fixed for the whole cycle — it's the
-    // baseline "how far has the player moved since I started tracking"
-    // measures from. Every shot (including each round of a burst — see
-    // Config.enemy.<type>'s burstCount/burstInterval, both optional/absent
-    // = a single shot, e.g. Rocketeer's one rocket) re-runs the lead
-    // formula fresh against the CURRENT player position at the instant it
-    // actually fires, rather than reusing one shot's target for the whole
-    // burst — otherwise a fast burst reads as freezing the player in place
-    // instead of tracking them.
-    this._aimStartX = spawnX;
-    this._aimStartY = 0;
+    // Lead-prediction aim: `_playerVX/VY` is a continuously-smoothed estimate
+    // of the player's velocity (updated every frame in `update`, in every
+    // state — see class doc for why). Every shot (including each round of a
+    // burst — see Config.enemy.<type>'s burstCount/burstInterval, both
+    // optional/absent = a single shot, e.g. Rocketeer's one rocket) re-runs
+    // the lead formula fresh against the CURRENT player position/velocity at
+    // the instant it actually fires, rather than reusing one shot's target
+    // for the whole burst — otherwise a fast burst reads as freezing the
+    // player in place instead of tracking them.
+    this._playerVX = 0;
+    this._playerVY = 0;
+    this._prevPlayerX = 0;
+    this._prevPlayerY = 0;
+    this._hasPlayerSample = false; // guards the very first tracked frame from producing a bogus velocity spike
     this._burstShotsFired = 0;
 
     // Mid-fight repositioning target — see the 'repositioning' branch.
@@ -122,6 +132,25 @@ export class Enemy {
     this._enginePhase += dt * 9;
     if (tickDeathState(this, dt)) return;
 
+    // Track the player's recent velocity continuously, every frame in every
+    // state — see class doc for why this replaced the old "displacement
+    // since aim started" formula. `dt` can be exactly 0 during a gameplay
+    // hit-stop freeze (GameplayScene's effectiveDt), which would otherwise
+    // divide by zero.
+    if (dt > 0) {
+      if (!this._hasPlayerSample) {
+        this._hasPlayerSample = true;
+      } else {
+        const instVX = (playerX - this._prevPlayerX) / dt;
+        const instVY = (playerY - this._prevPlayerY) / dt;
+        const k = 1 - Math.exp(-Config.enemy.leadVelocitySmoothing * dt);
+        this._playerVX += (instVX - this._playerVX) * k;
+        this._playerVY += (instVY - this._playerVY) * k;
+      }
+      this._prevPlayerX = playerX;
+      this._prevPlayerY = playerY;
+    }
+
     // Angle: local -y (nose) points AWAY from player; local +y (tail) faces player.
     // Formula: atan2(-dx, dy) makes tail face (dx, dy). Verified:
     //   player below (dx=0, dy>0) → angle=0 → nose points UP ✓
@@ -134,21 +163,13 @@ export class Enemy {
       stepEntryGlide(this, cfg, dt, 'aiming');
 
     } else if (this._state === 'aiming') {
-      // Sample once, on the first tick of this state (stateAge was just
-      // reset to 0 by whichever transition led here, then bumped by dt
-      // above — this is the dt-independent way to detect "just arrived").
-      if (this._stateAge <= dt) {
-        this._aimStartX = playerX;
-        this._aimStartY = playerY;
-      }
       if (this._stateAge >= cfg.aimPause) {
-        // Lead prediction: extrapolate however far the player moved since
-        // `_aimStartX/Y` was sampled, forward by `leadFactor` more of the
-        // same motion. leadFactor 0 (Rocketeer) reduces this to plain
-        // current-position aim — the rocket's own continuous homing makes
-        // leading the initial heading redundant.
-        const leadX = playerX + (playerX - this._aimStartX) * cfg.leadFactor;
-        const leadY = playerY + (playerY - this._aimStartY) * cfg.leadFactor;
+        // Lead prediction: project the player's current smoothed velocity
+        // `leadTime` seconds ahead. leadTime 0 (Rocketeer) reduces this to
+        // plain current-position aim — the rocket's own continuous homing
+        // makes leading the initial heading redundant.
+        const leadX = playerX + this._playerVX * cfg.leadTime;
+        const leadY = playerY + this._playerVY * cfg.leadTime;
         // The first round fires immediately, right here — same instant as
         // before burst fire existed (byte-identical timing for anything
         // with burstCount 1, e.g. Rocketeer). Additional rounds (if any)
@@ -169,14 +190,12 @@ export class Enemy {
       const shotCount      = cfg.burstCount ?? 1;
       const burstInterval  = cfg.burstInterval ?? 0;
       if (this._burstShotsFired < shotCount && this._stateAge >= this._burstShotsFired * burstInterval) {
-        // Re-aim fresh against the player's CURRENT position for each
-        // round — reusing round 1's target for the whole burst would make
-        // a fast burst read as freezing the player in place instead of
-        // actually tracking them (`_aimStartX/Y` itself stays fixed, same
-        // baseline the first round used, only the "where are they now"
-        // side of the lead formula updates).
-        const leadX = playerX + (playerX - this._aimStartX) * cfg.leadFactor;
-        const leadY = playerY + (playerY - this._aimStartY) * cfg.leadFactor;
+        // Re-aim fresh against the player's CURRENT position/velocity for
+        // each round — reusing round 1's target for the whole burst would
+        // make a fast burst read as freezing the player in place instead of
+        // actually tracking them.
+        const leadX = playerX + this._playerVX * cfg.leadTime;
+        const leadY = playerY + this._playerVY * cfg.leadTime;
         onFire(this.x, this.y, leadX, leadY);
         this._burstShotsFired++;
       }

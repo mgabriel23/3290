@@ -1097,6 +1097,14 @@ export const Config = Object.freeze({
 		// also covers its shield-hit case.
 		hitFlashDuration: 0.15,
 
+		// 1/sec exponential-smoothing rate for Scout/Rocketeer's tracked
+		// player-velocity estimate (see Enemy.js) — used to lead shots off the
+		// player's CURRENT motion instead of a stale sample. Higher = the
+		// estimate reacts to a direction change faster; this is fast enough to
+		// pick up a reversal within ~0.1-0.15s while still filtering single-
+		// frame pointer-event jitter.
+		leadVelocitySmoothing: 8,
+
 		/**
 		 * How every type's `points`/`gold` below were derived — not
 		 * independently hand-picked per type. There's currently no way for the
@@ -1177,7 +1185,7 @@ export const Config = Object.freeze({
 			minSeparation: 60,
 			repositionChance: 0.5, // odds a finished firing cycle sends it to a fresh rest point instead of aiming again in place
 			repositionDuration: 0.9, // seconds to ease to the new rest point (core/animation.js's easeOutCubic)
-			leadFactor: 1.0, // extrapolates the player's movement during the aim window forward by this much — its bullet is unguided, so leading it matters
+			leadTime: 0.3, // seconds — bullets aim at the player's tracked (smoothed) CURRENT velocity projected this far ahead; unguided bullet, so leading it matters
 			// EffortScore 3.00 (hitsToKill 3, stationary, mandatory) — see the
 			// methodology comment above `hitFlashDuration`. Calibration anchor:
 			// the scaling constant is chosen so Scout, the very first enemy, lands at 100.
@@ -1314,7 +1322,7 @@ export const Config = Object.freeze({
 			minSeparation: 64,
 			repositionChance: 0.5, // odds a finished firing cycle sends it to a fresh rest point instead of aiming again in place
 			repositionDuration: 0.9, // seconds to ease to the new rest point (core/animation.js's easeOutCubic)
-			leadFactor: 0, // no lead — the rocket already homes continuously after launch, so leading the initial heading is redundant
+			leadTime: 0, // no lead — the rocket already homes continuously after launch, so leading the initial heading is redundant
 			// Equal to Scout by design — see the EffortScore methodology comment
 			// above `hitFlashDuration` near the top of this `enemy` block.
 			points: 100,
