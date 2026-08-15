@@ -44,6 +44,7 @@ import { Config } from '../core/Config.js';
 import { cornerBracketPath } from '../core/shapes.js';
 import { loadNumber, saveNumber } from '../core/Storage.js';
 import { lerpHexColor } from '../core/color.js';
+import { dangerColor, textSizeScale } from '../core/Settings.js';
 
 export class HUD {
   constructor() {
@@ -113,6 +114,11 @@ export class HUD {
       margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur, bestFont, combo,
       chromeColor, chromeLineWidth, chromeGlowBlur,
     } = Config.hud;
+    // The Settings panel's text-size toggle (core/Settings.js) — applied via
+    // Renderer.drawText's own `scale` option, so it needs no font-string
+    // parsing. Scoped to the persistent gameplay HUD only (score/gold/best/
+    // combo/health-bar text below), not every overlay in the game.
+    const scale = textSizeScale();
 
     // Both brackets in one strokePaths call → one shadow-blur GPU pass instead of two.
     renderer.strokePaths(this._allBrackets, {
@@ -121,26 +127,26 @@ export class HUD {
 
     // Score panel (left)
     renderer.drawText('SCORE', this._scoreTX, margin + 22, {
-      font: labelFont, color: labelColor, align: 'left', alpha: 0.65,
+      font: labelFont, color: labelColor, align: 'left', alpha: 0.65, scale,
     });
     renderer.drawText(String(this.score), this._scoreTX, margin + 44, {
-      font: valueFont, color: valueColor, align: 'left', glowBlur: valueGlowBlur,
+      font: valueFont, color: valueColor, align: 'left', glowBlur: valueGlowBlur, scale,
     });
     renderer.drawText(`BEST ${this.bestScore}`, this._scoreTX, margin + 62, {
-      font: bestFont, color: labelColor, align: 'left', alpha: 0.6,
+      font: bestFont, color: labelColor, align: 'left', alpha: 0.6, scale,
     });
     if (comboMultiplier > 1) {
       renderer.drawText(`COMBO ×${comboMultiplier}`, this._scoreTX, margin + combo.offsetY, {
-        font: combo.font, color: combo.color, align: 'left',
+        font: combo.font, color: combo.color, align: 'left', scale,
       });
     }
 
     // Gold panel (right)
     renderer.drawText('GOLD', this._goldTX, margin + 22, {
-      font: labelFont, color: labelColor, align: 'right', alpha: 0.65,
+      font: labelFont, color: labelColor, align: 'right', alpha: 0.65, scale,
     });
     renderer.drawText(String(this.gold), this._goldTX, margin + 44, {
-      font: valueFont, color: valueColor, align: 'right', glowBlur: valueGlowBlur,
+      font: valueFont, color: valueColor, align: 'right', glowBlur: valueGlowBlur, scale,
     });
 
     this._renderHealthBar(renderer, health);
@@ -172,12 +178,13 @@ export class HUD {
     // kicks in) — a smooth ramp instead of a sudden binary color flip, since
     // health is the single most important stat on screen.
     const cautionThreshold = maxHealth * cfg.cautionThresholdRatio;
+    const dangerHex = dangerColor(lowHealth.color);
     let color;
     if (low) {
-      color = lowHealth.color;
+      color = dangerHex;
     } else if (clamped < cautionThreshold) {
       const t = 1 - (clamped - lowHealth.threshold) / (cautionThreshold - lowHealth.threshold);
-      color = lerpHexColor(cfg.color, lowHealth.color, t);
+      color = lerpHexColor(cfg.color, dangerHex, t);
     } else {
       color = cfg.color;
     }
@@ -204,7 +211,7 @@ export class HUD {
     // gray) and stays near-opaque — this is the actual "N / max" numeric
     // readout, not a secondary caption, so it should read with real weight.
     renderer.drawText(`${Math.ceil(clamped)} / ${maxHealth}`, cfg.x, this._healthLabelY, {
-      font: cfg.labelFont, color, alpha: low ? alpha : 0.9,
+      font: cfg.labelFont, color, alpha: low ? alpha : 0.9, scale: textSizeScale(),
     });
 
     if (low) {

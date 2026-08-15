@@ -8,7 +8,7 @@
  * time and gestures.
  */
 import { Config } from './Config.js';
-import { isMuted, onMutedChange } from './AudioSettings.js';
+import { isMuted, onMutedChange, getVolume } from './AudioSettings.js';
 import { AudioFader } from './AudioFader.js';
 import { Renderer } from './Renderer.js';
 import { SwipeInput } from './SwipeInput.js';
@@ -334,7 +334,11 @@ export class Game {
    * try/catch, so a scene bug can't leave audio fades permanently stuck) —
    * after, not before, so this frame's `onMusicDuck` call (fired from
    * GameplayScene's own `update()`) is already reflected the same frame
-   * instead of lagging a frame behind.
+   * instead of lagging a frame behind. It also re-reads `AudioSettings`'s
+   * `getVolume()` every frame rather than caching it, so the Settings
+   * panel's volume slider takes effect on already-playing music live,
+   * mid-drag — same reasoning as why `getVolume()` needs no change-listener
+   * (see that module's own doc).
    * @param {number} timestamp  high-resolution time in ms, supplied by rAF
    */
   _tick(timestamp) {
@@ -373,10 +377,10 @@ export class Game {
    */
   _updateAudioFades(dt) {
     if (this._prologueAudio && this._prologueFader) {
-      this._prologueAudio.volume = Config.audio.prologueThemeVolume * this._prologueFader.update(dt);
+      this._prologueAudio.volume = Config.audio.prologueThemeVolume * this._prologueFader.update(dt) * getVolume();
     }
     if (this._themeAudio && this._themeFader) {
-      this._themeAudio.volume = Config.audio.themeVolume * this._themeDuckMultiplier * this._themeFader.update(dt);
+      this._themeAudio.volume = Config.audio.themeVolume * this._themeDuckMultiplier * this._themeFader.update(dt) * getVolume();
     }
   }
 

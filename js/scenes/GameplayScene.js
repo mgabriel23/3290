@@ -146,6 +146,9 @@ import { AudioPool } from '../core/AudioPool.js';
 import { cornerBracketPath, heartbeatPath } from '../core/shapes.js';
 import { ScreenShake } from '../core/ScreenShake.js';
 import { consumeLuckyDrop, consumeShieldStart } from '../core/DailyReward.js';
+import { dangerColor } from '../core/Settings.js';
+import { recordRun, updateLastRunScore, getRunHistory } from '../core/RunHistory.js';
+import { shareScore } from '../core/Share.js';
 import { Barrier } from '../entities/Barrier.js';
 import { Bullets } from '../entities/Bullets.js';
 import { ComboBanner } from '../entities/ComboBanner.js';
@@ -260,6 +263,16 @@ export class GameplayScene {
     this._playerParticles = new Particles(Config.gameOver.explosionColor, Config.gameOver.explosionSparksPerEmit);
     this._deathExplosionAudio = new AudioPool(Config.gameOver.explosionAudioSrc, 4, Config.gameOver.explosionVolume);
     this._gameOverAudio = new AudioPool(Config.gameOver.audioSrc, 4, Config.gameOver.audioVolume);
+    // The "last 5 runs" list (core/RunHistory.js) — set the instant
+    // _triggerGameOver first fires this run (see that method), so it's
+    // false only for the brief window before this GameplayScene's first
+    // death. A paid revive can send this run through _triggerGameOver a
+    // SECOND time; that later call corrects the same history row's score
+    // in place instead of adding a duplicate — see _triggerGameOver.
+    this._historyRecorded = false;
+    // SHARE SCORE's brief "SHARED!"/"COPIED!" feedback — see _shareScore/_renderGameOver.
+    this._shareStatus = null;
+    this._shareStatusAge = 0;
 
     // Level / wave state -------------------------------------------------------
     // 'intro'  — level indicator is on screen; bullets are suppressed
@@ -304,6 +317,10 @@ export class GameplayScene {
     if (this._isGameOver) {
       this._gameOverAge += dt;
       this._playerParticles.update(dt); // let the death burst finish animating while everything else is frozen
+      if (this._shareStatus) {
+        this._shareStatusAge += dt;
+        if (this._shareStatusAge >= Config.gameOver.shareButton.feedbackDuration) this._shareStatus = null;
+      }
       return; // frozen for good — only a restart tap moves things forward
     }
     if (this._missionComplete) {
@@ -545,6 +562,7 @@ export class GameplayScene {
       if (this._gameOverAge < Config.gameOver.minRestartDelay) return;
       if (this._isInsideReviveButton(x, y)) { this._tryRevive(); return; }
       if (this._isNearReviveButton(x, y)) return; // near-miss on the CTA — absorbed, not read as "restart"
+      if (this._isInsideShareButton(x, y)) { this._shareScore(); return; }
       this._onGameOver?.();
       return;
     }
@@ -739,6 +757,17 @@ export class GameplayScene {
     this._onMusicStop?.();
     this._screenShake.trigger(Config.gameOver.deathTrauma);
     this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.playerHitDuration);
+
+    // "Last 5 runs" (core/RunHistory.js) — first death this run adds a new
+    // row (visible immediately on this same overlay); a later death after a
+    // paid revive corrects that same row's score instead of adding another
+    // — see the constructor's `_historyRecorded` doc.
+    if (!this._historyRecorded) {
+      recordRun({ score: this.hud.score, mode: this._mode, level: this._level });
+      this._historyRecorded = true;
+    } else {
+      updateLastRunScore(this.hud.score);
+    }
   }
 
   /**
@@ -858,7 +887,7 @@ export class GameplayScene {
     if (this._level % Config.boss.everyNLevels === 0) {
       const b = Config.boss.intro;
       this.renderer.drawText(b.text, vW / 2, vH / 2 + jitter + b.offsetY, {
-        font: b.font, color: b.color, alpha, glowBlur: b.glowBlur,
+        font: b.font, color: dangerColor(b.color), alpha, glowBlur: b.glowBlur,
       });
     }
   }
@@ -898,7 +927,7 @@ export class GameplayScene {
 
     this.renderer.clear(Config.colors.void, cfg.dimAlpha * alpha);
     this.renderer.drawText(cfg.titleText, vW / 2, vH / 2 + cfg.titleOffsetY, {
-      font: cfg.titleFont, color: cfg.titleColor, alpha, glowBlur: cfg.titleGlowBlur,
+      font: cfg.titleFont, color: dangerColor(cfg.titleColor), alpha, glowBlur: cfg.titleGlowBlur,
     });
     this._renderReviveButton(alpha);
 
@@ -910,6 +939,88 @@ export class GameplayScene {
     this.renderer.drawText(cfg.promptText, vW / 2, vH / 2 + cfg.promptOffsetY, {
       font: cfg.promptFont, color: cfg.promptColor, alpha: promptAlpha,
     });
+
+    this._renderRunHistory(alpha);
+    this._renderShareButton(alpha);
+  }
+
+  /**
+   * "LAST 5 RUNS" — core/RunHistory.js's local comparison point (see that
+   * module's doc for why bestScore alone wasn't one). Row 0 (this run,
+   * already recorded by `_triggerGameOver` by the time this can render —
+   * explosionDelay/fadeInDuration both already elapsed) is drawn in
+   * `currentColor` so it visibly stands out as "the run you just played."
+   */
+  _renderRunHistory(alpha) {
+    const cfg = Config.gameOver.history;
+    const { width: vW } = Config.virtual;
+    const history = getRunHistory();
+    if (history.length === 0) return;
+
+    this.renderer.drawText(cfg.titleText, vW / 2, cfg.titleY, {
+      font: cfg.titleFont, color: cfg.titleColor, alpha: alpha * 0.8,
+    });
+
+    history.forEach((run, i) => {
+      const modeLabel = run.mode === 'mission' ? `MISSION L${run.level}` : 'SURVIVAL';
+      this.renderer.drawText(`${run.score} PTS  ·  ${modeLabel}`, vW / 2, cfg.startY + i * cfg.lineHeight, {
+        font: cfg.entryFont, color: i === 0 ? cfg.currentColor : cfg.entryColor, alpha: alpha * (i === 0 ? 1 : 0.75),
+      });
+    });
+  }
+
+  /**
+   * SHARE SCORE — see core/Share.js/`_shareScore`. Label swaps briefly to
+   * whatever the share resolved to (`_shareStatus`, cleared by update()
+   * after `feedbackDuration`) so the tap has visible feedback even on
+   * desktop browsers where nothing else on screen changes.
+   */
+  _renderShareButton(alpha) {
+    const cfg = Config.gameOver.shareButton;
+    const { width: vW, height: vH } = Config.virtual;
+    const cy = vH / 2 + cfg.offsetY;
+    const label = this._shareStatus === 'shared' ? cfg.sharedLabel
+      : this._shareStatus === 'copied' ? cfg.copiedLabel
+      : cfg.label;
+
+    this.renderer.strokePaths(this._shareButtonPaths(), {
+      x: vW / 2, y: cy, color: cfg.color, lineWidth: cfg.lineWidth, glowBlur: cfg.glowBlur, alpha,
+    });
+    this.renderer.drawText(label, vW / 2, cy, { font: cfg.font, color: cfg.color, alpha });
+  }
+
+  /** Corner-bracket frame for the SHARE SCORE button — same shape every other bracketed button in this game uses, built fresh each call since (unlike REVIVE's) this button's geometry never changes and isn't worth caching. */
+  _shareButtonPaths() {
+    const cfg = Config.gameOver.shareButton;
+    const halfW = cfg.width / 2, halfH = cfg.height / 2;
+    return [
+      cornerBracketPath(-halfW, -halfH, 1, 1, cfg.legSize),
+      cornerBracketPath(halfW, -halfH, -1, 1, cfg.legSize),
+      cornerBracketPath(-halfW, halfH, 1, -1, cfg.legSize),
+      cornerBracketPath(halfW, halfH, -1, -1, cfg.legSize),
+    ];
+  }
+
+  /** @returns {boolean} true if (x, y) is inside the GAME OVER overlay's SHARE SCORE button. */
+  _isInsideShareButton(x, y) {
+    const { width: vW, height: vH } = Config.virtual;
+    const cfg = Config.gameOver.shareButton;
+    const cy = vH / 2 + cfg.offsetY;
+    return Math.abs(x - vW / 2) <= cfg.width / 2 && Math.abs(y - cy) <= cfg.height / 2;
+  }
+
+  /**
+   * Shares (or, lacking Web Share support, copies) this run's final score as
+   * plain text — no URL, this game has no public deployed address to attach
+   * one to. Fired directly from the SHARE SCORE tap (still inside that same
+   * user-gesture call chain `shareScore` needs for `navigator.share`), same
+   * "gesture-synchronous" requirement Config.audio's own doc already
+   * documents for audio.play().
+   */
+  async _shareScore() {
+    const status = await shareScore(`I scored ${this.hud.score} points in 3290! Can you beat it?`);
+    this._shareStatus = status === 'failed' ? null : status;
+    this._shareStatusAge = 0;
   }
 
   /**

@@ -101,6 +101,7 @@ import { ZigzagBullets } from './ZigzagBullets.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { AudioPool } from '../core/AudioPool.js';
+import { vibrate } from '../core/Settings.js';
 
 // Arbitrarily large multiplier on _playerDamage used by triggerSkillBomb to
 // guarantee a one-shot kill regardless of level scaling, without needing to
@@ -811,6 +812,7 @@ export class WaveManager {
     }
 
     if (killed) {
+      vibrate(Config.settings.haptics.killPatternMs);
       const reward = this._rewardFor(enemy);
       this._hud.score += Math.round(reward.points * scoreMultiplier);
 

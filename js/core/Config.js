@@ -107,6 +107,21 @@ export const Config = Object.freeze({
 		hitFlashDuration: 0.15, // seconds the hull flashes white on a hit — matches Config.enemy.hitFlashDuration
 
 		/**
+		 * The Settings panel's sensitivity slider (core/Settings.js
+		 * getSensitivity(), 0–1) interpolates between these two rates for
+		 * Player.update's exponential ease toward `_targetX/_targetY` — see
+		 * that method for the `1 - Math.exp(-rate * dt)` idiom, the same one
+		 * GameplayScene._updateMusicDuck already uses. At sensitivity 0
+		 * Player skips this entirely and snaps (today's exact behavior, and
+		 * the default), so these two values only ever matter once a player
+		 * has actually moved the slider off zero.
+		 */
+		followSmoothing: Object.freeze({
+			maxRate: 40, // sensitivity just above 0 — snappy, barely-perceptible trailing
+			minRate: 6,  // sensitivity 1 — a soft, deliberate trailing motion
+		}),
+
+		/**
 		 * Below `threshold`, the hull switches to a pulsing warning red —
 		 * identical shape/formula to Barrier's own low-health pulse (see
 		 * Config.barrier.lowHealth and Barrier._isLowHealth/_lowHealthPulseAlpha)
@@ -359,6 +374,52 @@ export const Config = Object.freeze({
 			unaffordableColor: "#4a5570", // dim — reads as disabled, same as Shop's own unaffordable color
 			pulseSpeed: 3.2, // rad/sec — same gentle "alive" breathing pulse DailyRewardPanel's CLAIM button already uses
 			pulseDepth: 0.3,
+		}),
+
+		/**
+		 * The "last 5 runs" list — core/RunHistory.js's local comparison
+		 * point, since bestScore alone (HUD's own wallet) never showed a
+		 * player how a run stacked up against their recent form, only their
+		 * single all-time peak. Sits well below `promptOffsetY` (680vp),
+		 * in the ~280vp of untouched space before the 960vp bottom edge, so
+		 * it never competes with the REVIVE CTA or the restart prompt above
+		 * it. Row 0 (the run just played) is drawn in `currentColor` instead
+		 * of `entryColor` — same "highlight the current one" language
+		 * DailyRewardPanel's streak strip already uses for today's pip —
+		 * confirming to the player that this run just landed on the list.
+		 */
+		history: Object.freeze({
+			titleText: "LAST 5 RUNS",
+			titleFont: '400 13px "Audiowide", "Courier New", monospace',
+			titleColor: "#aab4d4",
+			titleY: 742,
+			entryFont: '400 13px "Courier New", monospace',
+			entryColor: "#aab4d4",
+			currentColor: "#4DEFFF", // this run's own row — matches Config.player.color
+			startY: 768,
+			lineHeight: 20,
+		}),
+
+		/**
+		 * SHARE SCORE — Web Share API (clipboard-copy fallback), see
+		 * core/Share.js. `label` swaps briefly to whatever
+		 * `shareScore()` resolved to (`sharedLabel`/`copiedLabel`) so the tap
+		 * has visible feedback even though nothing else on screen changes;
+		 * GameplayScene reverts it after `feedbackDuration` seconds.
+		 */
+		shareButton: Object.freeze({
+			offsetY: 420, // vp below the title, well under the history list above it
+			width: 200,
+			height: 42,
+			legSize: 10,
+			color: "#4DEFFF",
+			lineWidth: 1.5,
+			glowBlur: 6,
+			font: '400 14px "Audiowide", "Courier New", monospace',
+			label: "SHARE SCORE",
+			sharedLabel: "SHARED!",
+			copiedLabel: "COPIED!",
+			feedbackDuration: 1.6,
 		}),
 
 		// Death explosion — reuses the same shared explosion.mp3 every enemy
@@ -4123,6 +4184,13 @@ export const Config = Object.freeze({
 	 */
 	colors: Object.freeze({
 		void: "#05070f", // deep space background
+		// The colorblind-mode swap for the game's one reused "danger red" —
+		// see core/Settings.js's dangerColor() for which call sites wrap
+		// themselves with it and why only this one signal is remapped.
+		// Amber rather than another red/green so it stays distinct from
+		// both the danger-red it replaces AND the game's cyan/green accents
+		// under red-green colorblindness, the most common form.
+		dangerColorblind: "#FFB627",
 	}),
 
 	/**
@@ -4593,6 +4661,96 @@ export const Config = Object.freeze({
 			hintFont: '400 13px "Audiowide", "Courier New", monospace',
 			hintColor: "#aab4d4",
 			hintOffsetY: 50, // virtual px below the title
+		}),
+	}),
+
+	/**
+	 * SettingsPanel — a ⚙ button + full-screen overlay composed into
+	 * PrologueScene's title beat ONLY (see that scene's class doc for why
+	 * settings deliberately isn't reachable mid-run, unlike mute/pause).
+	 * Same "one button toggles open/closed" shape as `codex` above, same
+	 * "dimmed background is inert" convention as `shop`. Five rows, each
+	 * built from `overlay.contentStartY + i * overlay.rowSpacing`:
+	 * VOLUME/SENSITIVITY (sliders — no slider primitive exists on Renderer,
+	 * so each is a `fillStrokePaths` rect track+fill plus a `fillEllipse`
+	 * knob), HAPTICS/COLORBLIND (toggle switches), TEXT SIZE (a 3-way
+	 * segmented control). See core/Settings.js for the persisted values
+	 * these all read/write, and core/AudioSettings.js for volume
+	 * specifically (grouped with mute there, not here).
+	 */
+	settings: Object.freeze({
+		button: Object.freeze({
+			x: 500,
+			y: 45,
+			radius: 25,
+			color: "#4DEFFF",
+			lineWidth: 2,
+			glowBlur: 7,
+			font: '400 20px "Audiowide", "Courier New", monospace',
+			pulseSpeed: 2.0,
+			pulseDepth: 0.3,
+		}),
+		overlay: Object.freeze({
+			dimAlpha: 0.85,
+			fadeInDuration: 0.2,
+
+			titleFont: '400 16px "Audiowide", "Courier New", monospace',
+			titleColor: "#4DEFFF",
+			titleY: 100,
+
+			contentStartY: 190, // first row's label baseline
+			rowSpacing: 92, // vertical distance between each row's label baseline
+			controlOffsetY: 32, // the row's control (slider/toggle/segmented) sits this far below its label
+
+			labelFont: '400 13px "Audiowide", "Courier New", monospace',
+			labelColor: "#aab4d4",
+			valueFont: '400 12px "Courier New", monospace',
+			valueColor: "#4DEFFF",
+
+			footerFont: '400 11px "Audiowide", "Courier New", monospace',
+			footerColor: "#aab4d4",
+			footerY: 860,
+			footerText: "TAP ⚙ TO CLOSE",
+		}),
+		slider: Object.freeze({
+			trackWidth: 260,
+			trackHeight: 6,
+			trackColor: "#2a3350",
+			fillColor: "#4DEFFF",
+			knobRadius: 9,
+			knobColor: "#4DEFFF",
+			knobLineWidth: 2,
+			glowBlur: 6,
+			hitPaddingY: 18, // extra vertical hit-test margin around the thin track, for a real touch target
+		}),
+		toggle: Object.freeze({
+			width: 52,
+			height: 26,
+			onColor: "#4DFF8A",
+			offColor: "#4a5570",
+			knobColor: "#e8ecff",
+			labelOnText: "ON",
+			labelOffText: "OFF",
+			font: '400 11px "Audiowide", "Courier New", monospace',
+		}),
+		segmented: Object.freeze({
+			options: Object.freeze(["SMALL", "NORMAL", "LARGE"]),
+			optionWidth: 84,
+			height: 30,
+			gap: 6,
+			legSize: 8,
+			activeColor: "#4DEFFF",
+			inactiveColor: "#4a5570",
+			font: '400 11px "Audiowide", "Courier New", monospace',
+		}),
+		// Vibration durations (ms) for the two haptics hooks — Player.takeDamage
+		// (a real hit landed) and WaveManager.handleBulletHit (an enemy died).
+		// Both no-op unless core/Settings.js's haptics toggle is on, and
+		// degrade silently on browsers with no Vibration API (every iOS
+		// browser) — see Settings.js's vibrate().
+		haptics: Object.freeze({
+			hitPatternMs: 35,
+			killPatternMs: 12,
 		}),
 	}),
 

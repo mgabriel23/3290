@@ -54,3 +54,30 @@ export function loadBool(key, fallback = false) {
 export function saveBool(key, value) {
   saveNumber(key, value ? 1 : 0);
 }
+
+/**
+ * @param {string} key
+ * @param {*} [fallback]
+ * @returns {*}
+ */
+export function loadJSON(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(PREFIX + key);
+    if (raw === null) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * @param {string} key
+ * @param {*} value
+ */
+export function saveJSON(key, value) {
+  try {
+    localStorage.setItem(PREFIX + key, JSON.stringify(value));
+  } catch {
+    // Ignore — see saveNumber's own doc.
+  }
+}

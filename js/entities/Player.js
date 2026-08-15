@@ -12,10 +12,13 @@
  * including during the entrance, since the ship is always under power.
  *
  * After the entry animation completes the ship becomes controllable:
- * `moveTo(x, y)` repositions it instantly (clamped to the play-area
- * bounds) and is called by the scene on every pointer-move event while
- * the player's finger or mouse button is held. While no pointer is
- * active the ship holds its last position.
+ * `moveTo(x, y)` sets a target (clamped to the play-area bounds), called
+ * by the scene on every pointer-move event while the player's finger or
+ * mouse button is held. `update` then moves `x/y` toward that target — by
+ * default an instant snap (core/Settings.js's sensitivity setting at its
+ * default of 0), or an exponential ease if the Settings panel's
+ * sensitivity slider has been raised — see `update`'s own comment. While
+ * no pointer is active the ship holds its last position.
  *
  * This is the game's first entity: a plain object with its own
  * `update(dt)` / `render(renderer)`, composed into GameplayScene rather
@@ -57,6 +60,7 @@
 import { Config } from '../core/Config.js';
 import { easeOutCubic } from '../core/animation.js';
 import { AudioPool } from '../core/AudioPool.js';
+import { getSensitivity, dangerColor, vibrate } from '../core/Settings.js';
 
 // Local ship-space outline coordinates (nose toward -Y — "forward", since
 // the ship faces up the screen). Only the right half is authored; it's
@@ -188,6 +192,7 @@ export class Player {
     this.health = Math.max(0, this.health - amount);
     this._hitFlash    = Config.player.hitFlashDuration;
     this._invulnTimer = Config.player.invulnDuration;
+    vibrate(Config.settings.haptics.hitPatternMs);
     return true;
   }
 
@@ -246,9 +251,32 @@ export class Player {
         this._targetX = this.x;
         this._targetY = this.y;
       }
+      this._followTarget(dt);
+    }
+  }
+
+  /**
+   * Moves `x/y` toward `_targetX/_targetY` — a snap at the sensitivity
+   * default (0), matching every build of this game before the Settings
+   * panel existed exactly, or an exponential ease-toward-target once a
+   * player raises the slider (same `1 - Math.exp(-rate * dt)` idiom
+   * GameplayScene._updateMusicDuck already uses for its music duck).
+   * `rate` is interpolated between Config.player.followSmoothing's
+   * min/max by the sensitivity value — higher sensitivity, slower rate,
+   * more visible trailing motion.
+   */
+  _followTarget(dt) {
+    const sensitivity = getSensitivity();
+    if (sensitivity <= 0) {
       this.x = this._targetX;
       this.y = this._targetY;
+      return;
     }
+    const { minRate, maxRate } = Config.player.followSmoothing;
+    const rate = maxRate - (maxRate - minRate) * sensitivity;
+    const k = 1 - Math.exp(-rate * dt);
+    this.x += (this._targetX - this.x) * k;
+    this.y += (this._targetY - this.y) * k;
   }
 
   /**
@@ -266,7 +294,7 @@ export class Player {
 
     const flashing = this._hitFlash > 0;
     const low      = this._isLowHealth();
-    const color    = flashing ? '#ffffff' : low ? Config.player.lowHealth.color : Config.player.color;
+    const color    = flashing ? '#ffffff' : low ? dangerColor(Config.player.lowHealth.color) : Config.player.color;
     const alpha    = this._invulnTimer > 0 ? this._invulnBlinkAlpha() : (low ? this._lowHealthPulseAlpha() : 1);
 
     renderer.strokePaths(

@@ -29,7 +29,7 @@
  * lazily created on first use, matching the original's "don't allocate
  * anything before a sound is actually needed" behavior.
  */
-import { isMuted } from './AudioSettings.js';
+import { isMuted, getVolume } from './AudioSettings.js';
 
 let _sharedContext = null;
 // Every pool requesting the same `src` shares one decode — keyed by src,
@@ -103,7 +103,7 @@ export class AudioPool {
           const source = ctx.createBufferSource();
           source.buffer = buffer;
           const gain = ctx.createGain();
-          gain.gain.value = volume !== undefined ? volume : this._volume;
+          gain.gain.value = (volume !== undefined ? volume : this._volume) * getVolume();
           source.connect(gain).connect(ctx.destination);
           source.start();
         } catch {

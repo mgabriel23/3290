@@ -42,6 +42,7 @@
 import { Config } from '../core/Config.js';
 import { diamondPath } from '../core/shapes.js';
 import { AudioPool } from '../core/AudioPool.js';
+import { dangerColor } from '../core/Settings.js';
 
 export class Barrier {
   constructor() {
@@ -132,7 +133,7 @@ export class Barrier {
     this._applyPulse();
 
     const low = this._isLowHealth();
-    const color = low ? Config.barrier.lowHealth.color : Config.barrier.color;
+    const color = low ? dangerColor(Config.barrier.lowHealth.color) : Config.barrier.color;
     const pulseAlpha = low ? this._lowHealthPulseAlpha() : 1;
 
     // Main arc — full brightness, full lineWidth
@@ -204,7 +205,7 @@ export class Barrier {
     const { width: vW } = Config.virtual;
     const peakY = baseY - arcHeight; // y of the arc's topmost point
     const low   = this._isLowHealth();
-    const color = low ? Config.barrier.lowHealth.color : healthColor;
+    const color = low ? dangerColor(Config.barrier.lowHealth.color) : healthColor;
     renderer.drawText('SHIELD', vW / 2, peakY + 26, {
       font: healthLabelFont, color, alpha: 0.5,
     });

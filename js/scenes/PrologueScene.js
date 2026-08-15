@@ -69,6 +69,7 @@ import { AudioPool } from '../core/AudioPool.js';
 import { DailyRewardPanel } from '../entities/DailyRewardPanel.js';
 import { previewNextReward } from '../core/DailyReward.js';
 import { markPrologueSeen } from '../core/PrologueProgress.js';
+import { SettingsPanel } from '../entities/SettingsPanel.js';
 
 /** One path-factory per spawnable portal-creature variant — see _spawnCreature. */
 const _CREATURE_PATH_FACTORIES = {
@@ -137,6 +138,10 @@ export class PrologueScene {
     // `isOpen` is false from construction if today's reward is already
     // claimed, so this is a no-op on every visit after the first.
     this._dailyRewardPanel = new DailyRewardPanel(renderer);
+
+    // Settings — see SettingsPanel's own class doc for why it's gated to
+    // this 'title' beat only, same as the daily-reward popup above.
+    this._settingsPanel = new SettingsPanel();
   }
 
   /** Advance whichever beat is current; each one decides for itself when it's done. */
@@ -158,10 +163,12 @@ export class PrologueScene {
       case 'portals': return this._updatePortals();
       case 'briefing': return this._updateBriefing(dt);
       case 'fadeOut': return this._updateFadeOut();
-      // Waits for a tap on PLAY (or the daily-reward CLAIM button, if one is
-      // showing) — see handleTap. The panel only has anything to animate
-      // (its fade-in/CLAIM pulse) while it's actually open.
-      case 'title': return this._dailyRewardPanel.update(dt);
+      // Waits for a tap on PLAY (or the daily-reward CLAIM button, or the
+      // Settings ⚙, if either is showing/open) — see handleTap. Both panels
+      // only have anything to animate while they're actually open/visible.
+      case 'title':
+        this._dailyRewardPanel.update(dt);
+        return this._settingsPanel.update(dt);
       case 'exitFade': return this._updateExitFade();
     }
   }
@@ -178,6 +185,13 @@ export class PrologueScene {
   handleTap(x, y) {
     if (this._beat !== 'title') return;
     if (this._dailyRewardPanel.isOpen) { this._dailyRewardPanel.handleTap(x, y); return; }
+    // Same shape as GameplayScene routing taps to EnemyCodex: while open OR
+    // when the tap is the ⚙ itself, the panel claims it outright so a mode
+    // button underneath can never receive it.
+    if (this._settingsPanel.isOpen || this._settingsPanel.isInsideButton(x, y)) {
+      this._settingsPanel.handleTap(x, y);
+      return;
+    }
     let mode = null;
     if (this._isInsideMissionButton(x, y)) mode = 'mission';
     else if (this._isInsideSurvivalButton(x, y)) mode = 'survival';
@@ -190,6 +204,25 @@ export class PrologueScene {
     }
   }
 
+  /**
+   * Forwarded from Game.js only while a drag is active — used solely by
+   * SettingsPanel's two sliders (see its own class doc); no other beat or
+   * element in this scene needs drag, only tap.
+   */
+  handlePointerDown(x, y) {
+    if (this._beat !== 'title' || this._dailyRewardPanel.isOpen) return;
+    this._settingsPanel.handlePointerDown(x, y);
+  }
+
+  handlePointerMove(x, y) {
+    if (this._beat !== 'title') return;
+    this._settingsPanel.handlePointerMove(x, y);
+  }
+
+  handlePointerUp() {
+    this._settingsPanel.handlePointerUp();
+  }
+
   render() {
     switch (this._beat) {
       case 'yearCard': return this._renderYearCard();
@@ -200,10 +233,13 @@ export class PrologueScene {
       // DailyRewardPanel's class doc for why this is its own full screen
       // rather than a modal drawn on top of them. Once claimed (this
       // session or a previous one today), the title renders normally plus
-      // a small reminder that a fresh reward is waiting tomorrow.
+      // a small reminder that a fresh reward is waiting tomorrow, and the
+      // Settings ⚙ (see SettingsPanel) is always available in its own
+      // corner alongside it.
       case 'title':
         if (this._dailyRewardPanel.isOpen) return this._dailyRewardPanel.render(this.renderer);
         this._renderTitle();
+        this._settingsPanel.render(this.renderer);
         return this._renderDailyRewardBadge();
       case 'exitFade': return this._renderExitFade();
     }
