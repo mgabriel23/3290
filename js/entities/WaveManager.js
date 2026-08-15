@@ -413,10 +413,8 @@ export class WaveManager {
    * @param {number} dt
    * @param {number} playerX
    * @param {number} playerY
-   * @param {number} [magnetRadius]  vp — forwarded into PowerUps/GoldPickups so nearby drops pull toward the player, see Player.magnetRadius. Defaults to 0 (no pull) so callers that don't pass it — none currently — degrade safely.
-   * @param {number} [magnetPullAccel]  vp/sec^2 — see Player.magnetPullAccel
    */
-  update(dt, playerX, playerY, magnetRadius = 0, magnetPullAccel = 0) {
+  update(dt, playerX, playerY) {
     // All particle/projectile systems drain past _waveClear so effects finish
     // (and keep moving/culling normally instead of freezing mid-flight)
     // before isDone returns true and the level transitions.
@@ -441,8 +439,6 @@ export class WaveManager {
     this._novaSeedBullets.update(dt);
     this._pulsorBullets.update(dt);
     this._zigzagBullets.update(dt);
-    this._powerUps.update(dt, playerX, playerY, magnetRadius, magnetPullAccel);
-    this._goldPickups.update(dt, playerX, playerY, magnetRadius, magnetPullAccel);
 
     if (this._waveClear) return;
 
@@ -525,7 +521,13 @@ export class WaveManager {
     if (this._allSpawned && this._enemies.length === 0) this._waveClear = true;
   }
 
-  /** @param {import('../core/Renderer.js').Renderer} renderer */
+  /**
+   * PowerUps/GoldPickups are deliberately NOT rendered here — see the
+   * constructor doc — GameplayScene draws them itself, unconditionally,
+   * so an uncollected pickup stays visible even while this WaveManager
+   * doesn't exist yet (the level-intro screen between waves).
+   * @param {import('../core/Renderer.js').Renderer} renderer
+   */
   render(renderer) {
     this._renderProjectiles(renderer);
     this._renderEngineFlames(renderer);
@@ -534,8 +536,6 @@ export class WaveManager {
     this._renderSniperExtras(renderer);
     this._renderIndividualEnemies(renderer);
     this._renderExplosions(renderer);
-    this._powerUps.render(renderer);
-    this._goldPickups.render(renderer);
   }
 
   /** Projectile pools — enemy bullets, sniper bullets, homing rockets, drifter orbs. */

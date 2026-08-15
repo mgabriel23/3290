@@ -111,7 +111,13 @@
  * PowerUp pickups (health/shield restores, a temporary fire-power/fire-rate
  * boost, or temporary full damage immunity, dropped by a fraction of enemy
  * kills — see WaveManager.checkPowerUpPickup) are tested against the player
- * right alongside `_checkPlayerHit` each frame; a health pickup's total is
+ * every frame `update()` runs at all, not just during 'active' gameplay —
+ * see the collection block right after the PowerUps/GoldPickups update()
+ * calls, guarded on `_waveManager` rather than `_levelState`, so a pickup
+ * still uncollected when a wave clears stays grabbable (the player can
+ * still steer freely too — see handlePointerDown/Move) straight through the
+ * "LEVEL N" intro instead of only becoming collectible again once the next
+ * wave's enemies start spawning. A health pickup's total is
  * applied here via `player.heal()` (mirroring `takeDamage`), a shield
  * pickup heals the barrier directly inside WaveManager itself, a fireBoost
  * pickup (re)starts `_fireBoostTimer`, and an invincible pickup calls
@@ -288,7 +294,15 @@ export class GameplayScene {
     this._shareStatusAge = 0;
 
     // Level / wave state -------------------------------------------------------
-    // 'intro'  — level indicator is on screen; bullets are suppressed
+    // 'intro'  — level indicator is on screen; only enemies (spawning,
+    //            movement, attacks) are suppressed. The ship still steers
+    //            normally, its cannon still auto-fires (nothing to hit yet,
+    //            purely visual continuity), and PowerUps/GoldPickups keep
+    //            animating, stay visible, AND stay collectible right through
+    //            this state (see their update()/render() calls below,
+    //            unconditional on _levelState, unlike enemy/wave logic) — so
+    //            a pickup still uncollected when a wave clears isn't
+    //            stranded behind the intro
     // 'active' — normal gameplay (enemies, bullets, scoring all live)
     // When enemies exist, 'active' → 'intro' fires once the wave is cleared
     // (Survival Mode only — see the `isDone` handling in update() for how
@@ -359,20 +373,23 @@ export class GameplayScene {
 
     this.barrier.update(effectiveDt);
     this.player.update(effectiveDt);
-    this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
-    this._floatingText.update(effectiveDt);
-    this._comboBanner.update(effectiveDt);
-    this._achievementToast.update(effectiveDt);
-    this._playerSkill.update(effectiveDt);
-    this._updateMusicDuck(effectiveDt);
-
-    // Bullets and enemies are suppressed during the level intro.
-    if (this._levelState === 'active') {
-      const fireBoostMultiplier = this._fireBoostTimer > 0 ? Config.powerUps.fireBoost.multiplier : 1;
-      this.bullets.update(effectiveDt, this.player, fireBoostMultiplier);
-      this._waveManager.update(effectiveDt, this.player.x, this.player.y, this.player.magnetRadius, this.player.magnetPullAccel);
-      this._checkCollisions(fireBoostMultiplier);
-      this._checkPlayerHit();
+    // Updated unconditionally (not gated on _levelState/_waveManager like the
+    // rest of wave gameplay below) so a pickup still falling when a level
+    // ends keeps animating/magnet-pulling straight through the "LEVEL N"
+    // intro instead of freezing mid-air — see also the matching render()
+    // calls, and _waveManager's own doc for why these pools outlive it.
+    this._powerUps.update(effectiveDt, this.player.x, this.player.y, this.player.magnetRadius, this.player.magnetPullAccel);
+    this._goldPickups.update(effectiveDt, this.player.x, this.player.y, this.player.magnetRadius, this.player.magnetPullAccel);
+    // Collected unconditionally too (not gated on 'active'), so a pickup
+    // still uncollected when the wave cleared can be scooped up during the
+    // "LEVEL N" intro instead of sitting there untouchable — guarded on
+    // `_waveManager` rather than `_levelState` since it's only ever null
+    // during the very first level-1 intro at the start of a run, before
+    // anything could possibly have dropped a pickup yet (every survival
+    // wave-clear after that deliberately leaves the just-finished
+    // WaveManager in place through the intro instead of nulling it out —
+    // see the wave-clear branch below).
+    if (this._waveManager) {
       const pickup = this._waveManager.checkPowerUpPickup(this.player);
       if (pickup.playerHeal > 0) this.player.heal(pickup.playerHeal);
       if (pickup.fireBoost) this._fireBoostTimer = Config.powerUps.fireBoost.duration;
@@ -389,6 +406,28 @@ export class GameplayScene {
       // already happened this frame by this point, so checking once here
       // catches everything without re-deriving progress per event.
       this._achievementToast.checkForUnlocks();
+    }
+    this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
+    this._floatingText.update(effectiveDt);
+    this._comboBanner.update(effectiveDt);
+    this._achievementToast.update(effectiveDt);
+    this._playerSkill.update(effectiveDt);
+    this._updateMusicDuck(effectiveDt);
+
+    // The auto-fire cannon keeps firing through the "LEVEL N" intro too, same
+    // as the ship staying freely steerable there (see handlePointerDown/Move)
+    // — pausing bullets while the player can still fly around read as broken.
+    // There's nothing for them to hit yet regardless, since enemies stay
+    // suppressed until 'active' below, so this is purely visual continuity.
+    const fireBoostMultiplier = this._fireBoostTimer > 0 ? Config.powerUps.fireBoost.multiplier : 1;
+    this.bullets.update(effectiveDt, this.player, fireBoostMultiplier);
+
+    // Enemies (spawning, movement, attacks) are still suppressed during the
+    // level intro — see above for why bullets/pickups no longer are.
+    if (this._levelState === 'active') {
+      this._waveManager.update(effectiveDt, this.player.x, this.player.y);
+      this._checkCollisions(fireBoostMultiplier);
+      this._checkPlayerHit();
       if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
       // Wave cleared AND all death effects finished → Survival Mode begins
@@ -402,7 +441,12 @@ export class GameplayScene {
           this.barrier.setLevel(this._level); // raises maxHealth's ceiling for the level just entered — see Barrier.setLevel
           this._levelState  = 'intro';
           this._levelAge    = 0;
-          this._waveManager = null;
+          // Deliberately NOT nulled out here (unlike before) — this
+          // just-finished WaveManager is fully drained (isDone was just
+          // true) so its own update()/render() are no-ops, but it's kept
+          // around through the intro purely so the pickup-collection block
+          // above still has a `_waveManager` to call into. Overwritten with
+          // a fresh instance below once 'active' begins again.
           this._levelAudio.play();
         }
       }
@@ -444,6 +488,11 @@ export class GameplayScene {
     this._playerParticles.render(this.renderer); // no-op when inactive — cheap to always call, same as WaveManager's own pools
     this.bullets.render(this.renderer);
     this._waveManager?.render(this.renderer);
+    // Rendered unconditionally, not just while a WaveManager exists — an
+    // uncollected pickup must stay visible through the "LEVEL N" intro too,
+    // see the matching update() calls above.
+    this._powerUps.render(this.renderer);
+    this._goldPickups.render(this.renderer);
     this._floatingText.render(this.renderer); // no-op when inactive — cheap to always call, same as _playerParticles above
 
     this.renderer.setCameraOffset(0, 0);
