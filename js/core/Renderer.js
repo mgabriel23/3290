@@ -189,14 +189,17 @@ export class Renderer {
    * @param {Array<{points: Array<[number, number]>, closed?: boolean}>} paths
    * @param {{x?: number, y?: number, scale?: number, rotation?: number, alpha?: number,
    *          color: string, lineWidth: number, glowColor?: string, glowBlur?: number,
-   *          lineCap?: CanvasLineCap, singleStroke?: boolean}} style
+   *          lineCap?: CanvasLineCap, lineDash?: number[], singleStroke?: boolean}} style
    * @param {number} [count]  how many entries in `paths` to draw; defaults to
    *   `paths.length`. Pass a smaller value to use only a leading slice of a
    *   pre-allocated pool without slicing the array (zero allocation).
    *   `singleStroke: true` draws all sub-paths with one `ctx.stroke()` call so
    *   the shadow-blur GPU pass runs once total — use for large same-style batches.
+   *   `lineDash` (e.g. `[10, 8]`) draws a dashed rather than solid line — the
+   *   canvas dash state lives in the save/restore pair below, so it never
+   *   leaks into unrelated draw calls. Omit for a solid line (the common case).
    */
-  strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0, lineCap = 'butt', singleStroke = false }, count = paths.length) {
+  strokePaths(paths, { x = 0, y = 0, scale = 1, rotation = 0, alpha = 1, color, lineWidth, glowColor, glowBlur = 0, lineCap = 'butt', lineDash, singleStroke = false }, count = paths.length) {
     const { ctx } = this;
     ctx.save();
     ctx.translate(x, y);
@@ -208,6 +211,7 @@ export class Renderer {
     // how the shape itself is scaled.
     ctx.lineWidth = scale !== 1 ? lineWidth / scale : lineWidth;
     if (lineCap !== 'butt') ctx.lineCap = lineCap;
+    if (lineDash) ctx.setLineDash(lineDash);
     if (glowBlur > 0) {
       ctx.shadowColor = glowColor ?? color;
       ctx.shadowBlur = this._glow(glowBlur);

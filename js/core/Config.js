@@ -230,11 +230,13 @@ export const Config = Object.freeze({
 
 	/**
 	 * MissionSelectScene — the level-select screen reached after choosing
-	 * MISSION MODE on the title card and finishing the tutorial. One tile
-	 * per mission (Config.mission.count), stacked vertically, corner-bracket
-	 * framed like Shop's item cards — locked (dim), unlocked-not-completed
-	 * (normal), or completed (green) — see MissionProgress.js for the
-	 * unlock/completion rules and MissionSelectScene.js for the tile content.
+	 * MISSION MODE on the title card and finishing the tutorial. One node
+	 * per mission (Config.mission.count), laid out as a zigzag journey map
+	 * (odd levels left, even levels right — see MissionSelectScene._nodeCenter)
+	 * and joined by a connector path (see _renderPath) rather than a plain
+	 * vertical stack — locked (dim), unlocked-not-completed (cyan), or
+	 * completed (green) — see MissionProgress.js for the unlock/completion
+	 * rules and MissionSelectScene.js for the node content.
 	 */
 	missionSelect: Object.freeze({
 		fadeInDuration: 0.3,
@@ -251,13 +253,26 @@ export const Config = Object.freeze({
 		backHitWidth: 100, // generous tap target, same "wider than the text itself" philosophy used throughout the game's tap targets
 		backHitHeight: 48, // bumped from 40 toward a real CSS-px touch-target size, not just virtual px — see Config.playbackControls' own comment for the scale math
 
-		tileStartY: 260,
-		tileSpacing: 150,
-		tileWidth: 320,
-		tileHeight: 110,
-		tileLegSize: 14,
-		tileLineWidth: 1.5, // was hardcoded inline in MissionSelectScene.js — moved here to match every other panel's convention of sourcing its own chrome from Config
-		tileGlowBlur: 4,
+		// Node centers: y increases per level (top to bottom), x alternates
+		// between vW/2 - nodeXOffset and vW/2 + nodeXOffset (zigzag).
+		nodeStartY: 300,
+		nodeSpacingY: 190,
+		nodeXOffset: 110,
+		nodeRadius: 42,
+		nodeHitRadius: 56, // generous tap target beyond the drawn ring, same philosophy as backHitWidth
+		nodeLineWidth: 2.5,
+		nodeGlowBlur: 6,
+		nodeNumberFont: '400 28px "Audiowide", "Courier New", monospace',
+
+		labelGap: 20, // vertical gap from a node's bottom edge to its "MISSION N" label
+		statusGap: 20, // vertical gap from the name label down to the status label
+
+		// Connector line between consecutive nodes — lights up (unlockedColor,
+		// glowing, solid) once its source mission is completed, otherwise
+		// dashed in lockedColor to read as "path ahead, not yet open".
+		pathLineWidth: 3,
+		pathGlowBlur: 6,
+		pathLockedDash: [10, 8],
 
 		nameFont: '400 20px "Audiowide", "Courier New", monospace',
 		statusFont: '400 13px "Audiowide", "Courier New", monospace',
