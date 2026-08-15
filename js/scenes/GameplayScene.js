@@ -84,7 +84,11 @@
  * Player damage: `_checkPlayerHit` is `_checkCollisions`' mirror image —
  * every enemy-attack source tested against the player once per frame (see
  * WaveManager.checkPlayerHit) instead of every enemy tested against the
- * player's bullets. Reaching 0 health triggers the ship's own death
+ * player's bullets. Every hit that actually applies also triggers
+ * `_damageFlashTimer`, a brief full-screen red wash (`_renderDamageFlash`,
+ * Config.damageFlash) layered over the world but under the HUD — the ship's
+ * own hit-flash (Player.js) is easy to miss since it's small and the eye is
+ * often elsewhere, so this is the harder-to-miss twin of that cue. Reaching 0 health triggers the ship's own death
  * explosion (`_triggerGameOver` — a `Particles` burst plus explosion SFX
  * at the player's last position, same effect language every enemy death
  * already uses, and the ship itself stops rendering) and freezes gameplay
@@ -220,6 +224,7 @@ export class GameplayScene {
     this._playerSkill = new PlayerSkill();
     this._screenShake = new ScreenShake();
     this._hitStopTimer = 0; // seconds of gameplay-time freeze remaining — see update()'s effectiveDt
+    this._damageFlashTimer = 0; // seconds remaining on the full-screen damage flash — see _checkPlayerHit/_renderDamageFlash
     this._cameraX = 0; // smoothed camera-follow pan offset — see _updateCameraFollow
     this._age = 0; // seconds since this scene started — drives the starfield fade-in
     this._pointerDown = false;
@@ -295,6 +300,7 @@ export class GameplayScene {
     this._shop.update(dt);
     this._playback.update(dt);
     this.starfield.update(dt); // keeps drifting even while paused/codex/shop/game-over is showing — purely cosmetic, not gameplay
+    this._damageFlashTimer = Math.max(0, this._damageFlashTimer - dt); // decays unconditionally, same reasoning as starfield above
     if (this._isGameOver) {
       this._gameOverAge += dt;
       this._playerParticles.update(dt); // let the death burst finish animating while everything else is frozen
@@ -403,6 +409,7 @@ export class GameplayScene {
     this._floatingText.render(this.renderer); // no-op when inactive — cheap to always call, same as _playerParticles above
 
     this.renderer.setCameraOffset(0, 0);
+    this._renderDamageFlash();
     this.hud.render(this.renderer, this.player.health, this._fireBoostTimer, this.player.invincibleTimer, this._comboMultiplier());
     this._waveManager?.renderBossHealthBar(this.renderer);
     this._playerSkill.render(this.renderer);
@@ -422,6 +429,20 @@ export class GameplayScene {
     // cleared wave can't also be the fatal hit that ended the run).
     if (this._isGameOver) this._renderGameOver();
     if (this._missionComplete) this._renderMissionComplete();
+  }
+
+  /**
+   * Full-screen red wash while `_damageFlashTimer` counts down — see class
+   * doc and Config.damageFlash. Linear fade from `peakAlpha` to 0 over
+   * `duration`; a no-op once the timer hits 0, so it's cheap to call every
+   * frame regardless of whether a hit just landed (same convention as
+   * `_playerParticles.render`/`_floatingText.render` above).
+   */
+  _renderDamageFlash() {
+    if (this._damageFlashTimer <= 0) return;
+    const { color, peakAlpha, duration } = Config.damageFlash;
+    const alpha = peakAlpha * (this._damageFlashTimer / duration);
+    this.renderer.clear(color, alpha);
   }
 
   /** The current smoothed camera-follow pan — see class doc and `_updateCameraFollow`. */
@@ -666,6 +687,7 @@ export class GameplayScene {
     if (!this.player.takeDamage(damage)) return; // invulnerable — hit source still consumed, no further effect
     this._comboCount = 0;
     this._comboAnnouncedTier = 0;
+    this._damageFlashTimer = Config.damageFlash.duration;
 
     if (this.player.health <= 0) {
       this._triggerGameOver();

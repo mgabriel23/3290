@@ -435,6 +435,22 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * Full-screen damage flash: a brief translucent red wash over the whole
+	 * canvas the instant the player takes damage — Player's own hull
+	 * hit-flash (Config.player.hitFlashDuration) is easy to miss since the
+	 * ship is small and the eye is often elsewhere (HUD, an incoming enemy).
+	 * GameplayScene owns the countdown (`_damageFlashTimer`, decaying with
+	 * real dt like `_hitStopTimer`'s trigger side) and renders it as a fixed-
+	 * camera overlay drawn over the world layer but under the HUD — see
+	 * GameplayScene.render/_renderDamageFlash.
+	 */
+	damageFlash: Object.freeze({
+		color: "#ff1a1a",
+		peakAlpha: 0.35, // opacity the instant a hit lands
+		duration: 0.25, // seconds to linearly fade back to 0
+	}),
+
+	/**
 	 * Player bullets: auto-fired as a continuous stream once the player's
 	 * ship has landed, rendered as short glowing capsule strokes in the same
 	 * neon-cyan as the hull so they read as energy bolts rather than solid
