@@ -20,9 +20,13 @@
  * shop itself or the open/close state.
  *
  * Health is different: it's owned by Player (mirrors `Barrier.health`'s
- * convention), not by HUD, so `render(renderer, health)` takes the current
- * value as a parameter instead — the same pattern `Barrier.render` already
- * uses for `power`. Its low-health color/pulse reads `Config.player.
+ * convention), not by HUD, so `render(renderer, health, maxHealth)` takes
+ * both the current value AND the current ceiling as parameters instead —
+ * the same pattern `Barrier.render` already uses for `power`. `maxHealth`
+ * varies with the Shop-purchased engine level (see Player.maxHealth,
+ * Config.player.engine) rather than being a fixed Config constant, which is
+ * why it has to be passed in per-frame instead of read straight off Config
+ * like it used to be. Its low-health color/pulse reads `Config.player.
  * lowHealth` directly, so the bar and the ship's own hull pulse read as
  * one consistent warning cue. Needs `update(dt)` purely to drive that
  * pulse's clock (`_age`) — the score/gold panels have no such need.
@@ -100,6 +104,10 @@ export class HUD {
    * rendered before this call.
    * @param {import('../core/Renderer.js').Renderer} renderer
    * @param {number} health  the player's current health — see class doc
+   * @param {number} [maxHealth]  the player's current max health (Player.
+   *   maxHealth — varies with the Shop-purchased engine level, see
+   *   Config.player.engine) — defaults to the free starting tier's value for
+   *   callers with no real Player instance (TutorialScene's preview HUD)
    * @param {number} [fireBoostTimer]  seconds remaining on an active fireBoost
    *   PowerUp (0 or omitted = inactive, badge is skipped entirely) — see class doc
    * @param {number} [invincibleTimer]  seconds remaining on an active invincible
@@ -109,7 +117,7 @@ export class HUD {
    *   streak yet, the readout is skipped entirely, same "only show while it
    *   matters" convention as the fireBoost/invincible badges
    */
-  render(renderer, health, fireBoostTimer = 0, invincibleTimer = 0, comboMultiplier = 1) {
+  render(renderer, health, maxHealth = Config.player.engine.levels[0].maxHealth, fireBoostTimer = 0, invincibleTimer = 0, comboMultiplier = 1) {
     const {
       margin, labelFont, labelColor, valueFont, valueColor, valueGlowBlur, bestFont, combo,
       chromeColor, chromeLineWidth, chromeGlowBlur,
@@ -149,7 +157,7 @@ export class HUD {
       font: valueFont, color: valueColor, align: 'right', glowBlur: valueGlowBlur, scale,
     });
 
-    this._renderHealthBar(renderer, health);
+    this._renderHealthBar(renderer, health, maxHealth);
     if (fireBoostTimer > 0) this._renderFireBoostIndicator(renderer, fireBoostTimer);
     if (invincibleTimer > 0) this._renderInvincibleIndicator(renderer, invincibleTimer);
   }
@@ -165,9 +173,9 @@ export class HUD {
    * as long as the danger persists; only the danger *sound* is capped
    * (see Player.js's `_updateLowHealthWarning`).
    */
-  _renderHealthBar(renderer, health) {
+  _renderHealthBar(renderer, health, maxHealth) {
     const cfg = Config.hud.health;
-    const { maxHealth, lowHealth } = Config.player;
+    const { lowHealth } = Config.player;
     const clamped = Math.max(0, Math.min(maxHealth, health));
     const frac    = clamped / maxHealth;
     const low     = clamped <= lowHealth.threshold;

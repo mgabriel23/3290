@@ -2,12 +2,24 @@
  * Bullets.js
  * The player's auto-firing energy bolt stream.
  *
- * Fires a new bolt at Config.bullet.fireRate once per second while the
+ * The center bolt fires at Config.bullet.fireRate once per second while the
  * player's ship is ready (entry animation complete), scaled by an optional
- * fireRateMultiplier GameplayScene passes into `update` while a fireBoost
- * PowerUp is active (see Config.powerUps.fireBoost) — 1 (no change) the
- * rest of the time. Each bolt moves straight up at Config.bullet.speed and
- * is culled when it exits the top of the screen.
+ * fireRateMultiplier GameplayScene passes into `update` — composed from the
+ * fireBoost PowerUp's multiplier (see Config.powerUps.fireBoost) and the
+ * player's own Shop-purchased wings fire-rate multiplier (see Player.
+ * fireRateMultiplier/Config.player.wings), 1 for either while inactive/
+ * unpurchased.
+ *
+ * Once `player.hasSideBullets` (wings level 8 — see Config.player.wings'
+ * own doc), two more bolts fire from wing-mounted offsets
+ * (Config.bullet.wing) — but on their OWN, much slower cooldown
+ * (`_wingCooldown`, ticking at `fireRate * fireRateMultiplier *
+ * Config.bullet.wing.fireRateMult`, a fraction of the center rate) rather
+ * than every center-bolt volley. All three bolts firing together at the
+ * main gun's full rate trivialized kills the moment a player reached the
+ * upgrade, so the side guns are a slow support stream layered underneath
+ * the center gun, not a flat tripling of it. Every bolt moves straight up
+ * at Config.bullet.speed and is culled when it exits the top of the screen.
  *
  * All bullet positions live in typed arrays for cache efficiency; all
  * path geometry is pre-allocated in a pool and mutated in place each
@@ -18,7 +30,7 @@
 import { Config } from '../core/Config.js';
 import { AudioPool } from '../core/AudioPool.js';
 
-const MAX = 64; // well above steady-state peak (~10 at 7/s × 1.5s screen-cross time)
+const MAX = 96; // well above steady-state peak — center bolts plus an occasional slow wing volley, at up to ~15/s (wings + fireBoost stacked) × ~0.5s screen-cross time
 
 export class Bullets {
   constructor() {
@@ -27,6 +39,7 @@ export class Bullets {
     this._by    = new Float32Array(MAX);
     this._count = 0;
     this._cooldown = 0;
+    this._wingCooldown = 0; // separate, slower cooldown for the wing-mounted side bolts — see class doc
 
     // Pre-allocated path objects — mutated in place per render frame,
     // then passed as a batch to strokePaths (no per-frame allocation).
@@ -58,7 +71,7 @@ export class Bullets {
    *   Config.powerUps.fireBoost), 1 otherwise.
    */
   update(dt, player, fireRateMultiplier = 1) {
-    const { fireRate, speed, spawnOffsetY } = Config.bullet;
+    const { fireRate, speed, spawnOffsetY, wing } = Config.bullet;
 
     // Only count down and fire once the ship has landed — prevents the
     // cooldown from going deeply negative during the entry animation and
@@ -66,8 +79,20 @@ export class Bullets {
     if (player.ready) {
       this._cooldown -= dt;
       if (this._cooldown <= 0) {
-        this._fire(player.x, player.y + spawnOffsetY);
+        this._spawn(player.x, player.y + spawnOffsetY);
+        this._audioPool.play();
         this._cooldown += 1 / (fireRate * fireRateMultiplier); // += preserves sub-frame accuracy
+      }
+
+      // Wing-mounted side bolts — own cooldown, own (much slower) rate, see class doc.
+      if (player.hasSideBullets) {
+        this._wingCooldown -= dt;
+        if (this._wingCooldown <= 0) {
+          this._spawn(player.x - wing.offsetX, player.y + wing.offsetY);
+          this._spawn(player.x + wing.offsetX, player.y + wing.offsetY);
+          this._audioPool.play();
+          this._wingCooldown += 1 / (fireRate * fireRateMultiplier * wing.fireRateMult);
+        }
       }
     }
 
@@ -129,11 +154,10 @@ export class Bullets {
 
   // ---------------------------------------------------------------------------
 
-  _fire(x, y) {
+  _spawn(x, y) {
     if (this._count >= MAX) return;
     this._bx[this._count] = x;
     this._by[this._count] = y;
     this._count++;
-    this._audioPool.play();
   }
 }

@@ -98,10 +98,23 @@ export const Config = Object.freeze({
 		restingYRatio: 0.78, // resting position as a fraction down the virtual height
 		entryDuration: 1.4, // seconds for the ease-out fly-up entrance
 
-		damage: 1, // health points removed from an enemy per bullet hit, at level 1
+		// +2% render scale per Shop-upgrade level step purchased beyond each
+		// part's free starting tier (0-10 steps total across the 5 parts —
+		// see Player.renderScale) — so a heavily-upgraded ship (and its added
+		// wing-cannon/missile-pod/nose-spike detail) reads as visibly bigger
+		// and easier to make out, both in the Shop preview and in gameplay,
+		// rather than staying pinned at the same small silhouette regardless
+		// of how loaded out it is. Deliberately visual only: movement bounds
+		// and `hitRadius` below stay fixed at the base `scale`, so a
+		// bigger-looking ship isn't also a bigger target.
+		upgradeScaleGrowth: 0.02,
+
+		damage: 1, // health points removed from an enemy per bullet hit, at level 1 — multiplied by Player.damageMultiplier (see `cannon` below) at the point of use, not baked in here
 		damagePerLevel: 0.25, // added to `damage` for each level beyond 1 (level 4 → 1 + 3*0.25 = 1.75)
 
-		maxHealth: 100, // player HP — see Player.js's takeDamage and HUD's health bar
+		// Max HP now lives on `engine.levels` below (a Shop upgrade raises the
+		// ceiling) — see Player.maxHealth. `engine.levels[0].maxHealth` is the
+		// free starting value, same number this flat field used to hold.
 		hitRadius: 18, // vp — collision circle for enemy attacks vs the player (ship is ~32vp wide at scale 0.5)
 		invulnDuration: 0.6, // seconds of grace after taking a hit — stops one attack (e.g. a laser sweep) re-hitting across several consecutive frames
 		hitFlashDuration: 0.15, // seconds the hull flashes white on a hit — matches Config.enemy.hitFlashDuration
@@ -118,7 +131,7 @@ export const Config = Object.freeze({
 		 */
 		followSmoothing: Object.freeze({
 			maxRate: 40, // sensitivity just above 0 — snappy, barely-perceptible trailing
-			minRate: 6,  // sensitivity 1 — a soft, deliberate trailing motion
+			minRate: 6, // sensitivity 1 — a soft, deliberate trailing motion
 		}),
 
 		/**
@@ -168,13 +181,169 @@ export const Config = Object.freeze({
 		 * a small radius and a gentle pull, just enough to rescue a coin or
 		 * pickup that grazes the player rather than yanking anything in from
 		 * across the screen. `levels` IS the upgrade path — Player._magnetLevel
-		 * indexes into it, so a future upgrade (e.g. a Shop purchase) only
-		 * needs to append a stronger entry here and bump that index; nothing
-		 * else about the pull mechanism changes.
+		 * indexes into it (1-based); `cost` (absent on level 1, the free
+		 * starting tier) is the Shop's gold price to reach that level — see
+		 * Shop.js/Config.shop. 10 levels total (see the class doc above this
+		 * block for why: small per-level bonuses, steeply multiplying costs,
+		 * so maxing any one part is a long-run investment rather than a quick
+		 * couple of purchases).
 		 */
 		magnet: Object.freeze({
 			levels: Object.freeze([
-				Object.freeze({ radius: 70, pullAccel: 700 }), // level 1 — starting strength
+				Object.freeze({ radius: 70,  pullAccel: 700 }),  // level 1 — starting strength, free
+				Object.freeze({ radius: 81,  pullAccel: 760,  cost: 125 }),
+				Object.freeze({ radius: 92,  pullAccel: 820,  cost: 190 }),
+				Object.freeze({ radius: 103, pullAccel: 880,  cost: 275 }),
+				Object.freeze({ radius: 114, pullAccel: 940,  cost: 400 }),
+				Object.freeze({ radius: 125, pullAccel: 1000, cost: 575 }),
+				Object.freeze({ radius: 136, pullAccel: 1060, cost: 840 }),
+				Object.freeze({ radius: 147, pullAccel: 1120, cost: 1215 }),
+				Object.freeze({ radius: 158, pullAccel: 1180, cost: 1750 }),
+				Object.freeze({ radius: 170, pullAccel: 1250, cost: 2540 }), // level 10 — matches the old (3-level) cap, now a long-run payoff instead of a quick 2nd purchase
+			]),
+		}),
+
+		/**
+		 * Wings — Shop upgrade path (Player._wingsLevel indexes into `levels`,
+		 * 1-based, same convention as `magnet` above; 10 levels, same
+		 * small-bonus/steep-cost shape). Every level raises `fireRateMult`,
+		 * multiplied into Bullets' CENTER bolt rate alongside the fireBoost
+		 * PowerUp's own multiplier (see GameplayScene.update). Level 8
+		 * additionally sets `sideBullets`, which makes Bullets fire two more
+		 * bolts from wing-mounted offsets (Config.bullet.wing) — deliberately
+		 * on their own much slower cadence (Config.bullet.wing.fireRateMult),
+		 * not the center bolt's own rate, since firing all three bolts at the
+		 * main gun's rate trivialized kills once a player reached it. Player.js
+		 * adds a matching pair of small wing-cannon nubs to the hull
+		 * silhouette at that same level, so the visual upgrade and the
+		 * mechanical one land together.
+		 */
+		wings: Object.freeze({
+			levels: Object.freeze([
+				Object.freeze({ fireRateMult: 1.00 }), // level 1 — starting rate, free
+				Object.freeze({ fireRateMult: 1.06, cost: 175 }),
+				Object.freeze({ fireRateMult: 1.11, cost: 250 }),
+				Object.freeze({ fireRateMult: 1.17, cost: 375 }),
+				Object.freeze({ fireRateMult: 1.22, cost: 540 }),
+				Object.freeze({ fireRateMult: 1.28, cost: 775 }),
+				Object.freeze({ fireRateMult: 1.33, cost: 1125 }),
+				Object.freeze({ fireRateMult: 1.39, sideBullets: true, cost: 1640 }),
+				Object.freeze({ fireRateMult: 1.44, cost: 2375 }),
+				Object.freeze({ fireRateMult: 1.50, cost: 3450 }), // level 10
+			]),
+		}),
+
+		/**
+		 * Engine — Shop upgrade path (Player._engineLevel, same convention as
+		 * `magnet`/`wings` above; 10 levels). Each level raises `maxHealth`
+		 * (see Player.maxHealth, HUD's health bar) — level 1's value is this
+		 * ship's free starting max HP, the exact number the old flat
+		 * `Config.player.maxHealth` field used to hold. `flameGrowthPerLevel`
+		 * is a flat per-level multiplier bonus applied to the thruster flame's
+		 * `flame.baseLength`/`glowBlur` (see Player._renderFlame) — a bigger,
+		 * brighter engine reads as more powerful without needing a whole
+		 * separate hull shape per level.
+		 */
+		engine: Object.freeze({
+			flameGrowthPerLevel: 0.05, // +5% flame length/glow per level beyond 1 (lowered to match the gentler 10-level stat curve below)
+			levels: Object.freeze([
+				Object.freeze({ maxHealth: 100 }), // level 1 — free starting HP
+				Object.freeze({ maxHealth: 115, cost: 200 }),
+				Object.freeze({ maxHealth: 130, cost: 290 }),
+				Object.freeze({ maxHealth: 148, cost: 415 }),
+				Object.freeze({ maxHealth: 166, cost: 600 }),
+				Object.freeze({ maxHealth: 184, cost: 875 }),
+				Object.freeze({ maxHealth: 202, cost: 1265 }),
+				Object.freeze({ maxHealth: 220, cost: 1825 }),
+				Object.freeze({ maxHealth: 240, cost: 2650 }),
+				Object.freeze({ maxHealth: 260, cost: 3840 }), // level 10
+			]),
+		}),
+
+		/**
+		 * Cannon — Shop upgrade path (Player._cannonLevel, same convention as
+		 * `magnet`/`wings`/`engine` above; 10 levels). Each level raises
+		 * `damageMult`, multiplied into every player bullet AND missile hit
+		 * alongside the fireBoost PowerUp's own multiplier (see
+		 * GameplayScene._checkCollisions/the missile onHit callback) — this is
+		 * what the barrier's PWR readout displays. Level 8 additionally sets
+		 * `noseSpike`, which adds a small forward spike to the hull silhouette
+		 * (see Player.hasNoseSpike/`_rebuildExtraPaths`), reading as a bigger
+		 * main gun. Like `wings.sideBullets`/`missiles.wingMount`, this only
+		 * needs to be set on the ONE level that first unlocks it — Player.js's
+		 * flag getters stay true at every level after that automatically (see
+		 * Player.js's own `hasReachedFlag` helper).
+		 */
+		cannon: Object.freeze({
+			levels: Object.freeze([
+				Object.freeze({ damageMult: 1.00 }), // level 1 — starting damage, free
+				Object.freeze({ damageMult: 1.09, cost: 200 }),
+				Object.freeze({ damageMult: 1.18, cost: 290 }),
+				Object.freeze({ damageMult: 1.27, cost: 415 }),
+				Object.freeze({ damageMult: 1.36, cost: 600 }),
+				Object.freeze({ damageMult: 1.45, cost: 875 }),
+				Object.freeze({ damageMult: 1.54, cost: 1265 }),
+				Object.freeze({ damageMult: 1.64, noseSpike: true, cost: 1825 }), // level 8 — see Player.hasNoseSpike
+				Object.freeze({ damageMult: 1.73, cost: 2650 }),
+				Object.freeze({ damageMult: 1.82, cost: 3840 }), // level 10
+			]),
+		}),
+
+		/**
+		 * Missiles — a Shop-only weapon (Player._missileLevel, same convention
+		 * as `magnet`/`wings`/`engine`/`cannon` above; 10 levels): level 1 is
+		 * locked (`unlocked: false`, no missile ever fires); buying level 2
+		 * turns the mechanic on outright rather than just tuning a number,
+		 * since there's no meaningful "half a missile launcher." See
+		 * PlayerMissiles.js for the homing/pooling mechanics themselves
+		 * (deliberately modeled on Config.rocket/Rockets.js — an enemy
+		 * Rocketeer's weapon — since both are homing projectiles that
+		 * detonate on proximity or timeout).
+		 *
+		 * `damageMult` is a multiplier on the player's wave-level-scaled base
+		 * bullet damage (`WaveManager._playerDamage`) rather than a flat
+		 * number — GameplayScene composes it with `Player.damageMultiplier`
+		 * (the cannon upgrade) the same way it already composes the fireBoost
+		 * PowerUp's multiplier into `handleBulletHit`'s own `damageMultiplier`
+		 * param, so a missile automatically keeps pace with both cannon
+		 * upgrades and level scaling instead of needing its own separate
+		 * damage curve. Level 8 additionally sets `wingMount`, which makes
+		 * PlayerMissiles alternate its launch point between the ship's
+		 * left/right wing pods (see Player.hasWingMissilePods) instead of
+		 * firing from dead-center — the mechanical unlock (level 2) and the
+		 * visible wing pods (level 8) land on separate levels on purpose, per
+		 * the user's own request that the pods appear "later on," after
+		 * missiles are already flying.
+		 */
+		missiles: Object.freeze({
+			color: "#4DEFFF", // matches Config.player.color (can't reference it directly — this literal is still being built) so a missile in flight visibly reads as "mine," not an enemy projectile
+			lineWidth: 2,
+			glowBlur: 7, // trimmed alongside the smaller body below — a full-size halo on a shrunk body read as oversized/blobby
+			bodyFillColor: "#0d2b30", // dark cyan-tinted fill, same "dark version of the stroke hue" convention Config.rocket.bodyFillColor uses for its own (amber) body
+			halfLen: 5, // vp — half-length of the rendered dart body, see Config.rocket.halfLen
+			bodyHalfWidth: 2.5,
+			speed: 380, // vp/sec — deliberately slow and weighty; this is a support weapon that leans on homing/retargeting (see PlayerMissiles.update), not on outrunning anything
+			turnRate: 3.0, // rad/sec homing turn rate
+			proximityRadius: 20, // vp — detonation distance to a live target
+			noTargetAccel: 1400, // vp/sec^2 — applied instead of homing once a missile has no live enemy left to retarget onto (see PlayerMissiles.update), so it visibly rushes off-screen and despawns quietly rather than detonating in place or drifting at cruise speed
+			maxLife: 5, // seconds before an unfulfilled missile just times out
+			fadeStart: 4, // seconds — begins fading out in its final second of life, same shape as Config.rocket.fadeStart
+			poolSize: 8,
+			trailHistory: 6,
+			trailStep: 0.03,
+			wingOffsetX: 16, // vp — left/right launch offset once `wingMount` is active, see Player.hasWingMissilePods
+			wingOffsetY: 6,
+			levels: Object.freeze([
+				Object.freeze({ unlocked: false }), // level 1 — locked, free (nothing to buy yet)
+				Object.freeze({ unlocked: true, interval: 4.0, damageMult: 3.0, cost: 375 }),
+				Object.freeze({ unlocked: true, interval: 3.7, damageMult: 3.6, cost: 540 }),
+				Object.freeze({ unlocked: true, interval: 3.4, damageMult: 4.2, cost: 775 }),
+				Object.freeze({ unlocked: true, interval: 3.1, damageMult: 4.8, cost: 1125 }),
+				Object.freeze({ unlocked: true, interval: 2.8, damageMult: 5.4, cost: 1625 }),
+				Object.freeze({ unlocked: true, interval: 2.5, damageMult: 6.0, cost: 2350 }),
+				Object.freeze({ unlocked: true, interval: 2.3, damageMult: 6.6, wingMount: true, cost: 3415 }),
+				Object.freeze({ unlocked: true, interval: 2.1, damageMult: 7.2, cost: 4950 }),
+				Object.freeze({ unlocked: true, interval: 1.9, damageMult: 8.0, cost: 7175 }), // level 10
 			]),
 		}),
 	}),
@@ -543,6 +712,22 @@ export const Config = Object.freeze({
 		speed: 1500, // virtual px/sec, upward
 		fireRate: 9, // shots per second — fast mid rate
 		spawnOffsetY: -14, // virtual px above player.y — places spawn near the nose tip
+
+		// Wing-mounted side bolts, fired once Player.hasSideBullets is true
+		// (Config.player.wings level 8) — see Bullets.update. Deliberately on
+		// their OWN slower cooldown (`fireRateMult`, a fraction of the center
+		// bolt's current rate) rather than firing every center-bolt volley —
+		// three simultaneous bolts at the main gun's full rate trivialized
+		// kills the moment a player reached the upgrade, so the side guns are
+		// a much slower support stream instead of tripling the main output
+		// outright. Offsets are authored independently of the hull's own
+		// wing-cannon-nub geometry (Player.js) so either can be retuned
+		// without touching the other.
+		wing: Object.freeze({
+			offsetX: 16, // vp — left/right of player.x
+			offsetY: -4, // vp — relative to player.y, shallower than spawnOffsetY since the wing cannons sit further back than the nose
+			fireRateMult: 0.3, // side bolts fire at ~30% of the center bolt's current rate — roughly one wing volley per 3 center shots
+		}),
 
 		audio: Object.freeze({
 			src: "assets/audio/bullet-shoot.mp3",
@@ -1075,7 +1260,7 @@ export const Config = Object.freeze({
 			pipLegSize: 8,
 			pipLineWidth: 1.5,
 			iconScale: 0.42, // shrinks the same icon paths _renderIcon draws on the big badge down to pip size
-			claimedColor: "#4DFF8A", // matches Shop's buyOwnedColor / MissionSelect's completedColor
+			claimedColor: "#4DFF8A", // matches Shop's buyMaxedColor / MissionSelect's completedColor
 			currentColor: "#4DEFFF", // matches Shop's buyAffordableColor / MissionSelect's unlockedColor
 			futureColor: "#4a5570", // matches Shop's buyUnaffordableColor / MissionSelect's lockedColor
 			futureIconAlpha: 0.5, // future pips still show their reward's icon, just dimmed — the preview itself
@@ -1385,7 +1570,7 @@ export const Config = Object.freeze({
 			lashLen: 40, // tentacle extension at full lash (2x tentacleLen)
 			projectileSpeed: 320, // vp/sec toward the locked target
 			projectileRadius: 4,
-			projectileDamage: 8, // player HP lost if still within range when the orb arrives — see Config.player.maxHealth
+			projectileDamage: 8, // player HP lost if still within range when the orb arrives — see Player.maxHealth
 			// Bumped from a flat 16 (fine for a handful of regular Drifter
 			// clones lashing at once) — Boss #4 "Snake" (Config.boss.snake) can
 			// have up to ~20 attacker segments sharing this same pool, each on
@@ -1701,7 +1886,7 @@ export const Config = Object.freeze({
 		halfLen: 5,
 		glowBlur: 8,
 		poolSize: 32,
-		damage: 6, // player HP lost per hit — see Config.player.maxHealth
+		damage: 6, // player HP lost per hit — see Player.maxHealth
 	}),
 
 	/**
@@ -1809,7 +1994,7 @@ export const Config = Object.freeze({
 			// uses. ~4.6:1 against void and ~4.3:1 against iconFillColor's
 			// cross glyph, both clearing the WCAG 1.4.11 non-text 3:1 minimum.
 			fillColor: "#178A45",
-			healAmount: 25, // player HP restored — see Config.player.maxHealth
+			healAmount: 25, // player HP restored — see Player.maxHealth
 		}),
 		// Same cyan as Barrier/its SHIELD readout on purpose — this pickup
 		// visually reads as "the barrier's own color" at a glance. Icon: a
@@ -3213,6 +3398,13 @@ export const Config = Object.freeze({
 		// appended at the end regardless, so it's in rotation either way.
 		everyNLevels: 5,
 		roster: Object.freeze([
+			"scout1",
+			"snake",
+			"spiral",
+			"bouncerPrimal",
+			"tetra",
+			"nova",
+			"pulsor",
 			"zigzag",
 			"pulsor",
 			"nova",
@@ -4452,19 +4644,23 @@ export const Config = Object.freeze({
 	}),
 
 	/**
-	 * Shop — a placeholder purchase screen opened by tapping the HUD's GOLD
-	 * panel, freezing gameplay the same way Config.codex's overlay does (see
-	 * Shop.js). Laid out as an equipment screen: the player's real ship
-	 * (Player.js, reused as-is — no re-derived approximation, same
-	 * philosophy as EnemyCodex's enemy previews) sits center-screen, with
-	 * one card per ship "part" radiating outward at the four compass points,
-	 * a thin connector line tying each card back to the ship. The item
-	 * roster itself (names/descriptions/costs) lives in Shop.js, not here —
-	 * same content/chrome split as EnemyCodex (roster in EnemyCodex.js's
-	 * ENTRIES, layout/chrome tuning here) — because those items are
-	 * deliberately throwaway placeholders (see Shop.js's own doc) due to be
-	 * replaced once the real weapon/upgrade design lands; only this visual
-	 * chrome is expected to last.
+	 * Shop — the player's actual ship (Player.js, reused as-is — no
+	 * re-derived approximation, same philosophy as EnemyCodex's enemy
+	 * previews — rendered at its real Config.player position/scale, just
+	 * relocated to screen center via `ship`) sits in the middle, with one
+	 * card per upgradable part (see Shop.js's PARTS) arranged in a pentagon
+	 * around it — `cardCenter` below places all 5 via one shared angle/
+	 * radius formula (`-90° + i*72°`, i.e. one card straight up, the rest
+	 * spaced evenly clockwise) rather than per-card coordinates, so the
+	 * layout stays symmetric even though 5 doesn't divide the screen's own
+	 * compass points evenly the way the old 4-card top/bottom/left/right
+	 * version did. A thin connector line ties each card back to the ship,
+	 * same "this part belongs to that ship" cue the original layout used.
+	 * The part roster itself (names/icon glyphs) lives in Shop.js, not here
+	 * — same content/chrome split as EnemyCodex (roster in EnemyCodex.js's
+	 * ENTRIES, layout/chrome tuning here); the real numeric stats/costs live
+	 * on Config.player.wings/engine/cannon/magnet/missiles instead, since
+	 * those are shared with actual gameplay, not Shop-only display data.
 	 */
 	shop: Object.freeze({
 		dimAlpha: 0.85, // same "frozen frame behind a dark veil" treatment as Config.codex.overlay
@@ -4492,13 +4688,12 @@ export const Config = Object.freeze({
 			font: '400 22px "Audiowide", "Courier New", monospace', // bumped from 18px to match the larger circle
 		}),
 
-		// The ship renders at its real in-game position/scale (Config.player),
-		// just relocated to this fixed spot for the overlay — see Shop.js's
-		// frozen preview instance. Each item (see Shop.js's ITEMS) is tagged
-		// with a compass `slot` resolved to a card center via these offsets.
-		ship: Object.freeze({ x: 270, y: 520 }),
-		cardOffsetX: 175, // vp from ship center to a left/right card's center
-		cardOffsetY: 210, // vp from ship center to a top/bottom card's center
+		// The ship renders at its real in-game silhouette, centered in the
+		// screen so the 5-card pentagon has equal room to breathe on every
+		// side — see Shop.js's frozen preview instance.
+		ship: Object.freeze({ x: 270, y: 480 }),
+		cardRadiusX: 195, // vp — horizontal distance from ship center to a card's center
+		cardRadiusY: 230, // vp — vertical distance (taller than X since the virtual canvas is a 9:16 portrait)
 
 		connectorColor: "#4DEFFF",
 		connectorLineWidth: 1,
@@ -4508,23 +4703,42 @@ export const Config = Object.freeze({
 		// frame / the title screen's PLAY button — see core/shapes.js's
 		// cornerBracketPath), not a filled box, to read as this game's UI
 		// rather than a generic panel. The whole card is the tap target.
-		cardWidth: 150,
-		cardHeight: 90,
-		cardLegSize: 12,
+		cardWidth: 140,
+		cardHeight: 100,
+		cardLegSize: 10,
 		cardLineWidth: 1,
 		cardGlowBlur: 3,
 
-		nameFont: '400 11px "Audiowide", "Courier New", monospace',
+		// Icon glyph (see Shop.js's PARTS) drawn near the top of each card.
+		iconOffsetY: -30, // vp above the card's center
+		iconLineWidth: 1.5,
+		iconGlowBlur: 4,
+
+		nameFont: '400 12px "Audiowide", "Courier New", monospace',
 		nameColor: "#e8ecff",
+		nameOffsetY: -10, // vp from the card's center
+
+		// Level readout ("LV 4/10") — a compact text line rather than one pip
+		// per level; with 10 levels per part now (see Config.player.wings/
+		// engine/cannon/magnet/missiles), 10 individual dots would have been
+		// too cramped/fiddly to read at this card size, so this reuses the
+		// same "labeled number" language the rest of the HUD already uses
+		// (health "100/185", barrier "PWR"/"LVL") instead.
+		levelFont: '400 11px "Audiowide", "Courier New", monospace',
+		levelColor: "#aab4d4",
+		levelOffsetY: 8, // vp from the card's center
+
 		costFont: '400 13px "Audiowide", "Courier New", monospace',
+		costOffsetY: 28, // vp from the card's center
 		buyAffordableColor: "#4DEFFF",
 		buyUnaffordableColor: "#4a5570", // dim — reads as "disabled," same intent as a grayed-out control
-		buyOwnedColor: "#4DFF8A", // same soft green as Config.powerUps.health — "acquired" reads the same as "restored"
+		buyMaxedColor: "#4DFF8A", // same soft green as Config.powerUps.health — "fully upgraded" reads the same as "restored"
+		maxedText: "MAX",
 
 		footerFont: '400 11px "Audiowide", "Courier New", monospace',
 		footerColor: "#aab4d4",
-		footerY: 860,
-		footerText: "TAP A PART TO PURCHASE",
+		footerY: 900,
+		footerText: "TAP A PART TO UPGRADE",
 	}),
 
 	/**

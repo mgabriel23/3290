@@ -166,6 +166,7 @@ import { HUD } from '../entities/HUD.js';
 import { Particles } from '../entities/Particles.js';
 import { Player } from '../entities/Player.js';
 import { PlaybackControls } from '../entities/PlaybackControls.js';
+import { PlayerMissiles } from '../entities/PlayerMissiles.js';
 import { PlayerSkill } from '../entities/PlayerSkill.js';
 import { PowerUps } from '../entities/PowerUps.js';
 import { GoldPickups } from '../entities/GoldPickups.js';
@@ -220,6 +221,24 @@ export class GameplayScene {
     if (consumeShieldStart()) this.player.activateInvincibility(Config.dailyReward.shieldStart.duration);
     this._dropChanceMultiplier = consumeLuckyDrop() ? Config.dailyReward.luckyDrop.dropChanceMultiplier : 1;
     this.bullets = new Bullets();
+    // A Shop-only weapon (see Config.player.missiles) — inert (never fires)
+    // until the player buys its first level, same "own its own cooldown"
+    // shape Bullets already uses. `onHit` composes the missile's own damage
+    // multiplier with the cannon upgrade's, the same way update() below
+    // composes fireBoost's multiplier into Bullets/`_checkCollisions`, then
+    // shares `_onKillFeedback` with a regular bullet kill.
+    this._playerMissiles = new PlayerMissiles({
+      onDetonate: (x, y) => this._missileParticles.emit(x, y),
+      onHit: (target) => {
+        const killed = this._waveManager.handleBulletHit(
+          target,
+          this.player.missileDamageMultiplier * this.player.damageMultiplier,
+          this._comboMultiplier(),
+          this._comboDropBonus(),
+        );
+        this._onKillFeedback(target, killed);
+      },
+    });
     this.hud = new HUD();
     // Owned here, not by WaveManager, even though only WaveManager spawns
     // into and drains them (see its constructor doc) — a fresh WaveManager
@@ -230,7 +249,7 @@ export class GameplayScene {
     this._goldPickups = new GoldPickups();
     this._floatingText = new FloatingText(); // "+N GOLD" popups on pickup — see checkGoldPickup handling in update()
     this._codex = new EnemyCodex();
-    this._shop = new Shop(this.hud);
+    this._shop = new Shop(this.hud, this.player);
     this._playback = new PlaybackControls();
     this._playerSkill = new PlayerSkill();
     this._screenShake = new ScreenShake();
@@ -280,6 +299,11 @@ export class GameplayScene {
     // _boltPath/_hexIconPath).
     this._reviveIconPath = heartbeatPath(0, 0, Config.gameOver.continue.iconRadius * 0.55);
     this._playerParticles = new Particles(Config.gameOver.explosionColor, Config.gameOver.explosionSparksPerEmit);
+    // Missile impact bursts (see `_playerMissiles`'s `onDetonate` above) — a
+    // separate, dedicated pool with its own color, same "one Particles
+    // instance per distinct source" convention WaveManager already uses for
+    // every enemy type's own death explosion.
+    this._missileParticles = new Particles(Config.player.missiles.color);
     this._deathExplosionAudio = new AudioPool(Config.gameOver.explosionAudioSrc, 4, Config.gameOver.explosionVolume);
     this._gameOverAudio = new AudioPool(Config.gameOver.audioSrc, 4, Config.gameOver.audioVolume);
     // The "last 5 runs" list (core/RunHistory.js) — set the instant
@@ -419,14 +443,17 @@ export class GameplayScene {
     // — pausing bullets while the player can still fly around read as broken.
     // There's nothing for them to hit yet regardless, since enemies stay
     // suppressed until 'active' below, so this is purely visual continuity.
+    // Same for missiles' own cooldown — see PlayerMissiles.update's own doc.
     const fireBoostMultiplier = this._fireBoostTimer > 0 ? Config.powerUps.fireBoost.multiplier : 1;
-    this.bullets.update(effectiveDt, this.player, fireBoostMultiplier);
+    this.bullets.update(effectiveDt, this.player, fireBoostMultiplier * this.player.fireRateMultiplier);
+    this._playerMissiles.update(effectiveDt, this.player, this._waveManager);
+    this._missileParticles.update(effectiveDt);
 
     // Enemies (spawning, movement, attacks) are still suppressed during the
     // level intro — see above for why bullets/pickups no longer are.
     if (this._levelState === 'active') {
       this._waveManager.update(effectiveDt, this.player.x, this.player.y);
-      this._checkCollisions(fireBoostMultiplier);
+      this._checkCollisions(fireBoostMultiplier * this.player.damageMultiplier);
       this._checkPlayerHit();
       if (!this._isGameOver && this.barrier.health <= 0) this._triggerGameOver();
 
@@ -480,13 +507,15 @@ export class GameplayScene {
 
     this.renderer.setCameraOffset(0, 0);
     const fireBoostMultiplier = this._fireBoostTimer > 0 ? Config.powerUps.fireBoost.multiplier : 1;
-    const playerDamage = (Config.player.damage + (this._level - 1) * Config.player.damagePerLevel) * fireBoostMultiplier;
+    const playerDamage = (Config.player.damage + (this._level - 1) * Config.player.damagePerLevel) * this.player.damageMultiplier * fireBoostMultiplier;
     this.barrier.render(this.renderer, playerDamage, this._level);
 
     this.renderer.setCameraOffset(worldOffsetX, shake.y);
     if (!this._isGameOver) this.player.render(this.renderer); // the ship is destroyed — see _triggerGameOver's explosion
     this._playerParticles.render(this.renderer); // no-op when inactive — cheap to always call, same as WaveManager's own pools
     this.bullets.render(this.renderer);
+    this._playerMissiles.render(this.renderer);
+    this._missileParticles.render(this.renderer); // no-op when inactive — same convention as _playerParticles above
     this._waveManager?.render(this.renderer);
     // Rendered unconditionally, not just while a WaveManager exists — an
     // uncollected pickup must stay visible through the "LEVEL N" intro too,
@@ -497,7 +526,7 @@ export class GameplayScene {
 
     this.renderer.setCameraOffset(0, 0);
     this._renderDamageFlash();
-    this.hud.render(this.renderer, this.player.health, this._fireBoostTimer, this.player.invincibleTimer, this._comboMultiplier());
+    this.hud.render(this.renderer, this.player.health, this.player.maxHealth, this._fireBoostTimer, this.player.invincibleTimer, this._comboMultiplier());
     this._waveManager?.renderBossHealthBar(this.renderer);
     this._playerSkill.render(this.renderer);
     this._comboBanner.render(this.renderer); // no-op when inactive — cheap to always call, same as _floatingText above
@@ -690,11 +719,13 @@ export class GameplayScene {
   /**
    * Test every active enemy against the player bullet pool. Each hit consumes
    * one bullet and calls `enemy.hit()` — enemies handle their own health and
-   * death-flash logic. Called once per frame during 'active' state. A kill
-   * triggers screen shake and a brief hit-stop (see update()'s effectiveDt);
-   * `Math.max` (not `+=`) on the timer means several kills in the same frame
-   * extend the freeze to the configured duration rather than stacking it
-   * into a longer one.
+   * death-flash logic. Called once per frame during 'active' state. A kill's
+   * combo/shake/hit-stop feedback lives in `_onKillFeedback` (shared with
+   * `_playerMissiles`'s own `onHit` callback, set up in the constructor, so
+   * a missile kill feels/scores exactly like a bullet kill) —
+   * `Math.max` (not `+=`) on the hit-stop timer there means several kills in
+   * the same frame extend the freeze to the configured duration rather than
+   * stacking it into a longer one.
    *
    * Each kill here also feeds the score combo streak (`_comboCount`,
    * `_comboMultiplier()`) — this kill scores at whatever multiplier the
@@ -711,7 +742,7 @@ export class GameplayScene {
    * ComboBanner.js. Every kill's gold/PowerUp drop rolls also get a slight
    * boost from the streak (`_comboDropBonus()`), same "earned by not getting
    * hit" spirit as the score multiplier.
-   * @param {number} [damageMultiplier]  see update()'s fireBoostMultiplier
+   * @param {number} [damageMultiplier]  see update()'s fireBoostMultiplier/Player.damageMultiplier composition
    */
   _checkCollisions(damageMultiplier = 1) {
     const enemies = this._waveManager.enemies;
@@ -719,24 +750,36 @@ export class GameplayScene {
       const e = enemies[i];
       if (this.bullets.checkHit(e.x, e.y, e.hitRadius)) {
         const killed = this._waveManager.handleBulletHit(e, damageMultiplier, this._comboMultiplier(), this._comboDropBonus());
-        if (killed) {
-          this._comboCount++;
-          if (this._comboCount > this._runBestCombo) this._runBestCombo = this._comboCount;
-          // Boss kills get a bigger shake than an ordinary kill — matches
-          // Config.gameOver.deathTrauma, the only other moment this strong.
-          const trauma = e.type === 'boss' ? Config.boss.killTrauma : Config.screenShake.killTrauma;
-          this._screenShake.trigger(trauma);
-          this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);
-
-          const tier = this._comboTierIndex(this._comboCount);
-          if (tier > this._comboAnnouncedTier) {
-            this._comboAnnouncedTier = tier;
-            this._comboBanner.trigger(tier, this._comboMultiplier());
-            this._streakAudio.play();
-            this._screenShake.trigger(Config.screenShake.comboTierTrauma);
-          }
-        }
+        this._onKillFeedback(e, killed);
       }
+    }
+  }
+
+  /**
+   * Combo/shake/hit-stop tail shared by every way an enemy can die from a
+   * player-sourced hit — a regular bullet (`_checkCollisions`) or a missile
+   * (`_playerMissiles`'s `onHit` callback, set up in the constructor). Not
+   * used by `triggerSkillBomb`'s kills, which deliberately bypass the combo
+   * streak — see that method's own doc.
+   * @param {object} enemy
+   * @param {boolean} killed
+   */
+  _onKillFeedback(enemy, killed) {
+    if (!killed) return;
+    this._comboCount++;
+    if (this._comboCount > this._runBestCombo) this._runBestCombo = this._comboCount;
+    // Boss kills get a bigger shake than an ordinary kill — matches
+    // Config.gameOver.deathTrauma, the only other moment this strong.
+    const trauma = enemy.type === 'boss' ? Config.boss.killTrauma : Config.screenShake.killTrauma;
+    this._screenShake.trigger(trauma);
+    this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);
+
+    const tier = this._comboTierIndex(this._comboCount);
+    if (tier > this._comboAnnouncedTier) {
+      this._comboAnnouncedTier = tier;
+      this._comboBanner.trigger(tier, this._comboMultiplier());
+      this._streakAudio.play();
+      this._screenShake.trigger(Config.screenShake.comboTierTrauma);
     }
   }
 
@@ -922,7 +965,7 @@ export class GameplayScene {
     this._continuesUsed++;
 
     this._isGameOver = false;
-    this.player.health = Config.player.maxHealth;
+    this.player.health = this.player.maxHealth;
     this.player.activateInvincibility(Config.gameOver.continue.invincibleDuration);
     this.barrier.heal(this.barrier.maxHealth);
     this._onMusicResume?.();

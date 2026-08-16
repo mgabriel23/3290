@@ -53,14 +53,33 @@
  * Magnet: `magnetRadius`/`magnetPullAccel` read off `Config.player.magnet
  * .levels[_magnetLevel - 1]` and are handed to WaveManager.update each
  * frame, which forwards them into GoldPickups/PowerUps so nearby drops
- * accelerate toward the ship instead of just falling. `_magnetLevel` starts
- * at 1 (the weak default) — see Config.player.magnet's own doc for how a
- * future upgrade bumps it.
+ * accelerate toward the ship instead of just falling.
+ *
+ * Shop upgrades: magnet is one of five parts (wings, engine, cannon,
+ * magnet, missiles) purchasable in Shop.js — `_wingsLevel`/`_engineLevel`/
+ * `_cannonLevel`/`_magnetLevel`/`_missileLevel` are all 1-based indices into
+ * their own `Config.player.<part>.levels` array, loaded once from
+ * PlayerUpgrades.js at construction and updated live by `applyUpgrade` the
+ * instant a purchase happens (see that method's own doc — Shop.js calls it
+ * on both the real gameplay Player and its own frozen preview instance).
+ * Each level's stat effect is read through a getter (`maxHealth`,
+ * `damageMultiplier`, `fireRateMultiplier`, `missileDamageMultiplier`, ...)
+ * rather than cached, so nothing needs to be recomputed by hand when a level
+ * changes — only the hull's decoration nubs (`_extraPaths`, see
+ * `_rebuildExtraPaths`) are cached, since rebuilding those per-frame would
+ * be wasted work for something that only ever changes on a purchase.
+ * `renderScale` (used by `render`/`_renderFlame` instead of
+ * `Config.player.scale` directly) grows a little with total upgrades
+ * purchased, so the added decoration actually reads at a glance instead of
+ * staying pinned at the same small silhouette — deliberately visual only,
+ * see that getter's own doc for why movement bounds/`hitRadius` don't grow
+ * with it.
  */
 import { Config } from '../core/Config.js';
 import { easeOutCubic } from '../core/animation.js';
 import { AudioPool } from '../core/AudioPool.js';
 import { getSensitivity, dangerColor, vibrate } from '../core/Settings.js';
+import { getPartLevel, setPartLevel } from '../core/PlayerUpgrades.js';
 
 // Local ship-space outline coordinates (nose toward -Y — "forward", since
 // the ship faces up the screen). Only the right half is authored; it's
@@ -111,6 +130,58 @@ function mirrorAcrossCenterline(halfOutline) {
   return [...halfOutline, ...mirrored];
 }
 
+/** Mirror a standalone (non-centerline-anchored) point set across x=0. */
+function mirrorX(points) {
+  return points.map(([x, y]) => [-x, y]);
+}
+
+/**
+ * True if any of `levels[0..level-1]` (1-based `level`) has `flag` set —
+ * i.e. a milestone declared on ONE level entry (e.g. wings' `sideBullets`
+ * on its level-8 entry) stays unlocked at every level from there onward,
+ * without needing that same flag repeated on every subsequent entry too.
+ * Used by Player's `hasSideBullets`/`missilesUnlocked`/`hasWingMissilePods`/
+ * `hasNoseSpike` getters.
+ */
+function hasReachedFlag(levels, level, flag) {
+  for (let i = 0; i < level; i++) if (levels[i][flag]) return true;
+  return false;
+}
+
+// ── Shop-upgrade hull decorations ─────────────────────────────────────────
+// Small local-space nub shapes, drawn ON TOP of the base SHIP_PATHS once the
+// matching part reaches its level-8-of-10 milestone (see
+// Player._rebuildExtraPaths, Config.player.wings/cannon/missiles) — a late
+// but not final tier, leaving levels 9-10 as pure stat refinement after the
+// visual payoff already landed. The base hull outline itself is never
+// touched — these are additive decoration, not a silhouette replacement, so
+// they stay simple to reason about and can't break the mirrored-outline math.
+
+// Wing-cannon nub — a small forward-pointing barrel near the wingtip
+// (SHIP_HALF_OUTLINE's own wingtip sits at [32, 12]) — appears at
+// Config.player.wings level 8, the same level that unlocks the wing-mounted
+// side bullets it visually represents.
+const WING_CANNON_RIGHT = [[24, 6], [35, 4], [37, 10], [26, 12]];
+const WING_CANNON_PATHS = [
+  { points: WING_CANNON_RIGHT, closed: true },
+  { points: mirrorX(WING_CANNON_RIGHT), closed: true },
+];
+
+// Missile pod nub — slung under the wing root, closer to the fuselage than
+// the wing cannon above — appears at Config.player.missiles level 8
+// ("later on," after missiles are already flying since level 2 — see that
+// config's own doc).
+const MISSILE_POD_RIGHT = [[12, 16], [20, 15], [21, 26], [11, 27]];
+const MISSILE_POD_PATHS = [
+  { points: MISSILE_POD_RIGHT, closed: true },
+  { points: mirrorX(MISSILE_POD_RIGHT), closed: true },
+];
+
+// Nose spike — a thin forward extension past the existing nose tip ([0, -24]
+// in SHIP_HALF_OUTLINE), centered on x=0 so it needs no mirroring — appears
+// at Config.player.cannon level 8, reading as a bigger main gun.
+const CANNON_SPIKE_PATH = { points: [[-2, -22], [2, -22], [1.2, -34], [-1.2, -34]], closed: true };
+
 export class Player {
   constructor() {
     const { width: vW, height: vH } = Config.virtual;
@@ -146,17 +217,26 @@ export class Player {
     // are mutated in place (see _renderFlame), the array reference never changes.
     this._flamePathArr = [{ points: this._flame }];
 
+    // Shop upgrade levels — 1-based indices into each part's own
+    // Config.player.<part>.levels array (level 1 = free starting tier),
+    // loaded once here and persisted across sessions via PlayerUpgrades.js.
+    // See applyUpgrade's own doc for how a Shop purchase updates these live,
+    // mid-run, on this exact instance.
+    this._wingsLevel   = getPartLevel('wings');
+    this._engineLevel  = getPartLevel('engine');
+    this._cannonLevel  = getPartLevel('cannon');
+    this._magnetLevel  = getPartLevel('magnet');
+    this._missileLevel = getPartLevel('missiles');
+    this._rebuildExtraPaths();
+
     // Health/damage — see takeDamage. `_hitFlash` and `_invulnTimer` mirror
     // the enemy hit-flash convention (EnemyCombat.applyHit) and Barrier's
     // own damage-taking shape respectively; `_age` above already drives the
     // low-health pulse the same way it drives Barrier's.
-    this.health = Config.player.maxHealth;
+    this.health = this.maxHealth;
     this._hitFlash    = 0; // seconds remaining in the white hit-flash
     this._invulnTimer = 0; // seconds remaining of post-hit grace, during which takeDamage is a no-op
     this._invincibleTimer = 0; // seconds remaining of PowerUp-driven full damage immunity — see activateInvincibility
-
-    // Magnet — index into Config.player.magnet.levels (1-based). See class doc.
-    this._magnetLevel = 1;
 
     // Low-health danger blip — see class doc.
     const { warningAudioSrc, warningVolume } = Config.player.lowHealth;
@@ -180,6 +260,82 @@ export class Player {
 
   /** vp/sec^2 — current magnet pull strength. See class doc. */
   get magnetPullAccel() { return Config.player.magnet.levels[this._magnetLevel - 1].pullAccel; }
+
+  /** Current max HP, per the Shop-purchased engine level — see Config.player.engine. */
+  get maxHealth() { return Config.player.engine.levels[this._engineLevel - 1].maxHealth; }
+
+  /** Multiplier on the player's base bullet/missile damage, per the Shop-purchased cannon level — see Config.player.cannon. */
+  get damageMultiplier() { return Config.player.cannon.levels[this._cannonLevel - 1].damageMult; }
+
+  /** Multiplier on Bullets' base fire rate, per the Shop-purchased wings level — see Config.player.wings. */
+  get fireRateMultiplier() { return Config.player.wings.levels[this._wingsLevel - 1].fireRateMult; }
+
+  /** True once wings has reached the level that fires extra wing-mounted bolts — see Bullets.update/Config.player.wings. */
+  get hasSideBullets() { return hasReachedFlag(Config.player.wings.levels, this._wingsLevel, 'sideBullets'); }
+
+  /** True once the missiles part has been purchased at all — see PlayerMissiles.js/Config.player.missiles. */
+  get missilesUnlocked() { return hasReachedFlag(Config.player.missiles.levels, this._missileLevel, 'unlocked'); }
+
+  /** Seconds between missile launches, per the Shop-purchased missiles level. */
+  get missileInterval() { return Config.player.missiles.levels[this._missileLevel - 1].interval; }
+
+  /** Multiplier on the player's CURRENT effective bullet damage applied by a missile hit — see Config.player.missiles' own doc for why this is relative, not flat. */
+  get missileDamageMultiplier() { return Config.player.missiles.levels[this._missileLevel - 1].damageMult; }
+
+  /** True once missiles has reached the level that launches from wing pods instead of dead-center — see PlayerMissiles.js/Config.player.missiles. */
+  get hasWingMissilePods() { return hasReachedFlag(Config.player.missiles.levels, this._missileLevel, 'wingMount'); }
+
+  /** True once cannon has reached the level that adds the forward nose-spike decoration — see `_rebuildExtraPaths`/Config.player.cannon. */
+  get hasNoseSpike() { return hasReachedFlag(Config.player.cannon.levels, this._cannonLevel, 'noseSpike'); }
+
+  /**
+   * Visual-only render scale — grows a little with total Shop upgrades
+   * purchased (see Config.player.upgradeScaleGrowth's own doc), independent
+   * of the fixed `Config.player.scale` movement bounds/`hitRadius` are
+   * built from. Read by `render`/`_renderFlame`, never by anything
+   * collision- or bounds-related.
+   */
+  get renderScale() {
+    const steps = (this._wingsLevel - 1) + (this._engineLevel - 1) + (this._cannonLevel - 1)
+                + (this._magnetLevel - 1) + (this._missileLevel - 1);
+    return Config.player.scale * (1 + steps * Config.player.upgradeScaleGrowth);
+  }
+
+  /**
+   * Apply a Shop-purchased upgrade level for `partId` — updates this ship's
+   * live stats/silhouette immediately and persists the new level via
+   * PlayerUpgrades.js, the same "mutate + persist together" shape HUD's
+   * gold/score setters already use. Shop.js calls this on both the real
+   * gameplay Player and its own frozen preview instance on every purchase,
+   * so the two never drift out of sync.
+   * @param {'wings'|'engine'|'cannon'|'magnet'|'missiles'} partId
+   * @param {number} level 1-based
+   */
+  applyUpgrade(partId, level) {
+    switch (partId) {
+      case 'wings':    this._wingsLevel   = level; break;
+      case 'engine':   this._engineLevel  = level; break;
+      case 'cannon':   this._cannonLevel  = level; break;
+      case 'magnet':   this._magnetLevel  = level; break;
+      case 'missiles': this._missileLevel = level; break;
+    }
+    setPartLevel(partId, level);
+    this._rebuildExtraPaths();
+  }
+
+  /**
+   * Rebuilds `_extraPaths` (the base SHIP_PATHS plus whichever upgrade-gated
+   * decoration nubs the current levels have unlocked) — called once at
+   * construction and again from applyUpgrade, never per-frame, since the
+   * ship's silhouette only ever changes on a purchase. render() strokes this
+   * array instead of the module-level SHIP_PATHS constant directly.
+   */
+  _rebuildExtraPaths() {
+    this._extraPaths = [...SHIP_PATHS];
+    if (this.hasSideBullets)     this._extraPaths.push(...WING_CANNON_PATHS);
+    if (this.hasWingMissilePods) this._extraPaths.push(...MISSILE_POD_PATHS);
+    if (this.hasNoseSpike)       this._extraPaths.push(CANNON_SPIKE_PATH);
+  }
 
   /**
    * Apply `amount` damage unless still within the post-hit grace window or
@@ -207,14 +363,13 @@ export class Player {
   }
 
   /**
-   * Restore `amount` health, clamped at Config.player.maxHealth. Used by a
-   * health PowerUp pickup (see WaveManager.checkPowerUpPickup) — no
-   * flash/feedback beyond the number itself rising, unlike takeDamage's
-   * hit-flash.
+   * Restore `amount` health, clamped at `this.maxHealth`. Used by a health
+   * PowerUp pickup (see WaveManager.checkPowerUpPickup) — no flash/feedback
+   * beyond the number itself rising, unlike takeDamage's hit-flash.
    * @param {number} amount
    */
   heal(amount) {
-    this.health = Math.min(Config.player.maxHealth, this.health + amount);
+    this.health = Math.min(this.maxHealth, this.health + amount);
   }
 
   /**
@@ -288,7 +443,8 @@ export class Player {
    * rather than a silent free pass.
    */
   render(renderer) {
-    const { lineWidth, glowBlur, scale } = Config.player;
+    const { lineWidth, glowBlur } = Config.player;
+    const scale = this.renderScale;
 
     this._renderFlame(renderer);
 
@@ -298,7 +454,7 @@ export class Player {
     const alpha    = this._invulnTimer > 0 ? this._invulnBlinkAlpha() : (low ? this._lowHealthPulseAlpha() : 1);
 
     renderer.strokePaths(
-      SHIP_PATHS,
+      this._extraPaths,
       { x: this.x, y: this.y, scale, color, lineWidth, glowBlur, alpha }
     );
 
@@ -369,28 +525,33 @@ export class Player {
    * The flame's length oscillates as the sum of two sine waves at
    * different speeds/amplitudes — a cheap, deterministic stand-in for
    * organic flicker (no per-frame randomness, so it's smooth and the
-   * animation is reproducible).
+   * animation is reproducible). `engineMult` (Config.player.engine.
+   * flameGrowthPerLevel, see that config's own doc) scales both the flame's
+   * length and glow by a flat bonus per engine level, so a Shop engine
+   * upgrade reads as "bigger, brighter thruster" without needing its own
+   * hull shape.
    */
   _renderFlame(renderer) {
     const { color, lineWidth, glowBlur, baseLength, flickerAmplitudes, flickerSpeeds } =
       Config.player.flame;
+    const engineMult = 1 + (this._engineLevel - 1) * Config.player.engine.flameGrowthPerLevel;
 
     const flicker =
       Math.sin(this._age * flickerSpeeds[0]) * flickerAmplitudes[0] +
       Math.sin(this._age * flickerSpeeds[1]) * flickerAmplitudes[1];
-    const length = Math.max(baseLength + flicker, 4);
+    const length = Math.max((baseLength + flicker) * engineMult, 4);
 
     this._flame[1][1] = 38 + length; // mutate tip y in-place — avoids creating a new array each frame
 
-    // Same `scale` as the hull — the flame is authored in ship-local
-    // coordinates too, so it must shrink and stay anchored to the tail.
+    // Same `renderScale` as the hull — the flame is authored in ship-local
+    // coordinates too, so it must shrink/grow and stay anchored to the tail.
     renderer.strokePaths(this._flamePathArr, {
       x: this.x,
       y: this.y,
-      scale: Config.player.scale,
+      scale: this.renderScale,
       color,
       lineWidth,
-      glowBlur,
+      glowBlur: glowBlur * engineMult,
     });
   }
 }

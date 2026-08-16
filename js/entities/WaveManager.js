@@ -1182,6 +1182,28 @@ export class WaveManager {
   get enemies() { return this._enemies; }
 
   /**
+   * Closest living enemy to (x, y), or `null` if none — used by
+   * PlayerMissiles to pick a homing target each time it's ready to launch
+   * (see GameplayScene's construction of PlayerMissiles/Config.player.
+   * missiles). A plain O(n) scan, same cost class as this file's other
+   * per-frame enemy loops; called at most once per missile-fire interval
+   * (seconds apart), never per-frame.
+   * @param {number} x @param {number} y
+   * @returns {object|null}
+   */
+  nearestEnemy(x, y) {
+    let best = null, bestDistSq = Infinity;
+    for (let i = 0; i < this._enemies.length; i++) {
+      const e = this._enemies[i];
+      if (!e.alive) continue;
+      const dx = e.x - x, dy = e.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < bestDistSq) { bestDistSq = distSq; best = e; }
+    }
+    return best;
+  }
+
+  /**
    * True once all enemies are dead AND every effect has finished animating.
    */
   get isDone() {

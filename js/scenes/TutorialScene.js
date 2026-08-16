@@ -226,7 +226,7 @@ export class TutorialScene {
     // No real Player exists in this scene — this HUD is a preview of the
     // real gameplay chrome the hints point at, so it shows a nominal full
     // health bar rather than an undefined/NaN one.
-    this._hud.render(renderer, Config.player.maxHealth);
+    this._hud.render(renderer, Config.player.engine.levels[0].maxHealth);
     // Codex/PlaybackControls/PlayerSkill only ever render their idle button
     // here — see the class doc for why their overlay/pause/cooldown state
     // is never touched (PlayerSkill's cooldown timer starts at 0 and is
