@@ -121,6 +121,7 @@ export class Game {
       this.scene = new PrologueScene(this.renderer, {
         onContinue: (mode) => this._startTutorial(mode),
         devSkipToTitle,
+        onMainMenuReached: () => this._fadeOutPrologueMusic(),
       });
     } catch (err) {
       console.error('Failed to start the prologue:', err);
@@ -158,17 +159,24 @@ export class Game {
   }
 
   /**
+   * Ramp the prologue music down to silence, then pause it — passed to
+   * `PrologueScene` as `onMainMenuReached`, so it fires the instant the
+   * title/PLAY card ("the main menu") is reached, whether that's via the
+   * full cinematic finishing or a `devSkipToTitle` boot starting there
+   * directly. Optional-chained throughout since `_startPrologueMusic` may
+   * have failed (or not run yet) — see its own try/catch.
+   */
+  _fadeOutPrologueMusic() {
+    this._prologueFader?.rampTo(0, Config.audio.prologueFadeOutDuration, () => this._prologueAudio?.pause());
+  }
+
+  /**
    * Swap the cinematic out for the tutorial once the player taps a mode
-   * button on the title card. The prologue's own music has been playing
-   * continuously since the intro swipe, straight through the cinematic AND
-   * the title/mode-button card ("the main menu") — this is where it
-   * finally stops, right as the tap actually lands (`onContinue` fires
-   * once the title card's exit-fade finishes — see
-   * PrologueScene._updateExitFade), so it doesn't keep playing underneath
-   * the entire tutorial too. Ramps out smoothly (see
-   * `_prologueFader`/`_tick`) rather than an abrupt `.pause()` — the
-   * fader's own `onComplete` is what actually pauses the element, once
-   * it's already faded down to silence.
+   * button on the title card. The prologue's own music has already been
+   * faded out by this point — it stops as soon as the title card ("the
+   * main menu") is reached, not here (see `_fadeOutPrologueMusic`, passed
+   * to `PrologueScene` as `onMainMenuReached`), so there's nothing left to
+   * silence on this transition.
    *
    * The tutorial itself only plays once per mode (see TutorialProgress.js):
    * Mission Mode's first-ever attempt is always Level 1 (missions unlock
@@ -182,7 +190,6 @@ export class Game {
    *   the tutorial itself finishes (or immediately, if already seen).
    */
   _startTutorial(mode) {
-    this._prologueFader?.rampTo(0, Config.audio.prologueFadeOutDuration, () => this._prologueAudio?.pause());
     if (hasSeenTutorial(mode)) {
       this._afterTutorial(mode);
       return;

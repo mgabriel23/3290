@@ -34,6 +34,7 @@
 import { Config } from '../core/Config.js';
 import { cornerBracketPath } from '../core/shapes.js';
 import { getVolume, setVolume } from '../core/AudioSettings.js';
+import { playButtonClick } from '../core/UiSound.js';
 import {
   getSensitivity, setSensitivity,
   getHapticsEnabled, setHapticsEnabled,
@@ -73,15 +74,16 @@ export class SettingsPanel {
   /** The button always wins first (opens/closes); while open, a toggle row or a segmented option; any other tap while open is swallowed. */
   handleTap(x, y) {
     if (this.isInsideButton(x, y)) {
+      playButtonClick();
       this._open = !this._open;
       this._overlayAge = 0;
       return;
     }
     if (!this._open) return;
-    if (this._isInsideToggle(x, y, ROW_HAPTICS)) { setHapticsEnabled(!getHapticsEnabled()); return; }
-    if (this._isInsideToggle(x, y, ROW_COLORBLIND)) { setColorblindEnabled(!getColorblindEnabled()); return; }
+    if (this._isInsideToggle(x, y, ROW_HAPTICS)) { playButtonClick(); setHapticsEnabled(!getHapticsEnabled()); return; }
+    if (this._isInsideToggle(x, y, ROW_COLORBLIND)) { playButtonClick(); setColorblindEnabled(!getColorblindEnabled()); return; }
     const segment = this._segmentedIndexAt(x, y, ROW_TEXT_SIZE);
-    if (segment !== -1) setTextSize(segment);
+    if (segment !== -1) { playButtonClick(); setTextSize(segment); }
   }
 
   handlePointerDown(x, y) {

@@ -16,6 +16,7 @@
  */
 import { Config } from '../core/Config.js';
 import { isMissionUnlocked, isMissionCompleted } from '../core/MissionProgress.js';
+import { playButtonClick } from '../core/UiSound.js';
 import { Starfield } from '../entities/Starfield.js';
 
 export class MissionSelectScene {
@@ -34,9 +35,10 @@ export class MissionSelectScene {
   }
 
   handleTap(x, y) {
-    if (this._isInsideBack(x, y)) { this._onBack?.(); return; }
+    if (this._isInsideBack(x, y)) { playButtonClick(); this._onBack?.(); return; }
     for (let level = 1; level <= Config.mission.count; level++) {
       if (this._isInsideNode(x, y, level) && isMissionUnlocked(level)) {
+        playButtonClick();
         this._onSelectMission?.(level);
         return;
       }

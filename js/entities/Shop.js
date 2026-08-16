@@ -43,6 +43,7 @@
 import { Config } from '../core/Config.js';
 import { getPartLevel } from '../core/PlayerUpgrades.js';
 import { cornerBracketPath } from '../core/shapes.js';
+import { playButtonClick } from '../core/UiSound.js';
 import { Player } from './Player.js';
 
 // Small local-space glyphs (roughly ±9vp, centered on the origin) — stroked
@@ -120,7 +121,7 @@ export class Shop {
   /** The close button always wins; otherwise a tap on a card buys its next level. Everything else (the dimmed background) is inert — see class doc. */
   handleTap(x, y) {
     if (!this._open) return;
-    if (this._isInsideCloseButton(x, y)) { this.close(); return; }
+    if (this._isInsideCloseButton(x, y)) { playButtonClick(); this.close(); return; }
     for (let i = 0; i < PARTS.length; i++) {
       if (this._isInsideCard(x, y, i)) { this._buy(i); return; }
     }
@@ -134,6 +135,7 @@ export class Shop {
     const nextLevel = level + 1;
     const cost = Config.player[part.id].levels[nextLevel - 1].cost;
     if (this._hud.gold < cost) return; // can't afford — silently ignored
+    playButtonClick();
     this._hud.gold -= cost;
     this._levels[i] = nextLevel;
     this._player.applyUpgrade(part.id, nextLevel);

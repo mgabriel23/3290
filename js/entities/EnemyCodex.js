@@ -29,6 +29,7 @@ import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, cr
 import { BouncerEnemy } from './BouncerEnemy.js';
 import { wrapText } from '../core/textLayout.js';
 import { cornerBracketPath } from '../core/shapes.js';
+import { playButtonClick } from '../core/UiSound.js';
 
 // --- Preview instances --------------------------------------------------
 // Every card's enemy is a real, live instance of its actual class,
@@ -204,13 +205,14 @@ export class EnemyCodex {
   /** Routes a tap: the button always wins first; while open, the arrows are next; any other tap while open is swallowed so it can never reach ship-steering. */
   handleTap(x, y) {
     if (this.isInsideButton(x, y)) {
+      playButtonClick();
       this._open = !this._open;
       this._cardAge = 0;
       return;
     }
     if (!this._open) return;
-    if (this._isInsideArrow(x, y, -1)) { this._page(-1); return; }
-    if (this._isInsideArrow(x, y, 1))  { this._page(1); return; }
+    if (this._isInsideArrow(x, y, -1)) { playButtonClick(); this._page(-1); return; }
+    if (this._isInsideArrow(x, y, 1))  { playButtonClick(); this._page(1); return; }
   }
 
   _page(direction) {

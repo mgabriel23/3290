@@ -48,10 +48,14 @@
  * ever, rather than replaying on every launch.
  *
  * The prologue's own background music (started by Game the instant the
- * player swipes past the intro prompt) plays continuously through this
- * entire scene — cinematic AND the title/PLAY card ("the main menu") —
- * with no stop point in here at all; `Game._startGameplay` is what stops
- * it, once gameplay's own separate theme is ready to take over.
+ * player swipes past the intro prompt) plays continuously through the
+ * cinematic, then fades out the moment the title/PLAY card ("the main
+ * menu") is reached — `onMainMenuReached` fires right as the `title` beat
+ * starts (from `_updateFadeOut`, or immediately in the constructor for a
+ * `devSkipToTitle` boot that starts there directly), and `Game` owns the
+ * actual fade since it owns the Audio element (see `Game._startPrologue`).
+ * The main menu itself, and everything after it, plays in silence until
+ * gameplay's own separate theme starts.
  */
 import { Config } from '../core/Config.js';
 import { Starfield } from '../entities/Starfield.js';
@@ -59,6 +63,7 @@ import { flickerAlpha } from '../core/animation.js';
 import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { cornerBracketPath, diamondPath } from '../core/shapes.js';
 import { AudioPool } from '../core/AudioPool.js';
+import { playButtonClick } from '../core/UiSound.js';
 import { DailyRewardPanel } from '../entities/DailyRewardPanel.js';
 import { previewNextReward } from '../core/DailyReward.js';
 import { markPrologueSeen } from '../core/PrologueProgress.js';
@@ -68,17 +73,21 @@ import { AchievementsPanel } from '../entities/AchievementsPanel.js';
 export class PrologueScene {
   /**
    * @param {import('../core/Renderer.js').Renderer} renderer
-   * @param {{ onContinue: (mode: 'mission'|'survival') => void, devSkipToTitle?: boolean }} options
+   * @param {{ onContinue: (mode: 'mission'|'survival') => void, devSkipToTitle?: boolean, onMainMenuReached?: () => void }} options
    *   `onContinue` fires once a mode button is tapped, passed which one —
    *   see `_renderModeButtons`/handleTap. `devSkipToTitle` starts straight
    *   on the title/mode-button card instead of the cinematic — Game.js
    *   passes it once `core/PrologueProgress.js` says this player has already
    *   seen the cinematic, and also for its own "back" navigation from
-   *   MissionSelectScene (see its own doc).
+   *   MissionSelectScene (see its own doc). `onMainMenuReached` fires the
+   *   instant the `title` beat starts — immediately, below, if `devSkipToTitle`
+   *   is set, or from `_updateFadeOut` once the cinematic finishes — see the
+   *   class doc for why Game.js uses it to fade the prologue music out.
    */
-  constructor(renderer, { onContinue, devSkipToTitle = false }) {
+  constructor(renderer, { onContinue, devSkipToTitle = false, onMainMenuReached }) {
     this.renderer = renderer;
     this.onContinue = onContinue;
+    this.onMainMenuReached = onMainMenuReached;
 
     this._beat = devSkipToTitle ? 'title' : 'yearCard';
     this._beatAge = 0;
@@ -119,6 +128,12 @@ export class PrologueScene {
     // Settings above (see Config.achievements' own doc for why it lives
     // here rather than in gameplay's HUD button row).
     this._achievementsPanel = new AchievementsPanel();
+
+    // A devSkipToTitle boot starts life already on the 'title' beat, so it
+    // never passes through `_updateFadeOut` below — fire the "reached the
+    // main menu" signal here instead, so the prologue music fades out just
+    // the same as it would after sitting through the full cinematic.
+    if (devSkipToTitle) this.onMainMenuReached?.();
   }
 
   /** Advance whichever beat is current; each one decides for itself when it's done. */
@@ -170,6 +185,7 @@ export class PrologueScene {
     if (this._isInsideMissionButton(x, y)) mode = 'mission';
     else if (this._isInsideSurvivalButton(x, y)) mode = 'survival';
     if (mode) {
+      playButtonClick();
       // Save the current beat age so the exit-fade can hold the title frozen
       // at the exact frame the tap landed, rather than restarting its animation.
       this._frozenTitleAge = this._beatAge;
@@ -401,6 +417,9 @@ export class PrologueScene {
       // class doc above and core/PrologueProgress.js).
       markPrologueSeen();
       this._advanceBeat('title');
+      // The main menu has just been reached — see the class doc for why
+      // Game.js uses this to start fading the prologue music out.
+      this.onMainMenuReached?.();
     }
   }
 

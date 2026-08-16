@@ -50,6 +50,7 @@ import { Config } from '../core/Config.js';
 import { cornerBracketPath, diamondPath, starPath } from '../core/shapes.js';
 import { wrapText } from '../core/textLayout.js';
 import { easeOutBack } from '../core/animation.js';
+import { AudioPool } from '../core/AudioPool.js';
 import { Particles } from './Particles.js';
 import { hasPendingReward, getPendingReward, claimReward } from '../core/DailyReward.js';
 
@@ -68,6 +69,9 @@ export class DailyRewardPanel {
     this._claimButtonPaths = this._buildClaimButtonPaths();
     this._pipFramePaths = this._buildPipFramePaths();
     this._buildIconPaths();
+    // Its own distinct sting, not the generic Config.ui.click blip every
+    // other button uses — see Config.dailyReward.claimAudioSrc's own doc.
+    this._claimAudio = new AudioPool(Config.dailyReward.claimAudioSrc, 4, Config.dailyReward.claimVolume);
 
     if (this._pending) {
       // One-shot celebratory burst, tinted to the rolled reward's own
@@ -96,6 +100,7 @@ export class DailyRewardPanel {
   handleTap(x, y) {
     if (!this._pending || this._closing) return; // ignore taps once the exit veil has already started falling
     if (this._isInsideClaimButton(x, y)) {
+      this._claimAudio.play();
       claimReward();
       this._closing = true;
     }

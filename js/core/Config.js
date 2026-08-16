@@ -1076,6 +1076,13 @@ export const Config = Object.freeze({
 			pulseDepth: 0.22,
 		}),
 
+		// Plays once, in place of the generic Config.ui.click blip, the instant
+		// CLAIM is tapped (see DailyRewardPanel.handleTap) — the daily reward
+		// is a bigger moment than an ordinary button, so it gets its own
+		// distinct sting rather than sounding like every other UI tap.
+		claimAudioSrc: "assets/audio/reward.mp3",
+		claimVolume: 0.6,
+
 		// A small persistent reminder shown ON the title card once today's
 		// reward has already been claimed (see PrologueScene's 'title'
 		// render) — without this, a player who already claimed has no
@@ -4303,11 +4310,11 @@ export const Config = Object.freeze({
 	 *     past the intro prompt (IntroScene's `onSwipeDetected` fires
 	 *     synchronously from the real swipe gesture, still safely inside
 	 *     its user-gesture activation window — see Game._startPrologueMusic),
-	 *     and playing continuously through the ENTIRE prologue scene —
-	 *     cinematic and the title/PLAY card ("the main menu") alike — right
-	 *     up until PLAY is actually tapped (Game._startTutorial, called once
-	 *     the title card's exit-fade finishes), rather than continuing to
-	 *     play underneath the tutorial that follows.
+	 *     playing through the cinematic, then fading back out the instant
+	 *     the title/PLAY card ("the main menu") is reached (Game.js's
+	 *     `_fadeOutPrologueMusic`, passed to PrologueScene as
+	 *     `onMainMenuReached`) — so the main menu itself, and the tutorial
+	 *     that follows it, play in silence.
 	 *   - gameplay's theme, started once the tutorial's last hint is
 	 *     dismissed (Game._startGameplay).
 	 */
@@ -4325,13 +4332,35 @@ export const Config = Object.freeze({
 		// on start, a fade-out (then an actual .pause()) on stop, so neither
 		// transition lands as an abrupt audio pop.
 		prologueFadeInDuration: 1.2, // swells in as the cinematic begins
-		prologueFadeOutDuration: 0.6, // stops promptly once PLAY is tapped, but not instantly
+		prologueFadeOutDuration: 0.6, // stops promptly once the main menu is reached, but not instantly
 
 		themeSrc: "assets/audio/bg-music.mp3",
 		themeVolume: 0.22, // BGM bed — lower than SFX so bullets and explosions always sit clearly on top
 		themeLoop: true,
 		themeFadeInDuration: 1.0, // eases in on gameplay start/restart
 		themeFadeOutDuration: 0.7, // smooth stop on death, not an abrupt cut
+	}),
+
+	/**
+	 * One shared "button tapped" blip, played by core/UiSound.js's
+	 * `playButtonClick()` — every real button across every scene/panel
+	 * (mode buttons, panel open/close buttons, Shop/Codex buttons, HUD
+	 * icons, mission-select tiles, REVIVE, etc.) calls that same function
+	 * rather than each owning its own AudioPool, so this one config entry
+	 * tunes the feel of every button in the game at once.
+	 * Deliberately NOT used for full-screen "tap anywhere to continue"
+	 * dismissals (tutorial hints, the post-death "any other tap restarts"
+	 * fallback, mission-complete's tap-to-continue) — those aren't discrete
+	 * buttons, so they stay silent here. Also skipped on a button tap whose
+	 * underlying action is a no-op (an unaffordable Shop card, a locked
+	 * mission node) — same "reads as a disabled control" silence those
+	 * already used before this existed.
+	 */
+	ui: Object.freeze({
+		click: Object.freeze({
+			audioSrc: "assets/audio/click.mp3",
+			volume: 0.4,
+		}),
 	}),
 
 	/**

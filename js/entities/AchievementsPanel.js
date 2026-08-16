@@ -19,6 +19,7 @@ import { TRACKS, getTrackProgress, formatTrackValue, totalUnlockedTiers, totalTi
 import { getStats } from '../core/Stats.js';
 import { cornerBracketPath } from '../core/shapes.js';
 import { wrapText } from '../core/textLayout.js';
+import { playButtonClick } from '../core/UiSound.js';
 
 export class AchievementsPanel {
   constructor() {
@@ -55,13 +56,14 @@ export class AchievementsPanel {
   /** Same routing shape as EnemyCodex.handleTap. */
   handleTap(x, y) {
     if (this.isInsideButton(x, y)) {
+      playButtonClick();
       this._open = !this._open;
       this._cardAge = 0;
       return;
     }
     if (!this._open) return;
-    if (this._isInsideArrow(x, y, -1)) { this._page(-1); return; }
-    if (this._isInsideArrow(x, y, 1)) { this._page(1); return; }
+    if (this._isInsideArrow(x, y, -1)) { playButtonClick(); this._page(-1); return; }
+    if (this._isInsideArrow(x, y, 1)) { playButtonClick(); this._page(1); return; }
   }
 
   _page(direction) {

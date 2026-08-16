@@ -149,6 +149,7 @@
 import { Config } from '../core/Config.js';
 import { flickerAlpha } from '../core/animation.js';
 import { AudioPool } from '../core/AudioPool.js';
+import { playButtonClick } from '../core/UiSound.js';
 import { cornerBracketPath, heartbeatPath } from '../core/shapes.js';
 import { ScreenShake } from '../core/ScreenShake.js';
 import { consumeLuckyDrop, consumeShieldStart } from '../core/DailyReward.js';
@@ -662,7 +663,7 @@ export class GameplayScene {
       if (this._gameOverAge < Config.gameOver.minRestartDelay) return;
       if (this._isInsideReviveButton(x, y)) { this._tryRevive(); return; }
       if (this._isNearReviveButton(x, y)) return; // near-miss on the CTA — absorbed, not read as "restart"
-      if (this._isInsideShareButton(x, y)) { this._shareScore(); return; }
+      if (this._isInsideShareButton(x, y)) { playButtonClick(); this._shareScore(); return; }
       this._commitLifetimeStats();
       this._onGameOver?.();
       return;
@@ -673,11 +674,12 @@ export class GameplayScene {
       return;
     }
     if (this._playback.isInsideMuteButton(x, y)) {
+      playButtonClick();
       this._playback.toggleMute();
       return;
     }
     if (this._playback.isInsidePauseButton(x, y)) {
-      if (!this._codex.isOpen && !this._shop.isOpen) this._playback.togglePause();
+      if (!this._codex.isOpen && !this._shop.isOpen) { playButtonClick(); this._playback.togglePause(); }
       return;
     }
     if (this._codex.isInsideButton(x, y)) {
@@ -690,7 +692,7 @@ export class GameplayScene {
     // rather than being reinterpreted as "open" again.
     if (this._shop.isOpen) { this._shop.handleTap(x, y); return; }
     if (this.hud.isInsideGoldPanel(x, y)) {
-      if (!this._playback.isPaused && !this._codex.isOpen) this._shop.open();
+      if (!this._playback.isPaused && !this._codex.isOpen) { playButtonClick(); this._shop.open(); }
       return;
     }
     if (this._codex.isOpen) { this._codex.handleTap(x, y); return; }
@@ -711,6 +713,7 @@ export class GameplayScene {
     if (!this._playerSkill.ready) return;
     const { killCount, hitBoss } = this._waveManager.triggerSkillBomb();
     if (killCount === 0 && !hitBoss) return;
+    playButtonClick();
     this._playerSkill.use();
     this._screenShake.trigger(Config.playerSkill.useTrauma);
     this._hitStopTimer = Math.max(this._hitStopTimer, Config.hitStop.killDuration);
@@ -961,6 +964,7 @@ export class GameplayScene {
     if (this._continuesUsed >= Config.gameOver.continue.maxRevives) return;
     const cost = this._continueCost();
     if (this.hud.gold < cost) return;
+    playButtonClick();
     this.hud.gold -= cost;
     this._continuesUsed++;
 
