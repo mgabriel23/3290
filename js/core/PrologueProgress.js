@@ -1,7 +1,7 @@
 /**
  * PrologueProgress.js
  * Tracks whether a player has ever finished PrologueScene's opening
- * cinematic (the yearCard → portals → briefing → fadeOut beats) — backed by
+ * cinematic (the yearCard → briefing → fadeOut beats) — backed by
  * Storage.js's loadBool/saveBool, same `spaceShooter.` prefix every other
  * persisted flag (best score, gold, mission completion, Shop ownership)
  * already uses. The cinematic is deliberately unskippable and, per

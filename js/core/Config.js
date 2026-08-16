@@ -796,10 +796,10 @@ export const Config = Object.freeze({
 		 * a clean title card. Once the year finishes typing, a quiet second
 		 * line fades in beneath it (reusing the same flicker alpha — no new
 		 * fade state, see _renderYearCard) — the subtitle itself is the turn
-		 * (silence, then "it just ended"), so the very next beat (the portals
-		 * tearing open) reads as the thing that was just promised rather than
-		 * a surprise. A "three hundred years" motif the briefing beat echoes
-		 * back later.
+		 * (silence, then "it just ended"), so the very next beat (the sky
+		 * revealing itself and the commander's briefing cutting in) reads as
+		 * the thing that was just promised rather than a surprise. A "three
+		 * hundred years" motif the briefing beat echoes back later.
 		 */
 		yearCard: Object.freeze({
 			text: "EARTH — YEAR 3290",
@@ -820,85 +820,14 @@ export const Config = Object.freeze({
 		}),
 
 		/**
-		 * Beat 2: three wireframe vortices burst into the (now-visible) sky,
-		 * one after another (see Portal — identical spiral arms fanned
-		 * evenly around a small counter-spinning core, the whole assembly
-		 * growing and fading in with an ease-out "tearing open" animation).
-		 * An eerie violet, deliberately distinct from the player's
-		 * cyan/orange palette, so they read as something that doesn't belong.
-		 */
-		portals: Object.freeze({
-			color: "#9D7BFF",
-			lineWidth: 2,
-			glowBlur: 14, // reduced from 22 — blur cost scales roughly with area (radius²), so 14 vs 22 is ~60% cheaper per pass; still visibly glowing
-			appearDuration: 1.6, // seconds for one portal's grow-and-fade-in (also syncs the sky's own reveal — see PrologueScene._renderPortals)
-			staggerDelay: 1.2, // seconds between each portal starting its own appear animation
-			holdDuration: 1.8, // seconds all three linger after the last one finishes appearing
-
-			/** The swirling vortex body: one spiral-arm shape, baked once and re-stroked at evenly fanned rotations — see Portal._renderArms. */
-			spiral: Object.freeze({
-				armCount: 4,
-				innerRadius: 8, // virtual px — where each arm starts, near the core
-				outerRadius: 50, // virtual px — how far each arm reaches outward
-				turns: 1.4, // revolutions an arm sweeps through end to end — higher reads as "tighter"
-				segments: 28, // polyline resolution along the curve — higher = smoother
-				rotationSpeed: 1.2, // radians/second — the whole swirl's spin
-			}),
-
-			/** A small faceted "event horizon" at the very center, counter-spinning against the arms for a layered, alien feel. */
-			core: Object.freeze({ sides: 6, radius: 10, rotationSpeed: -2.4 }),
-
-			// Spread across the upper half — virtual-ratio coordinates — the
-			// briefing text anchors near the bottom edge and stays legible over
-			// any drifting sample enemy because it's drawn AFTER them, not
-			// because the two occupy separate screen regions — see `creatures`
-			// below and PrologueScene._renderBriefing's draw order.
-			positions: Object.freeze([
-				Object.freeze({ xRatio: 0.24, yRatio: 0.13 }),
-				Object.freeze({ xRatio: 0.8, yRatio: 0.26 }),
-			]),
-
-			/**
-			 * A stream of sample enemies emerges from each portal once its own
-			 * tear-open animation finishes — real DrifterEnemy instances, one of
-			 * its four variants (never a re-derived approximation, same
-			 * principle as EnemyCodex), giving physical proof to the briefing's
-			 * "things are already coming through them" instead of leaving the
-			 * portals empty. Each spawn independently rolls a random variant
-			 * from `species` — a portal isn't "the Weaver portal" forever, every
-			 * tear can produce any of the four. Each one fades in on spawn, then
-			 * drifts slowly toward (and eventually off) the bottom of the
-			 * screen — see PrologueScene._spawnCreature/_updateCreatures. Their
-			 * real update() (which would fly them off along their own formation
-			 * path) is deliberately never called — only `_age` advances, which
-			 * is all their idle tentacle-wave/eye-pulse animation needs — and
-			 * their angle is fixed facing straight down (toward the direction
-			 * they're drifting, not away from it).
-			 */
-			creatures: Object.freeze({
-				species: Object.freeze([
-					"drifter",
-					"sweeper",
-					"diver",
-					"weaver",
-				]), // the pool each spawn independently rolls a random pick from
-				spawnInterval: 7.0, // seconds between spawns from the same portal — kept slow/sparse, not a swarm
-				maxSpawnsPerPortal: 3, // total creatures one portal produces over the cinematic
-				fadeInDuration: 0.6, // seconds for a freshly spawned creature to reach full opacity
-				driftSpeed: 35, // virtual px/second, straight down — "slowly moving out of the screen"
-				offscreenMarginY: 60, // virtual px past the bottom edge before a drifting creature is culled
-			}),
-		}),
-
-		/**
-		 * Beat 3: the commander's voice cuts in over comms — a typewriter-
-		 * revealed briefing, staged centered near the bottom edge, while the
-		 * portals and their sample enemies keep churning above (PrologueScene
-		 * keeps everything alive and on screen through this beat — see
-		 * _renderBriefing). The text is legible over them because of DRAW
-		 * ORDER, not screen position: `_renderBriefing`/`_renderFadeOut` call
-		 * `_renderCreatures()` before `_renderBriefingText()`, so the text is
-		 * always painted on top, even if a drifting creature passes behind it.
+		 * Beat 2: the sky reveals itself (Starfield fading in — see
+		 * `skyFadeInDuration`) as the commander's voice cuts in over comms —
+		 * a typewriter-revealed briefing, centered in the middle of the
+		 * screen with a signal-interference flicker (see
+		 * PrologueScene._renderBriefingText/core/animation.js's
+		 * flickerAlpha) as its only visual effect — the whole transmission
+		 * reads as weak and on the edge of dropping out, no portals or
+		 * sample enemies needed to sell "something is wrong with the sky".
 		 * There's no skip control on this (or any) beat — the cinematic is
 		 * deliberately unskippable, see the `prologue` block's own doc above.
 		 *
@@ -932,7 +861,7 @@ export const Config = Object.freeze({
 			textColor: "#aab4d4",
 			lineHeight: 32, // virtual px between line baselines
 			sideMargin: 56, // virtual px — bounds the wrapped paragraph's width
-			bottomMargin: 64, // virtual px from the bottom edge to the newest line's baseline (see PrologueScene._briefingAnchorY) — sits low, beneath the portals
+			skyFadeInDuration: 1.6, // seconds for the Starfield to fade in once this beat starts
 			maxVisibleLines: 4, // the "subtitle window" never shows more than this many lines at once — older ones fall away as new ones reveal (see PrologueScene._renderBriefingText)
 			wordsPerSecond: 4.3, // the briefing reveals a whole word at a time, not letter by letter — see PrologueScene._updateBriefing for why that reads (and sounds) more like typing
 			holdDuration: 2.4, // seconds the finished briefing stays up before fading out — gives the trailing "..." room to actually read as a pause before the cut to black
@@ -955,11 +884,11 @@ export const Config = Object.freeze({
 			}),
 		}),
 
-		/** Beat 4: the assembled scene dissolves to black — see Renderer.clear's translucent-overlay technique. */
+		/** Beat 3: the assembled scene dissolves to black — see Renderer.clear's translucent-overlay technique. */
 		fadeOutDuration: 1.2,
 
 		/**
-		 * Beat 5: the title card. "3290" is the game's name, deliberately
+		 * Beat 4: the title card. "3290" is the game's name, deliberately
 		 * echoing the year established in the opening beat. PLAY is the
 		 * actual control gate — tapping it is what hands off to gameplay
 		 * (see PrologueScene.handleTap / Game._startGameplay). The title

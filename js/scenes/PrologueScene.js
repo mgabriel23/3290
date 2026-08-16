@@ -7,18 +7,13 @@
  *
  *   yearCard  → a stark "EARTH — YEAR 3290" title card types in, then a
  *               quiet second line fades in beneath it before both hold and fade out
- *   portals   → the sky reveals itself (Starfield, fading in alongside) and
- *               three wireframe "tears" burst into it, one by one — they
- *               need an actual sky to tear open in for the visual to read.
- *               Once a portal finishes tearing open, it starts emitting a
- *               small stream of real sample enemies — one of the four
- *               Drifter-family variants, picked at random per spawn (see
- *               _spawnCreature/_updateCreatures) — fading in, facing
- *               straight down, and drifting slowly toward (and off) the
- *               bottom of the screen, giving physical proof to the
- *               briefing's "things are already coming through them"
- *   briefing  → the commander's voice cuts in over comms — a typewriter-
- *               revealed briefing over that same sky
+ *   briefing  → the sky reveals itself (Starfield fading in) as the
+ *               commander's voice cuts in over comms — a typewriter-
+ *               revealed briefing, centered in the middle of the screen,
+ *               with the same signal-interference flicker the year card
+ *               and title beats use (see _renderBriefingText/flickerAlpha)
+ *               so it reads as a weak transmission that keeps almost
+ *               dropping out, not clean subtitles
  *   fadeOut   → the assembled scene — sky, text, and all — dissolves to black
  *   title     → "3290" — the game's name, deliberately doubling as the
  *               year the story is set in — appears with a PLAY button,
@@ -36,7 +31,7 @@
  *
  * The starfield is the same Starfield entity GameplayScene composes —
  * shared rather than duplicated since both scenes need the identical
- * drifting sky — but it only renders from "portals" onward: the year
+ * drifting sky — but it only renders from "briefing" onward: the year
  * card and title beats are deliberately plain void, framed like title
  * cards rather than views into space.
  *
@@ -59,9 +54,7 @@
  * it, once gameplay's own separate theme is ready to take over.
  */
 import { Config } from '../core/Config.js';
-import { Portal } from '../entities/Portal.js';
 import { Starfield } from '../entities/Starfield.js';
-import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath } from '../entities/DrifterEnemy.js';
 import { flickerAlpha } from '../core/animation.js';
 import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { cornerBracketPath, diamondPath } from '../core/shapes.js';
@@ -71,14 +64,6 @@ import { previewNextReward } from '../core/DailyReward.js';
 import { markPrologueSeen } from '../core/PrologueProgress.js';
 import { SettingsPanel } from '../entities/SettingsPanel.js';
 import { AchievementsPanel } from '../entities/AchievementsPanel.js';
-
-/** One path-factory per spawnable portal-creature variant — see _spawnCreature. */
-const _CREATURE_PATH_FACTORIES = {
-  drifter: createDrifterPath,
-  sweeper: createSweeperPath,
-  diver:   createDiverPath,
-  weaver:  createWeaverPath,
-};
 
 export class PrologueScene {
   /**
@@ -103,19 +88,6 @@ export class PrologueScene {
     this._yearHoldAge = 0;       // accumulates AFTER the text is fully typed (hold + fade-out)
 
     this._starfield = new Starfield();
-    this._portals = this._createPortals();
-    // One spawner per portal — each produces a small stream of creatures
-    // (not just one) over the cinematic, each independently rolling a
-    // random species from Config.prologue.portals.creatures.species at the
-    // moment it spawns (see _updateCreatures) rather than a portal being
-    // "the Weaver portal" forever. `active` holds the ones currently on
-    // screen (fading in / drifting down / not yet culled).
-    this._creatures = this._portals.map((portal) => ({
-      portal,
-      spawnTimer: 0,   // counts down to the next spawn; 0 = spawn as soon as the portal is ready
-      spawnCount: 0,   // how many this portal has produced so far, capped at maxSpawnsPerPortal
-      active: [],      // [{ instance, age }] — age drives the fade-in
-    }));
 
     // Wrapped up front (text and font never change), then split into
     // per-line word lists with each line's starting word-index recorded —
@@ -154,18 +126,8 @@ export class PrologueScene {
     this._beatAge += dt;
     this._starfield.update(dt); // always scrolling underneath, whether or not the current beat draws it
 
-    // The portals stay alive (and on screen — see _renderBriefing/_renderFadeOut)
-    // through every beat from their entrance onward, not just their own —
-    // gated here rather than always-on so their staggered appear timers don't
-    // start ticking (and finish) before "portals" actually begins to draw them.
-    if (this._beat !== 'yearCard') {
-      for (const portal of this._portals) portal.update(dt);
-      this._updateCreatures(dt);
-    }
-
     switch (this._beat) {
       case 'yearCard': return this._updateYearCard(dt);
-      case 'portals': return this._updatePortals();
       case 'briefing': return this._updateBriefing(dt);
       case 'fadeOut': return this._updateFadeOut();
       // Waits for a tap on PLAY (or the daily-reward CLAIM button, or the
@@ -238,7 +200,6 @@ export class PrologueScene {
   render() {
     switch (this._beat) {
       case 'yearCard': return this._renderYearCard();
-      case 'portals':  return this._renderPortals();
       case 'briefing': return this._renderBriefing();
       case 'fadeOut':  return this._renderFadeOut();
       // Mutually exclusive with the title/mode buttons — see
@@ -286,7 +247,7 @@ export class PrologueScene {
 
     // Phase 2 — hold then fade out; beat ends once both are done.
     this._yearHoldAge += dt;
-    if (this._yearHoldAge >= holdDuration + fadeOutDuration) this._advanceBeat('portals');
+    if (this._yearHoldAge >= holdDuration + fadeOutDuration) this._advanceBeat('briefing');
   }
 
   _renderYearCard() {
@@ -321,123 +282,7 @@ export class PrologueScene {
     }
   }
 
-  // --- Beat 2: portals ---------------------------------------------------------
-
-  _createPortals() {
-    const { positions, staggerDelay } = Config.prologue.portals;
-    const { width: vW, height: vH } = Config.virtual;
-    return positions.map(({ xRatio, yRatio }, i) => new Portal({
-      x: vW * xRatio,
-      y: vH * yRatio,
-      delay: i * staggerDelay,
-    }));
-  }
-
-  _updatePortals() {
-    // The portals themselves are advanced centrally in `update` (they stay
-    // alive through later beats too) — this just watches for the moment to
-    // hand off to the briefing beat.
-    const { appearDuration, staggerDelay, holdDuration } = Config.prologue.portals;
-    const lastAppearEnd = (this._portals.length - 1) * staggerDelay + appearDuration;
-    if (this._beatAge >= lastAppearEnd + holdDuration) this._advanceBeat('briefing');
-  }
-
-  /** The sky fades in alongside the portals — synced to their own appear timing so both reveal as one moment. */
-  _renderPortals() {
-    const { appearDuration } = Config.prologue.portals;
-    const skyAlpha = Math.min(this._beatAge / appearDuration, 1);
-
-    this.renderer.clear(Config.colors.void);
-    this._starfield.render(this.renderer, skyAlpha);
-    for (const portal of this._portals) portal.render(this.renderer);
-    this._renderCreatures();
-  }
-
-  /**
-   * Build one real DrifterEnemy instance for a portal, pinned at that
-   * portal's position rather than wherever its formation path would
-   * normally start it. `species` picks which of the four variants (each
-   * just needs its own real path-factory to get the right `_palette`/
-   * body-shape-adjacent config — see DrifterEnemy's variant system) —
-   * `_updateCreatures` never actually advances it along that path, so the
-   * path's own starting point is irrelevant, only its `variant` matters.
-   * Angle is fixed at `Math.PI`: local -y (the body's dome/"face") maps to
-   * world +y at that angle, i.e. facing straight down — the direction
-   * these creatures drift, not away from it.
-   */
-  _spawnCreature(species, x, y) {
-    const path = _CREATURE_PATH_FACTORIES[species]();
-    const d = new DrifterEnemy(path, 0, 0);
-    d.x = x; d.y = y; d._angle = Math.PI; d._cosA = -1; d._sinA = 0;
-    return d;
-  }
-
-  /**
-   * Each portal spawns a small stream of creatures (not just one) once it
-   * finishes tearing open: a new one every `spawnInterval`, up to
-   * `maxSpawnsPerPortal` — each independently rolling a random variant from
-   * `creatures.species` at the moment it spawns, so a single portal isn't
-   * "the Weaver portal" forever. Their real update() (which would fly them
-   * off along their own formation path) is deliberately never called —
-   * only `_age` advances, which is all their idle tentacle-wave/eye-pulse
-   * animation needs — and every creature also drifts straight down at a
-   * fixed `driftSpeed`, independent of that path. Once a creature drifts
-   * past the bottom edge (plus a margin) it's dropped from `active` — same
-   * in-place compaction WaveManager itself uses for its enemy list.
-   */
-  _updateCreatures(dt) {
-    const { appearDuration, creatures } = Config.prologue.portals;
-    const { height: vH } = Config.virtual;
-    const { species, spawnInterval, maxSpawnsPerPortal, driftSpeed, offscreenMarginY } = creatures;
-    const cullY = vH + offscreenMarginY;
-
-    for (const spawner of this._creatures) {
-      const portalReady = spawner.portal._age - spawner.portal.delay >= appearDuration;
-      if (portalReady && spawner.spawnCount < maxSpawnsPerPortal) {
-        spawner.spawnTimer -= dt;
-        if (spawner.spawnTimer <= 0) {
-          const pick = species[Math.floor(Math.random() * species.length)];
-          spawner.active.push({
-            instance: this._spawnCreature(pick, spawner.portal.x, spawner.portal.y),
-            age: 0,
-          });
-          spawner.spawnCount++;
-          spawner.spawnTimer = spawnInterval;
-        }
-      }
-
-      let w = 0;
-      for (let i = 0; i < spawner.active.length; i++) {
-        const entry = spawner.active[i];
-        const inst  = entry.instance;
-        entry.age += dt;
-        if (inst.alive) {
-          inst._age += dt; // idle tentacle-wave/eye-pulse animation only — see _spawnCreature
-          inst.y += driftSpeed * dt;
-        }
-        if (inst.alive && inst.y < cullY) {
-          if (w !== i) spawner.active[w] = entry;
-          w++;
-        }
-      }
-      spawner.active.length = w;
-    }
-  }
-
-  _renderCreatures() {
-    const { fadeInDuration } = Config.prologue.portals.creatures;
-    for (const spawner of this._creatures) {
-      for (const entry of spawner.active) {
-        const inst = entry.instance;
-        if (!inst.alive) continue;
-        const alpha = Math.min(entry.age / fadeInDuration, 1);
-        inst.renderBody(this.renderer, alpha);
-        inst.render(this.renderer, alpha);
-      }
-    }
-  }
-
-  // --- Beat 3: briefing ---------------------------------------------------------
+  // --- Beat 2: briefing ---------------------------------------------------------
 
   /** Greedy word-wrap using real glyph metrics — same technique the typewriter overlay this superseded used. */
   _wrapBriefing(renderer) {
@@ -477,27 +322,25 @@ export class PrologueScene {
     }
   }
 
-  /** The portals stay on screen, still churning above, while the commander's voice plays out below them. */
+  /** The sky fades in as the transmission starts — see Config.prologue.briefing.skyFadeInDuration. */
   _renderBriefing() {
+    const skyAlpha = Math.min(this._beatAge / Config.prologue.briefing.skyFadeInDuration, 1);
     this.renderer.clear(Config.colors.void);
-    this._starfield.render(this.renderer);
-    for (const portal of this._portals) portal.render(this.renderer);
-    this._renderCreatures();
+    this._starfield.render(this.renderer, skyAlpha);
     this._renderBriefingText(Math.floor(this._revealedWordCount));
   }
 
   /**
-   * Centered, in a small fixed-size "subtitle window" anchored near the
-   * bottom edge: the line currently being revealed always sits at
-   * `_briefingAnchorY`, with up to `maxVisibleLines - 1` finished lines
-   * stacked above it. Once a new line begins, the oldest visible one
-   * simply stops being drawn — so a long briefing never grows taller
-   * than the window, it just keeps scrolling its newest line into a
-   * fixed slot (unlike the corner-anchored overlay this superseded,
-   * which had to fit its whole paragraph on screen at once). Drawn AFTER
-   * `_renderCreatures()` in both `_renderBriefing`/`_renderFadeOut` — that
-   * draw order, not screen position, is what keeps the text legible on
-   * top of the portal creatures rather than being covered by them.
+   * Centered in the middle of the screen: the line currently being
+   * revealed always sits at `_briefingAnchorY`, with up to
+   * `maxVisibleLines - 1` finished lines stacked above it — so a long
+   * briefing never grows taller than the window, it just keeps scrolling
+   * its newest line into a fixed slot. A signal-interference flicker (the
+   * same technique `_renderYearCard`/`_renderTitleText` use — see
+   * core/animation.js's flickerAlpha) is layered over every visible line
+   * so the whole transmission looks like it's on the edge of dropping out,
+   * not clean, reliable subtitles — the only visual effect left standing
+   * in for the portals/creatures this beat used to show.
    */
   _renderBriefingText(revealedWordCount) {
     const { font, textColor, lineHeight, maxVisibleLines } = Config.prologue.briefing;
@@ -505,6 +348,7 @@ export class PrologueScene {
     const anchorY = this._briefingAnchorY();
     const currentLine = this._currentBriefingLine(revealedWordCount);
     const firstVisibleLine = Math.max(0, currentLine - maxVisibleLines + 1);
+    const flicker = flickerAlpha(this._beatAge, [7.3, 11.7, 19.1], [2.0, 0.8], 0.8, 0.85);
 
     for (let i = firstVisibleLine; i <= currentLine; i++) {
       const words = this._briefingLineWords[i];
@@ -516,13 +360,15 @@ export class PrologueScene {
         font,
         color: textColor,
         align: 'center',
+        alpha: flicker,
       });
     }
   }
 
-  /** The fixed baseline the most-recently-revealed line always sits at — `bottomMargin` above the bottom edge, regardless of how long the briefing runs. */
+  /** The baseline the most-recently-revealed line sits at, offset above the vertical center by half the stacked block's height so the full window of lines reads as centered on screen, not just its newest line. */
   _briefingAnchorY() {
-    return Config.virtual.height - Config.prologue.briefing.bottomMargin;
+    const { lineHeight, maxVisibleLines } = Config.prologue.briefing;
+    return Config.virtual.height * 0.5 + ((maxVisibleLines - 1) / 2) * lineHeight;
   }
 
   /** Index of the line the reveal is currently inside (or resting on, once finished). `_briefingLineWordOffsets` is ascending, so the last one at or before `revealedWordCount` wins. */
@@ -546,7 +392,7 @@ export class PrologueScene {
     this._blipPool.play();
   }
 
-  // --- Beat 4: fade to black -----------------------------------------------------
+  // --- Beat 3: fade to black -----------------------------------------------------
 
   _updateFadeOut() {
     if (this._beatAge >= Config.prologue.fadeOutDuration) {
@@ -558,19 +404,17 @@ export class PrologueScene {
     }
   }
 
-  /** Redraw the briefing's final frame — sky, portals, and all — then lay an ever-darkening overlay on top — see Renderer.clear's alpha. */
+  /** Redraw the briefing's final frame — sky and text — then lay an ever-darkening overlay on top — see Renderer.clear's alpha. */
   _renderFadeOut() {
     this.renderer.clear(Config.colors.void);
     this._starfield.render(this.renderer);
-    for (const portal of this._portals) portal.render(this.renderer);
-    this._renderCreatures();
     this._renderBriefingText(this._briefingWordCount);
 
     const overlayAlpha = Math.min(this._beatAge / Config.prologue.fadeOutDuration, 1);
     this.renderer.clear(Config.colors.void, overlayAlpha);
   }
 
-  // --- Beat 5: title + PLAY --------------------------------------------------------
+  // --- Beat 4: title + PLAY --------------------------------------------------------
 
   /**
    * Pre-bake all title-beat geometry into flat path arrays. All positions are
@@ -751,7 +595,7 @@ export class PrologueScene {
     });
   }
 
-  // --- Beat 6: exit fade (a mode button tapped → black → onContinue) -----------------
+  // --- Beat 5: exit fade (a mode button tapped → black → onContinue) -----------------
 
   _updateExitFade() {
     if (this._beatAge >= Config.prologue.title.exitFadeDuration) this.onContinue(this._chosenMode);

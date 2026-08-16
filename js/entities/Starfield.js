@@ -3,9 +3,8 @@
  * The drifting, seamlessly-looping layered backdrop shared by every
  * scene that needs to feel like it's set against open space. Originally
  * authored inline as GameplayScene's permanent backdrop; extracted into
- * its own composed entity (the same shape as Player/Portal) once
- * PrologueScene needed the same sky behind its "portals" beat onward —
- * the tears need an actual sky to tear open in.
+ * its own composed entity (the same shape as Player) once PrologueScene
+ * needed the same sky behind its "briefing" beat onward.
  *
  * Performance: each parallax layer is baked ONCE to an off-screen
  * canvas tile (see _bakeTile — drawing straight to the tile's own 2D
