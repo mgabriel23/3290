@@ -971,6 +971,16 @@ export const Config = Object.freeze({
 			fadeInDuration: 1.0,
 			exitFadeDuration: 0.55, // seconds — black veil that falls over the title when a mode button is tapped
 
+			// One-shot sting that plays shortly after the main menu (this title
+			// card) is reached — see PrologueScene._updateMenuAudio, driven off
+			// `_beatAge` so it lands `menuAudioDelay` seconds into the beat
+			// rather than in the same instant as the title's own fade-in.
+			// AudioPool never loops a clip on its own, so this fires exactly
+			// once per arrival rather than repeating.
+			menuAudioSrc: "assets/audio/menu.mp3",
+			menuAudioVolume: 0.7,
+			menuAudioDelay: 0.6,
+
 			/**
 			 * Two stacked buttons replace the old single PLAY button — the
 			 * player's very first choice is which mode to enter (see

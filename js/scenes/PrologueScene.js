@@ -54,8 +54,9 @@
  * starts (from `_updateFadeOut`, or immediately in the constructor for a
  * `devSkipToTitle` boot that starts there directly), and `Game` owns the
  * actual fade since it owns the Audio element (see `Game._startPrologue`).
- * The main menu itself, and everything after it, plays in silence until
- * gameplay's own separate theme starts.
+ * The main menu itself plays one short one-shot sting the instant it's
+ * reached (`_menuAudio`, Config.prologue.title.menuAudioSrc) and is
+ * otherwise silent, all the way through to gameplay's own separate theme.
  */
 import { Config } from '../core/Config.js';
 import { Starfield } from '../entities/Starfield.js';
@@ -129,6 +130,13 @@ export class PrologueScene {
     // here rather than in gameplay's HUD button row).
     this._achievementsPanel = new AchievementsPanel();
 
+    // One-shot sting for arriving at the main menu (title card) — see
+    // Config.prologue.title.menuAudioSrc's own doc. Actually fired from
+    // `_updateMenuAudio`, gated to the 'title' case in `update` below, once
+    // `menuAudioDelay` seconds of `_beatAge` have passed.
+    this._menuAudio = new AudioPool(Config.prologue.title.menuAudioSrc, 4, Config.prologue.title.menuAudioVolume);
+    this._menuAudioPlayed = false;
+
     // A devSkipToTitle boot starts life already on the 'title' beat, so it
     // never passes through `_updateFadeOut` below — fire the "reached the
     // main menu" signal here instead, so the prologue music fades out just
@@ -149,11 +157,27 @@ export class PrologueScene {
       // Settings ⚙, if either is showing/open) — see handleTap. Both panels
       // only have anything to animate while they're actually open/visible.
       case 'title':
+        this._updateMenuAudio();
         this._dailyRewardPanel.update(dt);
         this._settingsPanel.update(dt);
         return this._achievementsPanel.update(dt);
       case 'exitFade': return this._updateExitFade();
     }
+  }
+
+  /**
+   * Fires the menu sting once `menuAudioDelay` seconds into the 'title'
+   * beat (`_beatAge`, reset to 0 by `_advanceBeat`/the devSkipToTitle
+   * constructor path covers both ways of arriving here) — a short beat of
+   * silence first reads better than the sting landing in the exact same
+   * instant as the title card's own fade-in. `_menuAudioPlayed` latches so
+   * it never re-fires for the rest of this beat.
+   */
+  _updateMenuAudio() {
+    if (this._menuAudioPlayed) return;
+    if (this._beatAge < Config.prologue.title.menuAudioDelay) return;
+    this._menuAudioPlayed = true;
+    this._menuAudio.play();
   }
 
   /**
