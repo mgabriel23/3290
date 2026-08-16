@@ -105,7 +105,11 @@ export class AchievementsPanel {
     const progress = getTrackProgress(track, stats);
     const alpha = Math.min(this._cardAge / cfg.fadeInDuration, 1);
 
-    renderer.clear(Config.colors.void, cfg.dimAlpha);
+    // Fully opaque, not a translucent dim — this sits over the still-live,
+    // still-animating title screen (not a frozen frame like codex/pause), so
+    // a see-through veil let the menu bleed through. Same "separate full
+    // screen" precedent as DailyRewardPanel's own opaque `clear`.
+    renderer.clear(Config.colors.void);
 
     renderer.drawText('ACHIEVEMENTS', vW / 2, cfg.titleY, {
       font: cfg.titleFont, color: cfg.titleColor, alpha,

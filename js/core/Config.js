@@ -4876,7 +4876,6 @@ export const Config = Object.freeze({
 		}),
 		tierLabels: Object.freeze(["I", "II", "III"]),
 		overlay: Object.freeze({
-			dimAlpha: 0.85,
 			fadeInDuration: 0.2,
 
 			titleFont: '400 16px "Audiowide", "Courier New", monospace',
@@ -5045,7 +5044,6 @@ export const Config = Object.freeze({
 			pulseDepth: 0.3,
 		}),
 		overlay: Object.freeze({
-			dimAlpha: 0.85,
 			fadeInDuration: 0.2,
 
 			titleFont: '400 16px "Audiowide", "Courier New", monospace',

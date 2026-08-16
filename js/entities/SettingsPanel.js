@@ -188,7 +188,11 @@ export class SettingsPanel {
     const { width: vW } = Config.virtual;
     const alpha = Math.min(this._overlayAge / cfg.fadeInDuration, 1);
 
-    renderer.clear(Config.colors.void, cfg.dimAlpha * alpha);
+    // Fully opaque, not a translucent dim — this sits over the still-live,
+    // still-animating title screen (not a frozen frame like codex/pause), so
+    // a see-through veil let the menu bleed through. Same "separate full
+    // screen" precedent as DailyRewardPanel's own opaque `clear`.
+    renderer.clear(Config.colors.void);
     renderer.drawText('SETTINGS', vW / 2, cfg.titleY, {
       font: cfg.titleFont, color: cfg.titleColor, alpha,
     });

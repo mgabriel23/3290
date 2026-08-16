@@ -253,7 +253,12 @@ export class PrologueScene {
         this._renderTitle();
         this._settingsPanel.render(this.renderer);
         this._achievementsPanel.render(this.renderer);
-        return this._renderDailyRewardBadge();
+        // Settings/achievements now paint a fully opaque backdrop (see their
+        // own class docs), so this reminder must stay hidden while either is
+        // open — otherwise it reads as a stray title-screen element floating
+        // on top of the modal instead of behind it.
+        if (!this._settingsPanel.isOpen && !this._achievementsPanel.isOpen) this._renderDailyRewardBadge();
+        return;
       case 'exitFade': return this._renderExitFade();
     }
   }
