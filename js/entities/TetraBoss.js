@@ -1,8 +1,9 @@
 /**
  * TetraBoss.js
  * Boss #5 — "Tetra". Spawned by WaveManager on every 5th boss-level
- * encounter (level 35, 70, ... — see Config.boss.roster and WaveManager's
- * boss-selection lookup in its constructor). An original rotating-square
+ * encounter (level 35, 70, ... under Survival Mode's canonical schedule —
+ * see Config.bossSchedule[mode].roster and WaveManager's boss-selection
+ * lookup in its constructor). An original rotating-square
  * silhouette (see TETRA_HULL_PTS below — a plain 4-sided polygon, not a
  * reskin of any existing enemy, same "original hull" lineage as Spiral),
  * spinning continuously while patrolling a slow bouncing path around the

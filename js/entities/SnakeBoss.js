@@ -1,8 +1,9 @@
 /**
  * SnakeBoss.js
  * Boss #4 — "Snake". Spawned by WaveManager on every 4th boss-level
- * encounter (level 28, 56, ... — see Config.boss.roster and WaveManager's
- * boss-selection lookup in its constructor). This class IS the chain's
+ * encounter (level 28, 56, ... under Survival Mode's canonical schedule —
+ * see Config.bossSchedule[mode].roster and WaveManager's boss-selection
+ * lookup in its constructor). This class IS the chain's
  * FRONT segment (chain index 0) — the actual boss, with its own health/
  * reward/health-bar, same as every other boss — and also OWNS/coordinates
  * the whole chain behind it (`SnakeSegment.js`, pushed into WaveManager's

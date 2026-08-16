@@ -1,8 +1,9 @@
 /**
  * SpiralBoss.js
  * Boss #2 — "Spiral". Spawned by WaveManager on every OTHER boss-level
- * encounter (level 14, 42, ... — see Config.boss.roster and WaveManager's
- * boss-selection lookup in its constructor). An original radial-turret/orb
+ * encounter (level 14, 42, ... under Survival Mode's canonical schedule —
+ * see Config.bossSchedule[mode].roster and WaveManager's boss-selection
+ * lookup in its constructor). An original radial-turret/orb
  * silhouette (see SPIRAL_HULL_PTS below — a symmetric N-pointed star/gear),
  * unlike Boss #1's giant-Scout reskin: no other enemy in the game is
  * circular, so this reads as a wholly different kind of threat.

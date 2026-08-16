@@ -1,8 +1,9 @@
 /**
  * PulsorBoss.js
  * Boss #7 — "Pulsor". Spawned by WaveManager on every 7th boss-level
- * encounter (level 49, 98, ... — see Config.boss.roster and WaveManager's
- * boss-selection lookup in its constructor). The first CIRCULAR hull (see
+ * encounter (level 49, 98, ... under Survival Mode's canonical schedule —
+ * see Config.bossSchedule[mode].roster and WaveManager's boss-selection
+ * lookup in its constructor). The first CIRCULAR hull (see
  * `_renderHull` below — a plain stroked+filled circle via Renderer's
  * `fillEllipse`/`strokeCircle` primitives, not a polygon, so unlike every
  * other boss/enemy it can't reuse EnemyCombat.js's `renderHull`), patrolling

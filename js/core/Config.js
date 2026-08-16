@@ -439,16 +439,65 @@ export const Config = Object.freeze({
 	 * Mission Mode — a discrete, one-level-at-a-time alternative to the
 	 * default endless Survival Mode (see PrologueScene's two title buttons,
 	 * MissionSelectScene.js, MissionProgress.js). Mission N plays exactly
-	 * Config.waves.levels[N-1] (the same wave content Survival Mode's level
-	 * N would) via GameplayScene constructed with `{ mode: 'mission', level:
-	 * N }`, and ends the instant that single level's wave clears — no
-	 * auto-advance to N+1 like Survival Mode does. `count` starts small
-	 * on purpose ("we can broaden it later" — only the first 3 of
-	 * Config.waves.levels' 30 entries are reachable this way for now);
-	 * bump it whenever more missions are ready.
+	 * Config.missionWaves.levels[N-1] via GameplayScene constructed with
+	 * `{ mode: 'mission', level: N }`, and ends the instant that single
+	 * level's wave clears — no auto-advance to N+1 like Survival Mode does.
+	 * Mission Mode's wave content (Config.missionWaves) and boss schedule
+	 * (Config.bossSchedule.mission) are deliberately SEPARATE from Survival
+	 * Mode's (Config.waves, Config.bossSchedule.survival) — see
+	 * WaveManager's `mode`-driven `_resolveLevelAndBoss` — so either mode's
+	 * pacing/composition can be tuned without touching the other. `count`
+	 * starts small on purpose ("we can broaden it later" — only the first 3
+	 * entries of Config.missionWaves.levels are reachable this way for
+	 * now); bump it (and add a matching entry to Config.missionWaves.levels)
+	 * whenever more missions are ready.
 	 */
 	mission: Object.freeze({
 		count: 3,
+	}),
+
+	/**
+	 * Mission Mode's own wave content — same shape as Config.waves
+	 * (`{ simultaneous, levels: [...] }`; see that key's doc for the
+	 * per-level `enemies` group shape), kept as a fully independent array
+	 * so mission levels can diverge from whatever Survival Mode plays at
+	 * the same level number (see Config.mission's doc for why). Currently
+	 * seeded as a straight copy of Config.waves.levels[0..2] — this mode's
+	 * initial 3 missions — safe to edit freely from here on, since nothing
+	 * else reads Config.waves for Mission Mode anymore.
+	 */
+	missionWaves: Object.freeze({
+		simultaneous: true,
+		levels: Object.freeze([
+			// Mission 1 — {Scout}.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 3, spawnInterval: 2.5 }),
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 2.2 }),
+					Object.freeze({ type: "scout", count: 3, spawnInterval: 2.0 }),
+				]),
+			}),
+			// Mission 2 — {Scout, Rocketeer}.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 3, spawnInterval: 2.3 }),
+					Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.6 }),
+					Object.freeze({ type: "scout", count: 3, spawnInterval: 2.0 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 2.3 }),
+				]),
+			}),
+			// Mission 3 — {Scout, Rocketeer, Diver}.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 3, spawnInterval: 2.3 }),
+					Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.6 }),
+					Object.freeze({ type: "diver", count: 1, spawnInterval: 3.5 }),
+					Object.freeze({ type: "scout", count: 2, spawnInterval: 2.0 }),
+					Object.freeze({ type: "diver", count: 1, spawnInterval: 3.5 }),
+					Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.3 }),
+				]),
+			}),
+		]),
 	}),
 
 	/**
@@ -2464,8 +2513,8 @@ export const Config = Object.freeze({
 				]),
 			}),
 			// Level 7 — {Scout, Rocketeer, Sniper, Bouncer, Diver}. Every 7th
-			// level is a boss level (see Config.boss.everyNLevels) — WaveManager
-			// checks that BEFORE ever reading this array, so this entry (and
+			// level is a boss level (see Config.bossSchedule.survival.everyNLevels)
+			// — WaveManager checks that BEFORE ever reading this array, so this entry (and
 			// every other multiple of 7 below) never actually plays while that
 			// stays true. Kept as a real, playable config anyway rather than a
 			// placeholder — everyNLevels has already changed more than once
@@ -2656,8 +2705,8 @@ export const Config = Object.freeze({
 			// reskins) are on screen together — the family's completion, played
 			// as one deliberate spectacle rather than a rule to avoid. Originally
 			// level 7, moved here once every 7th level became a boss level (see
-			// Config.boss.everyNLevels) — this is the first level of "act two",
-			// right after the player's first boss kill.
+			// Config.bossSchedule.survival.everyNLevels) — this is the first
+			// level of "act two", right after the player's first boss kill.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -2761,8 +2810,8 @@ export const Config = Object.freeze({
 			}),
 			// Level 14 — {Scout, Sniper, Rocketeer, Bouncer}. A boss level (see
 			// the comment on level 7's entry above for why this never actually
-			// plays while Config.boss.everyNLevels stays 7 — kept as a real
-			// config for the same reason).
+			// plays while Config.bossSchedule.survival.everyNLevels stays 7 —
+			// kept as a real config for the same reason).
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3381,12 +3430,89 @@ export const Config = Object.freeze({
 	}),
 
 	/**
+	 * Per-mode boss encounter SCHEDULE — WHEN a boss level occurs
+	 * (`everyNLevels`) and WHICH boss appears (`roster`, cycling once every
+	 * boss has had a turn), kept fully independent per mode so Survival
+	 * Mode's pacing can be tuned without touching Mission Mode's and vice
+	 * versa (see Config.mission's doc for why the two modes' content is
+	 * deliberately kept apart). The boss DESIGNS themselves — stats,
+	 * visuals, attack patterns (`Config.boss.scout1`/`spiral`/.../`electron`
+	 * below) — are mode-agnostic and shared by both schedules; only the
+	 * "every Nth level, in this order" scheduling lives here. See
+	 * WaveManager's `_resolveLevelAndBoss` for how its `mode` argument
+	 * selects `survival` vs `mission` below, and GameplayScene's
+	 * boss-level-intro check (`_renderLevelIntro`) for the other read site.
+	 */
+	bossSchedule: Object.freeze({
+		survival: Object.freeze({
+			// NOTE: everyNLevels/roster below are currently hand-tweaked for
+			// local playtesting (forces every level to be a boss level, Tetra
+			// moved to the front) — canonical shipped values are
+			// `everyNLevels: 7` and roster starting with 'scout1'; revert
+			// before shipping. `nova` is appended at the end regardless, so
+			// it's in rotation either way.
+			everyNLevels: 1,
+			roster: Object.freeze([
+				"electron",
+				"phoenix",
+				"scout1",
+				"snake",
+				"spiral",
+				"bouncerPrimal",
+				"tetra",
+				"nova",
+				"pulsor",
+				"zigzag",
+				"pulsor",
+				"nova",
+				"tetra",
+				"scout1",
+				"spiral",
+				"bouncerPrimal",
+				"snake",
+				"phoenix",
+				"electron",
+			]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/8th/9th/10th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[7] "zigzag", 63→roster[8] "phoenix", 70→roster[9] "electron", 77→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
+		}),
+		// Seeded as an exact copy of `survival` above for now (see
+		// Config.mission's doc) — free to diverge on its own from here on,
+		// e.g. a smaller everyNLevels so the mission-3 finale is a boss, or a
+		// roster that never repeats scout1 first, without touching Survival
+		// Mode's schedule at all.
+		mission: Object.freeze({
+			everyNLevels: 1,
+			roster: Object.freeze([
+				"electron",
+				"phoenix",
+				"scout1",
+				"snake",
+				"spiral",
+				"bouncerPrimal",
+				"tetra",
+				"nova",
+				"pulsor",
+				"zigzag",
+				"pulsor",
+				"nova",
+				"tetra",
+				"scout1",
+				"spiral",
+				"bouncerPrimal",
+				"snake",
+				"phoenix",
+				"electron",
+			]),
+		}),
+	}),
+
+	/**
 	 * Boss encounters — a single, much tougher enemy that completely
-	 * replaces the normal level roster every `everyNLevels` levels (7, 14,
-	 * 21, ...). Checked against the raw level number in WaveManager rather
-	 * than read from `waves.levels` above (which only defines 30 entries and
-	 * caps at the last one forever), so boss levels keep recurring past
-	 * level 30 too.
+	 * replaces the normal level roster on a boss level (see the per-mode
+	 * `Config.bossSchedule` above for WHEN/WHICH — this key only holds the
+	 * boss DESIGNS themselves, shared by every mode). Checked against the
+	 * raw level number in WaveManager rather than read from `waves.levels`
+	 * above (which only defines 30 entries and caps at the last one
+	 * forever), so boss levels keep recurring past level 30 too.
 	 *
 	 * `scout1` is the first boss ("Scout Prime") — a giant reskin of the
 	 * Scout hull (BossEnemy.js reuses SCOUT_HULL_PTS's exact authored
@@ -3402,33 +3528,6 @@ export const Config = Object.freeze({
 	 * later addition.
 	 */
 	boss: Object.freeze({
-		// NOTE: everyNLevels/roster below are currently hand-tweaked for local
-		// playtesting (forces every level to be a boss level, Tetra moved to
-		// the front) — canonical shipped values are `everyNLevels: 7` and
-		// roster starting with 'scout1'; revert before shipping. `nova` is
-		// appended at the end regardless, so it's in rotation either way.
-		everyNLevels: 1,
-		roster: Object.freeze([
-			"electron",
-			"phoenix",
-			"scout1",
-			"snake",
-			"spiral",
-			"bouncerPrimal",
-			"tetra",
-			"nova",
-			"pulsor",
-			"zigzag",
-			"pulsor",
-			"nova",
-			"tetra",
-			"scout1",
-			"spiral",
-			"bouncerPrimal",
-			"snake",
-			"phoenix",
-			"electron",
-		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/8th/9th/10th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[7] "zigzag", 63→roster[8] "phoenix", 70→roster[9] "electron", 77→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		// Fraction of a boss's OWN max health the player's skill bomb deals

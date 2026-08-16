@@ -1,8 +1,9 @@
 /**
  * BossEnemy.js
  * The first boss encounter ("Scout Prime") — spawned by WaveManager every
- * `Config.boss.everyNLevels` levels in place of that level's normal roster
- * (see WaveManager's boss-level branch in its constructor/`_spawnNext`). A
+ * `Config.bossSchedule[mode].everyNLevels` levels in place of that level's
+ * normal roster (see WaveManager's boss-level branch in its
+ * constructor/`_spawnNext`). A
  * giant reskin of the Scout hull — the exact same authored proportions as
  * Enemy.js's SCOUT_HULL_PTS, just parameterized by a much bigger `size` (see
  * BOSS_HULL_PTS below) — whose attack is a cycle through the three

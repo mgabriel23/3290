@@ -1,8 +1,9 @@
 /**
  * PhoenixBoss.js
  * Boss #9 — "Phoenix". Spawned by WaveManager on every 9th boss-level
- * encounter (level 63, 126, ... — see Config.boss.roster and WaveManager's
- * boss-selection lookup in its constructor). An original swept-wing,
+ * encounter (level 63, 126, ... under Survival Mode's canonical schedule —
+ * see Config.bossSchedule[mode].roster and WaveManager's boss-selection
+ * lookup in its constructor). An original swept-wing,
  * forked-tail bird silhouette (see PHOENIX_HULL_PTS below — not a reskin,
  * same "original hull" lineage as Spiral/Tetra/Nova/Pulsor/Zigzag, but the
  * first of that lineage that isn't a regular polygon). Reuses the ship-

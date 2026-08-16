@@ -393,7 +393,7 @@ export class GameplayScene {
     // Transition from intro → active once the indicator animation is done
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
       this._levelState  = 'active';
-      this._waveManager = new WaveManager(this._level, this.barrier, this.hud, this._screenShake, this._powerUps, this._goldPickups, this._dropChanceMultiplier);
+      this._waveManager = new WaveManager(this._mode, this._level, this.barrier, this.hud, this._screenShake, this._powerUps, this._goldPickups, this._dropChanceMultiplier);
     }
 
     this.barrier.update(effectiveDt);
@@ -1021,7 +1021,7 @@ export class GameplayScene {
       font, color, alpha, glowBlur,
     });
 
-    if (this._level % Config.boss.everyNLevels === 0) {
+    if (this._level % Config.bossSchedule[this._mode].everyNLevels === 0) {
       const b = Config.boss.intro;
       this.renderer.drawText(b.text, vW / 2, vH / 2 + jitter + b.offsetY, {
         font: b.font, color: dangerColor(b.color), alpha, glowBlur: b.glowBlur,

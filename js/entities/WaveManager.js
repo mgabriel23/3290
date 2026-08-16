@@ -44,13 +44,22 @@
  * bullet hit uses, so it's a real kill (reward, explosion, SFX and all),
  * not a separate mechanic.
  *
- * Every `Config.boss.everyNLevels`th level (7, 14, 21, ...) is a boss level
- * — the constructor swaps in a synthetic one-group `_waveCfg` (`{ type:
- * 'boss', count: 1 }`) instead of reading `Config.waves.levels`, so the
- * existing spawn machinery (`_spawnNext`/`_groupForIdx`) builds a single
- * boss instance the same way it builds any other group. WHICH boss is read
- * off `Config.boss.roster`, cycling once every boss has had a turn (level
- * 7 → roster[0] "scout1", 14 → roster[1] "spiral", 21 → roster[2]
+ * Wave content AND boss scheduling are resolved independently per MODE
+ * (constructor's `mode`, `'survival'` or `'mission'`) — Survival Mode reads
+ * `Config.waves`/`Config.bossSchedule.survival`, Mission Mode reads
+ * `Config.missionWaves`/`Config.bossSchedule.mission` — entirely separate
+ * config objects, so either mode's per-level enemy composition or boss
+ * cadence can be tuned without touching the other (see `_resolveLevelAndBoss`
+ * and Config.mission's own doc for why they're kept apart).
+ *
+ * Every `everyNLevels`th level (per the active mode's schedule above) is a
+ * boss level — the constructor swaps in a synthetic one-group `_waveCfg`
+ * (`{ type: 'boss', count: 1 }`) instead of reading the mode's normal
+ * `levels` array, so the existing spawn machinery (`_spawnNext`/
+ * `_groupForIdx`) builds a single boss instance the same way it builds any
+ * other group. WHICH boss is read off the active mode's `roster`, cycling
+ * once every boss has had a turn (under Survival Mode's canonical schedule:
+ * level 7 → roster[0] "scout1", 14 → roster[1] "spiral", 21 → roster[2]
  * "bouncerPrimal", 28 → roster[3] "snake", 35 → roster[4] "tetra", 42 →
  * roster[5] "nova", 49 → roster[6] "pulsor", 56 → roster[7] "zigzag", 63 →
  * roster[8] "phoenix", 70 → roster[9] "electron", 77 → roster[0] again, ...)
@@ -118,8 +127,8 @@ import { recordKill } from '../core/Stats.js';
 // never-lethal damage a boss takes from the same button instead.
 const SKILL_LETHAL_MULTIPLIER = 9999;
 
-// Which boss CLASS to construct for a given Config.boss.roster key — see
-// the constructor's boss-selection lookup and _spawnNext's 'boss' branch.
+// Which boss CLASS to construct for a given Config.bossSchedule[mode].roster
+// key — see the constructor's boss-selection lookup and _spawnNext's 'boss' branch.
 const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss, snake: SnakeBoss, tetra: TetraBoss, nova: NovaBoss, pulsor: PulsorBoss, zigzag: ZigzagBoss, phoenix: PhoenixBoss, electron: ElectronBoss };
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
@@ -186,7 +195,8 @@ const _weaverFlashHulls  = _mkDrifterPool();
 
 export class WaveManager {
   /**
-   * @param {number} level  1-based. Values beyond the config array reuse the last entry.
+   * @param {'survival'|'mission'} mode  selects which independent config pair this WaveManager reads for the lifetime of the instance — `Config.waves`/`Config.bossSchedule.survival` for 'survival', `Config.missionWaves`/`Config.bossSchedule.mission` for 'mission'. See `_resolveLevelAndBoss` and Config.mission's own doc for why the two are kept apart.
+   * @param {number} level  1-based. Values beyond the mode's config array reuse the last entry.
    * @param {import('./Barrier.js').Barrier} barrier  used by Bouncer clones (repeated bounces) and Diver/Weaver clones (one-shot dive-through impact) to detect/damage the barrier
    * @param {import('./HUD.js').HUD} hud  score is awarded directly onto it on kill; gold is collected via GoldPickups instead — see handleBulletHit/_rewardFor/checkGoldPickup
    * @param {import('../core/ScreenShake.js').ScreenShake} screenShake  triggered on barrier impacts — see the onBarrierHit closure below; kill-triggered shake/hit-stop instead lives in GameplayScene, driven by handleBulletHit's return value
@@ -194,12 +204,12 @@ export class WaveManager {
    * @param {import('./GoldPickups.js').GoldPickups} goldPickups  same cross-level-survival reasoning as `powerUps` above
    * @param {number} [dropChanceMultiplier]  multiplies both Config.powerUps.dropChance and Config.gold.dropChance for this WaveManager's whole lifetime — see _maybeDropPowerUp/_maybeDropGold. Defaults to 1 (no change); GameplayScene passes a boosted value for a run that claimed a Lucky Drop daily reward (see Config.dailyReward.luckyDrop, core/DailyReward.js's consumeLuckyDrop).
    */
-  constructor(level, barrier, hud, screenShake, powerUps, goldPickups, dropChanceMultiplier = 1) {
+  constructor(mode, level, barrier, hud, screenShake, powerUps, goldPickups, dropChanceMultiplier = 1) {
     this._hud     = hud;
     this._barrier = barrier; // direct reference — needed by checkPowerUpPickup to heal it outside the onBarrierHit closure below
     this._dropChanceMultiplier = dropChanceMultiplier;
 
-    this._resolveLevelAndBoss(level);
+    this._resolveLevelAndBoss(mode, level);
     this._buildBarrierCallbacks(barrier, screenShake);
 
     // Player bullet damage scales with level — see Config.player.damage/damagePerLevel.
@@ -236,33 +246,42 @@ export class WaveManager {
   }
 
   /**
-   * Resolves which level/wave content applies, and — every
-   * Config.boss.everyNLevels levels (7, 14, 21, ...) — which boss takes
-   * over the wave entirely. Checked against the raw level number rather
-   * than read from `Config.waves.levels` (which only defines 30 entries and
-   * caps at the last one forever), so boss levels keep recurring past level
-   * 30 too. Sets `_level`, `_isBossLevel`, `_bossKey`, `_bossCfg`, `_waveCfg`.
+   * Resolves which mode-specific wave content applies, and — every
+   * `everyNLevels` levels per that mode's OWN boss schedule
+   * (Config.bossSchedule.survival or .mission, see class doc) — which boss
+   * takes over the wave entirely. Checked against the raw level number
+   * rather than read from the mode's `levels` array (which only defines a
+   * handful of entries and caps at the last one forever), so boss levels
+   * keep recurring past the end of that array too. Sets `_mode`, `_level`,
+   * `_wavesCfg`, `_isBossLevel`, `_bossKey`, `_bossCfg`, `_waveCfg`.
    */
-  _resolveLevelAndBoss(level) {
-    const levels = Config.waves.levels;
+  _resolveLevelAndBoss(mode, level) {
+    this._mode = mode;
+    // Entirely separate config objects per mode — see class doc and
+    // Config.mission's own doc for why Mission/Survival content is kept apart.
+    this._wavesCfg = mode === 'mission' ? Config.missionWaves : Config.waves;
+    const bossSchedule = Config.bossSchedule[mode];
+    const levels = this._wavesCfg.levels;
     this._level = level;
     // A boss wave completely replaces the level's normal roster. This
     // synthetic single-group config feeds the exact same spawn machinery
     // every other level already uses (`_totalToSpawn`/`_groupForIdx`/
     // `_spawnNext`) — see `_spawnNext`'s own 'boss' branch for how that
     // group actually gets built.
-    this._isBossLevel = level % Config.boss.everyNLevels === 0;
-    // Which boss appears is read off Config.boss.roster, cycling once every
-    // boss has had a turn (1st boss-level encounter → roster[0], 2nd →
+    this._isBossLevel = level % bossSchedule.everyNLevels === 0;
+    // Which boss appears is read off the active mode's roster, cycling once
+    // every boss has had a turn (1st boss-level encounter → roster[0], 2nd →
     // roster[1], 3rd → roster[0] again, ...) — see BOSS_CLASSES above for
-    // the matching class lookup used in _spawnNext. `_bossCfg` falls back to
-    // scout1 on non-boss levels purely so `_bossParticles` below always has
-    // a valid (if never-emitted) color to construct with.
+    // the matching class lookup used in _spawnNext. Boss DESIGNS
+    // (Config.boss[key]) are shared across modes — only the schedule
+    // deciding WHEN/WHICH differs. `_bossCfg` falls back to scout1 on
+    // non-boss levels purely so `_bossParticles` below always has a valid
+    // (if never-emitted) color to construct with.
     this._bossKey = null;
     this._bossCfg = Config.boss.scout1;
     if (this._isBossLevel) {
-      const bossEncounterNum = level / Config.boss.everyNLevels; // 1, 2, 3, ...
-      this._bossKey = Config.boss.roster[(bossEncounterNum - 1) % Config.boss.roster.length];
+      const bossEncounterNum = level / bossSchedule.everyNLevels; // 1, 2, 3, ...
+      this._bossKey = bossSchedule.roster[(bossEncounterNum - 1) % bossSchedule.roster.length];
       this._bossCfg = Config.boss[this._bossKey];
     }
     this._waveCfg = this._isBossLevel
@@ -470,7 +489,7 @@ export class WaveManager {
       if (this._spawnTimer <= 0 && this._spawnIdx < this._totalToSpawn) {
         const group = this._groupForIdx(this._spawnIdx);
         const groupChanged = this._spawnIdx > 0 && group !== this._groupForIdx(this._spawnIdx - 1);
-        const simultaneous = this._waveCfg.simultaneous ?? Config.waves.simultaneous ?? true;
+        const simultaneous = this._waveCfg.simultaneous ?? this._wavesCfg.simultaneous ?? true;
         const blocked = simultaneous === false && groupChanged && this._enemies.length > 0;
 
         if (!blocked) {

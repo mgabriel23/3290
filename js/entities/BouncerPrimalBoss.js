@@ -1,8 +1,9 @@
 /**
  * BouncerPrimalBoss.js
  * Boss #3 — "Bouncer Primal". Spawned by WaveManager on every 3rd boss-level
- * encounter (level 21, 49, ... — see Config.boss.roster and WaveManager's
- * boss-selection lookup in its constructor). A giant reskin of the Splitter
+ * encounter (level 21, 49, ... under Survival Mode's canonical schedule —
+ * see Config.bossSchedule[mode].roster and WaveManager's boss-selection
+ * lookup in its constructor). A giant reskin of the Splitter
  * Bouncer variant — same wireframe hexagon silhouette, same physics — unlike
  * Boss #1/#2, which hold position or orbit, this one drops in and bounces
  * around the ENTIRE arena for the whole fight, reusing BouncerEnemy.js's own
