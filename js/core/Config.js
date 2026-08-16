@@ -190,11 +190,11 @@ export const Config = Object.freeze({
 		 */
 		magnet: Object.freeze({
 			levels: Object.freeze([
-				Object.freeze({ radius: 70,  pullAccel: 700 }),  // level 1 — starting strength, free
-				Object.freeze({ radius: 81,  pullAccel: 760,  cost: 125 }),
-				Object.freeze({ radius: 92,  pullAccel: 820,  cost: 190 }),
-				Object.freeze({ radius: 103, pullAccel: 880,  cost: 275 }),
-				Object.freeze({ radius: 114, pullAccel: 940,  cost: 400 }),
+				Object.freeze({ radius: 70, pullAccel: 700 }), // level 1 — starting strength, free
+				Object.freeze({ radius: 81, pullAccel: 760, cost: 125 }),
+				Object.freeze({ radius: 92, pullAccel: 820, cost: 190 }),
+				Object.freeze({ radius: 103, pullAccel: 880, cost: 275 }),
+				Object.freeze({ radius: 114, pullAccel: 940, cost: 400 }),
 				Object.freeze({ radius: 125, pullAccel: 1000, cost: 575 }),
 				Object.freeze({ radius: 136, pullAccel: 1060, cost: 840 }),
 				Object.freeze({ radius: 147, pullAccel: 1120, cost: 1215 }),
@@ -220,16 +220,20 @@ export const Config = Object.freeze({
 		 */
 		wings: Object.freeze({
 			levels: Object.freeze([
-				Object.freeze({ fireRateMult: 1.00 }), // level 1 — starting rate, free
+				Object.freeze({ fireRateMult: 1.0 }), // level 1 — starting rate, free
 				Object.freeze({ fireRateMult: 1.06, cost: 175 }),
 				Object.freeze({ fireRateMult: 1.11, cost: 250 }),
 				Object.freeze({ fireRateMult: 1.17, cost: 375 }),
 				Object.freeze({ fireRateMult: 1.22, cost: 540 }),
 				Object.freeze({ fireRateMult: 1.28, cost: 775 }),
 				Object.freeze({ fireRateMult: 1.33, cost: 1125 }),
-				Object.freeze({ fireRateMult: 1.39, sideBullets: true, cost: 1640 }),
+				Object.freeze({
+					fireRateMult: 1.39,
+					sideBullets: true,
+					cost: 1640,
+				}),
 				Object.freeze({ fireRateMult: 1.44, cost: 2375 }),
-				Object.freeze({ fireRateMult: 1.50, cost: 3450 }), // level 10
+				Object.freeze({ fireRateMult: 1.5, cost: 3450 }), // level 10
 			]),
 		}),
 
@@ -276,14 +280,18 @@ export const Config = Object.freeze({
 		 */
 		cannon: Object.freeze({
 			levels: Object.freeze([
-				Object.freeze({ damageMult: 1.00 }), // level 1 — starting damage, free
+				Object.freeze({ damageMult: 1.0 }), // level 1 — starting damage, free
 				Object.freeze({ damageMult: 1.09, cost: 200 }),
 				Object.freeze({ damageMult: 1.18, cost: 290 }),
 				Object.freeze({ damageMult: 1.27, cost: 415 }),
 				Object.freeze({ damageMult: 1.36, cost: 600 }),
 				Object.freeze({ damageMult: 1.45, cost: 875 }),
 				Object.freeze({ damageMult: 1.54, cost: 1265 }),
-				Object.freeze({ damageMult: 1.64, noseSpike: true, cost: 1825 }), // level 8 — see Player.hasNoseSpike
+				Object.freeze({
+					damageMult: 1.64,
+					noseSpike: true,
+					cost: 1825,
+				}), // level 8 — see Player.hasNoseSpike
 				Object.freeze({ damageMult: 1.73, cost: 2650 }),
 				Object.freeze({ damageMult: 1.82, cost: 3840 }), // level 10
 			]),
@@ -335,15 +343,61 @@ export const Config = Object.freeze({
 			wingOffsetY: 6,
 			levels: Object.freeze([
 				Object.freeze({ unlocked: false }), // level 1 — locked, free (nothing to buy yet)
-				Object.freeze({ unlocked: true, interval: 4.0, damageMult: 3.0, cost: 375 }),
-				Object.freeze({ unlocked: true, interval: 3.7, damageMult: 3.6, cost: 540 }),
-				Object.freeze({ unlocked: true, interval: 3.4, damageMult: 4.2, cost: 775 }),
-				Object.freeze({ unlocked: true, interval: 3.1, damageMult: 4.8, cost: 1125 }),
-				Object.freeze({ unlocked: true, interval: 2.8, damageMult: 5.4, cost: 1625 }),
-				Object.freeze({ unlocked: true, interval: 2.5, damageMult: 6.0, cost: 2350 }),
-				Object.freeze({ unlocked: true, interval: 2.3, damageMult: 6.6, wingMount: true, cost: 3415 }),
-				Object.freeze({ unlocked: true, interval: 2.1, damageMult: 7.2, cost: 4950 }),
-				Object.freeze({ unlocked: true, interval: 1.9, damageMult: 8.0, cost: 7175 }), // level 10
+				Object.freeze({
+					unlocked: true,
+					interval: 4.0,
+					damageMult: 3.0,
+					cost: 375,
+				}),
+				Object.freeze({
+					unlocked: true,
+					interval: 3.7,
+					damageMult: 3.6,
+					cost: 540,
+				}),
+				Object.freeze({
+					unlocked: true,
+					interval: 3.4,
+					damageMult: 4.2,
+					cost: 775,
+				}),
+				Object.freeze({
+					unlocked: true,
+					interval: 3.1,
+					damageMult: 4.8,
+					cost: 1125,
+				}),
+				Object.freeze({
+					unlocked: true,
+					interval: 2.8,
+					damageMult: 5.4,
+					cost: 1625,
+				}),
+				Object.freeze({
+					unlocked: true,
+					interval: 2.5,
+					damageMult: 6.0,
+					cost: 2350,
+				}),
+				Object.freeze({
+					unlocked: true,
+					interval: 2.3,
+					damageMult: 6.6,
+					wingMount: true,
+					cost: 3415,
+				}),
+				Object.freeze({
+					unlocked: true,
+					interval: 2.1,
+					damageMult: 7.2,
+					cost: 4950,
+				}),
+				Object.freeze({
+					unlocked: true,
+					interval: 1.9,
+					damageMult: 8.0,
+					cost: 7175,
+				}), // level 10
 			]),
 		}),
 	}),
@@ -3343,8 +3397,9 @@ export const Config = Object.freeze({
 		// the front) — canonical shipped values are `everyNLevels: 7` and
 		// roster starting with 'scout1'; revert before shipping. `nova` is
 		// appended at the end regardless, so it's in rotation either way.
-		everyNLevels: 5,
+		everyNLevels: 1,
 		roster: Object.freeze([
+			"phoenix",
 			"scout1",
 			"snake",
 			"spiral",
@@ -3360,7 +3415,8 @@ export const Config = Object.freeze({
 			"spiral",
 			"bouncerPrimal",
 			"snake",
-		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/8th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[7] "zigzag", 63→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
+			"phoenix",
+		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/8th/9th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[7] "zigzag", 63→roster[8] "phoenix", 70→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		// Fraction of a boss's OWN max health the player's skill bomb deals
@@ -4266,6 +4322,162 @@ export const Config = Object.freeze({
 			sparksPerEmit: 43,
 			points: 3300,
 			gold: 165,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.8,
+				poolSize: 3,
+			}),
+		}),
+
+		/**
+		 * Boss #9 — "Phoenix". An original angular bird silhouette (see
+		 * PhoenixBoss.js's PHOENIX_HULL_PTS — a swept-wing, forked-tail bird
+		 * shape, not a reskin, same "original hull" lineage as Spiral/Tetra/
+		 * Nova/Pulsor/Zigzag), the first boss whose hull isn't a regular
+		 * polygon. Reuses the ship-family's nose/tail anchor convention
+		 * (Enemy.js's `atan2(-dx, dy)` — local -Y away from the player, local
+		 * +Y toward it) in a way that doubles as the phoenix's own anatomy:
+		 * the tail-spike anchor (local -Y) gets `renderEngineFlame`'s exhaust
+		 * plume as a trailing fire plume, and the beak anchor (local +Y) is
+		 * where phase 1's fireballs launch from — same `renderFlame`/
+		 * `renderCore` pairing BossEnemy.js uses, not the coreGlow-ring-only
+		 * treatment Tetra/Nova/Pulsor/Zigzag use, because — like BossEnemy —
+		 * this hull has a real facing direction, not just a spinning turret.
+		 *
+		 * A repeating TIMED loop between THREE phases (`_phase`/`_phaseAge`),
+		 * one more than every other boss's 2-phase loop, all sharing ONE
+		 * fixed rest point (`restX` = arena center, `restY` below) so every
+		 * phase transition lands exactly where the next phase expects to
+		 * start from — see PhoenixBoss.js's class doc for the full seam-by-
+		 * seam reasoning:
+		 *
+		 *   phase 1 (`phase1Duration` seconds) — circles the rest point on a
+		 *   closed loop (`orbitRadiusX/Y`, `orbitSpeed`) that starts and ends
+		 *   exactly AT the rest point (same zero-jump trick BossEnemy's own
+		 *   figure-8 orbit uses), beak tracking the player throughout, firing
+		 *   one aimed fireball (PhoenixFireballs.js) straight at the player's
+		 *   CURRENT position — no lead prediction, same idiom as Nova's seed —
+		 *   every `fireball.fireInterval` seconds.
+		 *
+		 *   phase 2 (`charge`) — a single telegraphed dash, three beats:
+		 *   'telegraph' locks the player's position at that instant (NOT
+		 *   re-aimed as they move) and shows a directional indicator line +
+		 *   target reticle for `charge.telegraphDuration` seconds; 'charging'
+		 *   then accelerates the boss from `chargeStartSpeed` toward
+		 *   `chargeMaxSpeed` (`chargeAcceleration` vp/sec²) along that FIXED
+		 *   locked direction — a real dodge-or-get-hit commitment, not a
+		 *   homing missile — dealing `charge.contactDamage` to the player on
+		 *   touch (opts into WaveManager.checkPlayerHit's generic
+		 *   `.contactDamage` hook only while actually mid-dash, see
+		 *   PhoenixBoss.contactDamage's getter) until it either travels for
+		 *   `chargeDuration` seconds or crosses the `boundMarginX`/`boundYMin`/
+		 *   `boundYMax` clamp (kept comfortably above the barrier — this is a
+		 *   player-only attack, it never touches the barrier); 'recover' then
+		 *   eases it back to the shared rest point over `recoverDuration`
+		 *   seconds (smoothstep, not linear) before phase 3 begins.
+		 *
+		 *   phase 3 (`sway`) — sways side-to-side around the rest point
+		 *   (`swayAmplitude`, `swaySpeed`) while holding one continuous
+		 *   straight-line beam of fire anchored to its own X position,
+		 *   sweeping with the sway — same live point-test idiom TetraBoss's
+		 *   phase-2 lasers use (`checkLaserHit`, read by WaveManager
+		 *   generically), just a fixed vertical beam instead of a rotating
+		 *   one, so no segment-angle math is needed. Telegraphs harmlessly
+		 *   for `warmupDuration` seconds on every entry, same fairness beat
+		 *   Tetra's laser uses. Runs for an EXACT `swayCycles` full sway
+		 *   periods (not a raw seconds duration) — see PhoenixBoss.js's class
+		 *   doc — so it always finishes a cycle at its center point, which is
+		 *   also exactly phase 1's own start point, before looping back.
+		 */
+		phoenix: Object.freeze({
+			name: "PHOENIX",
+
+			size: 52, // vp — hull half-reach; wingtips/tail spike extend to ~size, see PHOENIX_HULL_PTS
+			health: 560,
+			healthPerLevel: 70,
+			color: "#E8382F", // crimson/vermillion — distinct two-tone pairing (see engineCoreColor/flameColor below) from every existing flat-hue boss
+			fillColor: "#2a0509",
+			lineWidth: 3,
+			glowBlur: 18,
+			hitGlowBlur: 30,
+			engineCoreColor: "#FFD966", // gold ember — chest core, the "gold trim" half of the crimson+gold palette
+			flameColor: "#FFB238", // gold-orange tail plume
+			flameHalfWidth: 10,
+			hitRadius: 42,
+
+			entrySpeed: 150,
+			// vp — shared rest point (with restX = arena center, set in
+			// PhoenixBoss's constructor) that phase 1's orbit, phase 2's
+			// recover beat, and phase 3's sway ALL treat as their common
+			// anchor — see class doc for why that's load-bearing, not
+			// cosmetic. Kept clear of the boss health bar (bottom edge ~162)
+			// with the same margin reasoning as every other boss's restY.
+			restY: 280,
+
+			// Phase 1 — circular orbit + aimed fireballs, see class doc.
+			phase1Duration: 8,
+			orbitRadiusX: 95, // vp — horizontal reach
+			orbitRadiusY: 65, // vp — vertical reach — close enough to orbitRadiusX to read as "circled", per the class doc, rather than Boss #1's deliberately flat figure-8
+			orbitSpeed: 1.1, // rad/sec
+			fireball: Object.freeze({
+				fireInterval: 0.9,
+				speed: 230,
+				color: "#FF6A3D",
+				lineWidth: 4,
+				glowBlur: 10,
+				halfLen: 8,
+				poolSize: 40,
+				damage: 12,
+			}),
+
+			// Phase 2 — telegraphed charge, see class doc.
+			charge: Object.freeze({
+				telegraphDuration: 0.85, // seconds the directional indicator is up before the dash — the fairness/reaction window
+				chargeStartSpeed: 120, // vp/sec
+				chargeAcceleration: 900, // vp/sec² — reaches chargeMaxSpeed in ~0.73s
+				chargeMaxSpeed: 780, // vp/sec
+				chargeDuration: 1.4, // seconds — safety cap if neither bound clamp is hit first (e.g. a near-horizontal lock)
+				boundMarginX: 60,
+				boundYMin: 150,
+				// vp — kept well above the barrier (baseY 940, dome peak ~870)
+				// so this player-only attack never visually crosses into
+				// barrier territory, even at a dead-vertical lock.
+				boundYMax: 820,
+				contactDamage: 22,
+				recoverDuration: 0.9, // seconds to smoothstep-ease back to the shared rest point once the dash ends
+
+				indicatorColor: "#FFFFFF",
+				indicatorLineWidth: 3,
+				indicatorGlowBlur: 10,
+				indicatorDashPulseSpeed: 5, // rad/sec-ish — how fast the indicator line/reticle pulse during the telegraph
+				targetRingRadius: 24,
+				targetRingLineWidth: 2.5,
+				targetDotRadius: 5,
+				targetDotLineWidth: 3.5,
+				targetDotGlowBlur: 8,
+			}),
+
+			// Phase 3 — sweeping beam + sway, see class doc.
+			sway: Object.freeze({
+				swaySpeed: 1.5, // rad/sec
+				// EXACT full sway periods, not a raw seconds duration — see
+				// class doc for why this must divide evenly (PhoenixBoss.js
+				// derives phase3's actual duration as swayCycles * 2π/swaySpeed).
+				swayCycles: 2,
+				swayAmplitude: 130,
+				warmupDuration: 0.5, // seconds the beam is visible but harmless on every phase-3 entry
+				halfWidth: 14,
+				damage: 14,
+				color: "#E8382F",
+				coreColor: "#FFD966",
+				lineWidth: 6,
+				coreLineWidth: 2,
+				glowBlur: 16,
+			}),
+
+			sparksPerEmit: 42,
+			points: 3600,
+			gold: 175,
 			audio: Object.freeze({
 				src: "assets/audio/explosion.mp3",
 				volume: 0.8,
