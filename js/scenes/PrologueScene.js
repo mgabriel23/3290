@@ -305,8 +305,8 @@ export class PrologueScene {
 
     // Signal-interference flicker layered on top — the whole line randomly
     // dips toward transparent as if the transmission is weak. Frequencies
-    // chosen to create dips at a cinematic 1–3 Hz, not a 60fps strobe.
-    const alpha = fadeAlpha * flickerAlpha(this._beatAge, [7.3, 11.7, 19.1], [2.0, 0.8], 0.8, 0.85);
+    // chosen so a dip lands roughly once every ~1.3s, not a constant strobe.
+    const alpha = fadeAlpha * flickerAlpha(this._beatAge, [4.4, 7.0, 11.5], [2.0, 0.8], 0.8, 0.85);
     const visible = text.slice(0, Math.floor(this._yearRevealedCount));
 
     this.renderer.clear(Config.colors.void);
@@ -388,7 +388,7 @@ export class PrologueScene {
     const anchorY = this._briefingAnchorY();
     const currentLine = this._currentBriefingLine(revealedWordCount);
     const firstVisibleLine = Math.max(0, currentLine - maxVisibleLines + 1);
-    const flicker = flickerAlpha(this._beatAge, [7.3, 11.7, 19.1], [2.0, 0.8], 0.8, 0.85);
+    const flicker = flickerAlpha(this._beatAge, [4.4, 7.0, 11.5], [2.0, 0.8], 0.8, 0.85);
 
     for (let i = firstVisibleLine; i <= currentLine; i++) {
       const words = this._briefingLineWords[i];
@@ -561,7 +561,7 @@ export class PrologueScene {
     const { width: vW } = Config.virtual;
     const ty = this._titleY();
 
-    const flicker = flickerAlpha(this._beatAge, [7.3, 11.7, 19.1], [2.0, 0.8], 0.8, 0.85);
+    const flicker = flickerAlpha(this._beatAge, [4.4, 7.0, 11.5], [2.0, 0.8], 0.8, 0.85);
     this.renderer.drawText(text, vW / 2, ty, { font, color: textColor, alpha: alpha * flicker, glowBlur });
     this.renderer.drawText(subtitleText, vW / 2, ty + 55, {
       font: subtitleFont,
