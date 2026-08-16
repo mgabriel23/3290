@@ -39,12 +39,21 @@
  * this popup and shouldn't be a hidden dismiss target) and not by re-tapping
  * the GOLD panel, which the dim overlay covers almost completely once open
  * anyway.
+ *
+ * A successful buy gets its own feedback, distinct from the close button's
+ * generic Config.ui.click blip: `Config.shop.buySuccessAudioSrc` (the same
+ * celebratory sting DailyRewardPanel's CLAIM uses) plus a "+1 LVL"
+ * FloatingText popup rising from the bought card — see `_buy`. An
+ * unaffordable or already-maxed tap stays completely silent, same as every
+ * other disabled control in this game.
  */
 import { Config } from '../core/Config.js';
 import { getPartLevel } from '../core/PlayerUpgrades.js';
 import { cornerBracketPath } from '../core/shapes.js';
 import { playButtonClick } from '../core/UiSound.js';
+import { AudioPool } from '../core/AudioPool.js';
 import { Player } from './Player.js';
+import { FloatingText } from './FloatingText.js';
 
 // Small local-space glyphs (roughly ±9vp, centered on the origin) — stroked
 // at each card's icon slot via strokePaths' own {x, y} transform, same
@@ -100,6 +109,11 @@ export class Shop {
     this._shipPreview = new Player();
     this._shipPreview.x = Config.shop.ship.x;
     this._shipPreview.y = Config.shop.ship.y;
+
+    // "+1 LVL" popup + its own success sting on a completed purchase — see
+    // _buy and Config.shop's upgradePopup*/buySuccess* fields.
+    this._floatingText = new FloatingText();
+    this._buySuccessAudio = new AudioPool(Config.shop.buySuccessAudioSrc, 4, Config.shop.buySuccessVolume);
   }
 
   get isOpen() { return this._open; }
@@ -115,7 +129,10 @@ export class Shop {
   }
 
   update(dt) {
-    if (this._open) this._age += dt;
+    if (this._open) {
+      this._age += dt;
+      this._floatingText.update(dt);
+    }
   }
 
   /** The close button always wins; otherwise a tap on a card buys its next level. Everything else (the dimmed background) is inert — see class doc. */
@@ -135,11 +152,15 @@ export class Shop {
     const nextLevel = level + 1;
     const cost = Config.player[part.id].levels[nextLevel - 1].cost;
     if (this._hud.gold < cost) return; // can't afford — silently ignored
-    playButtonClick();
+    this._buySuccessAudio.play();
     this._hud.gold -= cost;
     this._levels[i] = nextLevel;
     this._player.applyUpgrade(part.id, nextLevel);
     this._shipPreview.applyUpgrade(part.id, nextLevel);
+
+    const cfg = Config.shop;
+    const { x: cx, y: cy } = this._cardCenter(i);
+    this._floatingText.spawn(cx, cy + cfg.upgradePopupOffsetY, cfg.upgradePopupText, cfg.upgradePopupColor);
   }
 
   /**
@@ -186,6 +207,7 @@ export class Shop {
     this._shipPreview.render(renderer);
     for (let i = 0; i < PARTS.length; i++) this._renderCard(renderer, i, alpha);
     this._renderCloseButton(renderer, alpha);
+    this._floatingText.render(renderer);
 
     renderer.drawText(cfg.footerText, vW / 2, cfg.footerY, {
       font: cfg.footerFont, color: cfg.footerColor, alpha: alpha * 0.6,

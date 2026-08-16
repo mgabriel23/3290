@@ -4708,6 +4708,21 @@ export const Config = Object.freeze({
 		footerColor: "#aab4d4",
 		footerY: 900,
 		footerText: "TAP A PART TO UPGRADE",
+
+		// Plays on a SUCCESSFUL purchase only (see Shop._buy) in place of the
+		// generic Config.ui.click blip — reuses the same celebratory sting
+		// DailyRewardPanel's CLAIM uses (Config.dailyReward.claimAudioSrc),
+		// same "a bigger moment gets its own distinct sound" reasoning, just
+		// its own independent volume/AudioPool instance.
+		buySuccessAudioSrc: "assets/audio/reward.mp3",
+		buySuccessVolume: 0.5,
+
+		// "+1 LVL" popup on a successful buy — same FloatingText rise-and-fade
+		// entities/FloatingText.js already uses for "+N GOLD" pickups, spawned
+		// from Shop's own instance right above the card that was bought.
+		upgradePopupText: "+1 LVL",
+		upgradePopupColor: "#4DFF8A", // same soft green as buyMaxedColor — "leveled up" reads the same as "fully upgraded"
+		upgradePopupOffsetY: -60, // vp above the card's center — clears the corner-bracket frame
 	}),
 
 	/**
