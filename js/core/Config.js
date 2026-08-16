@@ -1035,14 +1035,19 @@ export const Config = Object.freeze({
 		haloAlpha: 0.1,
 
 		// The reward's icon "medallion" — a filled+stroked circle straddling
-		// the card's top edge (like an achievement badge), tinted to the
-		// rolled reward's own color, with a small glyph inside distinguishing
-		// which of the 3 it is — see DailyRewardPanel._renderIcon.
+		// the card's top edge (like an achievement badge), scaled up from
+		// whichever real drop-up the reward corresponds to (Config.gold's coin
+		// palette for 'gold', Config.powerUps.invincible's for 'shieldStart' —
+		// see DailyRewardPanel._renderGoldIcon/_renderShieldStartIcon) so the
+		// badge reads as "the same pickup you see in a run," not a lookalike.
+		// luckyDrop has no in-game pickup of its own, so it borrows the
+		// health pickup's green body (Config.powerUps.health) with a filled
+		// sparkle glyph in the same iconFillColor white PowerUps uses for its
+		// own cross/diamond/bolt glyphs — see _renderLuckyDropIcon.
 		iconBadge: Object.freeze({
 			radius: 42,
 			lineWidth: 2.5,
 			glowBlur: 14,
-			fillAlpha: 0.18,
 		}),
 
 		nameFont: '400 20px "Audiowide", "Courier New", monospace',
@@ -1196,6 +1201,13 @@ export const Config = Object.freeze({
 			currentPulseSpeed: 3.2, // rad/sec — same breathing idea as Config.dailyReward.claimButton
 			currentPulseDepth: 0.25,
 			checkLineWidth: 2,
+			// A plain "1".."7" caption under each pip, same state color (and,
+			// for today's pip, the same glow) as the pip itself — spells out
+			// which calendar day each icon belongs to instead of making the
+			// player count positions from the left. Bumped from 10px, which
+			// was too small to read at a glance on a real phone screen.
+			dayLabelFont: '700 15px "Courier New", monospace',
+			dayLabelOffsetY: 42, // vp below pip center (half pipSize + a gap, nudged down for the bigger font)
 		}),
 	}),
 
@@ -2021,14 +2033,13 @@ export const Config = Object.freeze({
 		pulseDepth: 0.25,
 
 		// A proper metallic gold palette instead of a single flat hue — a solid
-		// mid-gold body, a brighter glinting rim, a pale specular highlight, and
-		// a deep antique-bronze for the stamped emblem/emboss. This is what
-		// actually reads as "gold coin" at a glance rather than "colored orb"
-		// (the old fillColor was a near-black wash, so only the thin outline
-		// carried any gold color at all — see GoldPickups.render).
+		// mid-gold body, a brighter glinting rim, and a deep antique-bronze for
+		// the stamped emblem/emboss. This is what actually reads as "gold coin"
+		// at a glance rather than "colored orb" (the old fillColor was a
+		// near-black wash, so only the thin outline carried any gold color at
+		// all — see GoldPickups.render).
 		color: "#FFDE59", // bright rim/glint — distinct from Config.powerUps.fireBoost's warm-gold (#FFD24D)
 		fillColor: "#E7B740", // solid coin body
-		highlightColor: "#FFF6DC", // pale specular shine, drifts slowly across the face
 		shadeColor: "#6B4610", // dark antique-gold — stamped star emblem + inner emboss; darkened from #8A5A12 so the emblem clears WCAG 1.4.11's 3:1 non-text contrast against fillColor with real margin (was ~3.2:1, now ~4.5:1)
 	}),
 

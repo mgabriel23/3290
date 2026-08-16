@@ -22,7 +22,15 @@
  * screen appears — all so the moment reads as "a reward," not a settings
  * dialog. Each of the 3 reward kinds also gets its own small vector icon
  * (a coin, a sparkle, a hexagon shield ring) rather than relying on text
- * alone to tell them apart at a glance.
+ * alone to tell them apart at a glance — and wherever a reward maps to a
+ * REAL in-run drop-up, its badge is drawn in that drop-up's own style, not
+ * a generic lookalike: 'gold' reuses GoldPickups.render's exact metallic
+ * coin (star emblem, bright rim), 'shieldStart' reuses
+ * PowerUps.render's 'invincible' orb (solid body + bolder unfilled hex
+ * ring), since that's the effect it actually grants. 'luckyDrop' has no
+ * in-run pickup of its own, so it borrows the 'health' pickup's green body
+ * and PowerUps' shared white iconFillColor for its filled glyph — see
+ * _renderGoldIcon/_renderShieldStartIcon/_renderLuckyDropIcon.
  *
  * The reward itself is resolved once, at construction — PrologueScene
  * creates exactly one of these per boot, and the underlying roll is already
@@ -39,7 +47,7 @@
  * tomorrow" hook: a player can see day 7's jackpot pip from day 1 onward.
  */
 import { Config } from '../core/Config.js';
-import { cornerBracketPath, diamondPath } from '../core/shapes.js';
+import { cornerBracketPath, diamondPath, starPath } from '../core/shapes.js';
 import { wrapText } from '../core/textLayout.js';
 import { easeOutBack } from '../core/animation.js';
 import { Particles } from './Particles.js';
@@ -153,12 +161,13 @@ export class DailyRewardPanel {
 
   /**
    * One small glyph per reward kind, local-origin-centered like PowerUps.js's
-   * own icon paths (see that file's _crossPaths/_hexPath) — gold reuses
-   * GoldPickups' concentric-ring coin look (drawn directly in _renderIcon,
-   * no path needed), luckyDrop gets a 4-point sparkle star (new — nothing
-   * else in the game means "lucky/special"), shieldStart reuses the exact
-   * hexagon ring PowerUps draws for the `invincible` pickup, since this
-   * reward grants that same effect.
+   * own icon paths (see that file's _crossPaths/_hexPath). Gold needs no
+   * path here — its coin is drawn directly from Config.gold's own
+   * palette/geometry in _renderGoldIcon. luckyDrop gets a 4-point sparkle
+   * star (new — nothing else in the game means "lucky/special").
+   * shieldStart reuses the exact hexagon ring PowerUps draws for the
+   * `invincible` pickup, since this reward grants that same effect — see
+   * _renderShieldStartIcon.
    */
   _buildIconPaths() {
     const g = Config.dailyReward.iconBadge.radius * 0.5;
@@ -271,25 +280,59 @@ export class DailyRewardPanel {
     });
   }
 
-  /** The reward's icon "medallion" — a filled+stroked circle straddling the card's top edge, tinted to the reward's color, with a distinguishing glyph inside. */
+  /** The reward's icon "medallion" straddling the card's top edge — dispatches to whichever real drop-up's look this reward's type echoes (see class doc). */
   _renderIcon(renderer, cx, cy, scale, alpha) {
     const cfg = Config.dailyReward.iconBadge;
-    const color = this._reward.displayColor;
-    const r = cfg.radius * scale;
     // Jackpot's medallion glows harder than an ordinary day's — same signal as _renderHalo's boost.
     const glowBlur = this._reward.jackpot ? cfg.glowBlur * 1.6 : cfg.glowBlur;
 
-    renderer.fillEllipse(0, 0, r, r, { x: cx, y: cy, fillColor: color, alpha: alpha * cfg.fillAlpha });
-    renderer.strokeCircle(cx, cy, r, { color, lineWidth: cfg.lineWidth, glowBlur, alpha });
-
     if (this._reward.type === 'gold') {
-      // Concentric coin rings — same "this reads as a coin" look GoldPickups draws.
-      renderer.strokeCircle(cx, cy, r * 0.5, { color, lineWidth: cfg.lineWidth, alpha });
-    } else if (this._reward.type === 'luckyDrop') {
-      renderer.strokePaths([this._sparklePath], { x: cx, y: cy, scale, color, lineWidth: cfg.lineWidth, alpha, lineCap: 'round' });
+      this._renderGoldIcon(renderer, cx, cy, scale, alpha, glowBlur);
+    } else if (this._reward.type === 'shieldStart') {
+      this._renderShieldStartIcon(renderer, cx, cy, scale, alpha, glowBlur);
     } else {
-      renderer.strokePaths([this._hexPath], { x: cx, y: cy, scale, color, lineWidth: cfg.lineWidth, alpha });
+      this._renderLuckyDropIcon(renderer, cx, cy, scale, alpha, glowBlur);
     }
+  }
+
+  /** Gold's medallion — GoldPickups.render's real coin (solid body, stamped star emblem, bright glinting rim) scaled up to badge size, using Config.gold's own palette rather than the reward's flat displayColor wash. */
+  _renderGoldIcon(renderer, cx, cy, scale, alpha, glowBlur) {
+    const badge = Config.dailyReward.iconBadge;
+    const coin = Config.gold;
+    const r = badge.radius * scale;
+
+    renderer.fillEllipse(0, 0, r, r, { x: cx, y: cy, fillColor: coin.fillColor, alpha });
+    renderer.fillStrokePaths([starPath(0, 0, r * 0.48, r * 0.2)], {
+      x: cx, y: cy, fillColor: coin.shadeColor, strokeColor: coin.shadeColor, lineWidth: 1, alpha,
+    });
+    renderer.strokeCircle(cx, cy, r, { color: coin.color, lineWidth: badge.lineWidth, glowBlur, alpha });
+  }
+
+  /** shieldStart's medallion — PowerUps.render's real 'invincible' orb (solid dark-blue body, pale rim, bolder UNFILLED hex ring) rather than the generic wash, since this reward grants that exact effect at the start of the next run. */
+  _renderShieldStartIcon(renderer, cx, cy, scale, alpha, glowBlur) {
+    const badge = Config.dailyReward.iconBadge;
+    const inv = Config.powerUps.invincible;
+    const r = badge.radius * scale;
+
+    renderer.fillEllipse(0, 0, r, r, { x: cx, y: cy, fillColor: inv.fillColor, alpha });
+    renderer.strokeCircle(cx, cy, r, { color: inv.color, lineWidth: badge.lineWidth, glowBlur, alpha });
+    renderer.strokePaths([this._hexPath], {
+      x: cx, y: cy, scale, color: inv.color, lineWidth: badge.lineWidth * 1.4, glowBlur: glowBlur * 0.5, alpha,
+    });
+  }
+
+  /** luckyDrop's medallion — no in-run pickup grants exactly this effect, so it borrows the 'health' pickup's green body and PowerUps' shared white iconFillColor glyph treatment (like that pool's own cross/diamond/bolt) for its sparkle instead of a bespoke look. */
+  _renderLuckyDropIcon(renderer, cx, cy, scale, alpha, glowBlur) {
+    const badge = Config.dailyReward.iconBadge;
+    const r = badge.radius * scale;
+    const color = this._reward.displayColor; // matches Config.powerUps.health.color
+    const pts = this._sparklePath.points.map(([px, py]) => [px * scale, py * scale]);
+
+    renderer.fillEllipse(0, 0, r, r, { x: cx, y: cy, fillColor: Config.powerUps.health.fillColor, alpha });
+    renderer.strokeCircle(cx, cy, r, { color, lineWidth: badge.lineWidth, glowBlur, alpha });
+    renderer.fillStrokePaths([{ points: pts, closed: true }], {
+      x: cx, y: cy, fillColor: Config.powerUps.iconFillColor, strokeColor: color, lineWidth: badge.lineWidth, alpha,
+    });
   }
 
   /**
@@ -348,10 +391,22 @@ export class DailyRewardPanel {
       } else {
         this._renderPipIcon(renderer, cx, cy, entry.type, color, pipAlpha);
       }
+
+      renderer.drawText(String(day), cx, cy + cfg.dayLabelOffsetY, {
+        font: cfg.dayLabelFont, color, alpha: pipAlpha, glowBlur, glowColor: color,
+      });
     }
   }
 
-  /** A single streak-strip pip's icon — the same coin/sparkle/hex glyphs _renderIcon draws on the big badge, shrunk to `streakStrip.iconScale`. */
+  /**
+   * A single streak-strip pip's icon — simplified silhouettes (a plain
+   * double-ring, sparkle, hex) rather than the big badge's full gameplay-
+   * accurate rendering (_renderGoldIcon/_renderShieldStartIcon/
+   * _renderLuckyDropIcon): pips are tinted by calendar STATE (claimed/
+   * current/future), not by the reward's own color, so a real coin's fixed
+   * gold palette would fight that color coding instead of reading as
+   * claimed/current/future like every other pip.
+   */
   _renderPipIcon(renderer, cx, cy, type, color, alpha) {
     const cfg = Config.dailyReward.streakStrip;
     const r = Config.dailyReward.iconBadge.radius * 0.5 * cfg.iconScale;

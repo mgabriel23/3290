@@ -144,7 +144,7 @@ export class GoldPickups {
     if (this._count === 0) return;
     const {
       radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, maxLife, expireFadeDuration,
-      color, fillColor, highlightColor, shadeColor,
+      color, fillColor, shadeColor,
     } = Config.gold;
     for (let i = 0; i < this._count; i++) {
       const x = this._x[i], y = this._y[i];
@@ -166,14 +166,6 @@ export class GoldPickups {
       renderer.fillStrokePaths(this._starPathArr, {
         x, y, fillColor: shadeColor, strokeColor: shadeColor, lineWidth: 1, alpha: expireAlpha,
       });
-      // Glossy specular highlight, slowly drifting across the face — like
-      // light catching a softly tumbling coin.
-      const hlAngle = age * pulseSpeed * 0.4;
-      renderer.fillEllipse(
-        Math.cos(hlAngle) * radius * 0.32, Math.sin(hlAngle) * radius * 0.32,
-        radius * 0.3, radius * 0.2,
-        { x, y, fillColor: highlightColor, alpha: expireAlpha * 0.5 },
-      );
       // Bright glinting rim + glow — the "pick me up" silhouette against a busy starfield.
       renderer.strokeCircle(x, y, radius, { color, lineWidth, glowBlur, alpha: rimAlpha });
     }
