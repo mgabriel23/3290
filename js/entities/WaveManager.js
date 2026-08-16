@@ -53,19 +53,21 @@
  * 7 → roster[0] "scout1", 14 → roster[1] "spiral", 21 → roster[2]
  * "bouncerPrimal", 28 → roster[3] "snake", 35 → roster[4] "tetra", 42 →
  * roster[5] "nova", 49 → roster[6] "pulsor", 56 → roster[7] "zigzag", 63 →
- * roster[8] "phoenix", 70 → roster[0] again, ...) — see the constructor's `_bossKey`/`_bossCfg`
+ * roster[8] "phoenix", 70 → roster[9] "electron", 77 → roster[0] again, ...)
+ * — see the constructor's `_bossKey`/`_bossCfg`
  * lookup and the `BOSS_CLASSES` table above for the matching class
  * construction. Every boss class shares one `update(dt, playerX, playerY,
  * ctx)` shape, where `ctx` is a bag of every callback ANY boss might need —
  * fire callbacks for the ship-family bosses (`fireBullet`/`fireRocket`/
  * `fireSniperBullet`/`fireSpiralBullet`/`fireTetraBullet`/`fireNovaSeed`/
  * `fireNovaSeedAngle`/`firePulsorBullet`/`fireZigzagBullet`/
- * `firePhoenixFireball`), `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal,
+ * `firePhoenixFireball`/`fireElectronBolt`/`fireElectronChain`),
+ * `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal,
  * and `fireDrifterProjectile` for Snake's head (`_bossContext`, built once
  * in the constructor) — each class reads only the ones it actually uses
  * (see BossEnemy.js/SpiralBoss.js/BouncerPrimalBoss.js/SnakeBoss.js/
- * TetraBoss.js/NovaBoss.js/PulsorBoss.js/ZigzagBoss.js/PhoenixBoss.js's own
- * docs for their attack patterns). Every boss renders itself individually
+ * TetraBoss.js/NovaBoss.js/PulsorBoss.js/ZigzagBoss.js/PhoenixBoss.js/
+ * ElectronBoss.js's own docs for their attack patterns). Every boss renders itself individually
  * like Drifter/Bouncer (see `_renderIndividualEnemies`), and gets its own
  * boss-tier UI treatment — `renderBossHealthBar`, a separate method
  * GameplayScene calls from the fixed UI camera layer (not part of this
@@ -90,6 +92,7 @@ import { NovaBoss } from './NovaBoss.js';
 import { PulsorBoss } from './PulsorBoss.js';
 import { ZigzagBoss } from './ZigzagBoss.js';
 import { PhoenixBoss } from './PhoenixBoss.js';
+import { ElectronBoss } from './ElectronBoss.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
@@ -100,6 +103,8 @@ import { NovaBullets } from './NovaBullets.js';
 import { PulsorBullets } from './PulsorBullets.js';
 import { ZigzagBullets } from './ZigzagBullets.js';
 import { PhoenixFireballs } from './PhoenixFireballs.js';
+import { ElectronBolts } from './ElectronBolts.js';
+import { ElectronChains } from './ElectronChains.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
 import { AudioPool } from '../core/AudioPool.js';
@@ -115,7 +120,7 @@ const SKILL_LETHAL_MULTIPLIER = 9999;
 
 // Which boss CLASS to construct for a given Config.boss.roster key — see
 // the constructor's boss-selection lookup and _spawnNext's 'boss' branch.
-const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss, snake: SnakeBoss, tetra: TetraBoss, nova: NovaBoss, pulsor: PulsorBoss, zigzag: ZigzagBoss, phoenix: PhoenixBoss };
+const BOSS_CLASSES = { scout1: BossEnemy, spiral: SpiralBoss, bouncerPrimal: BouncerPrimalBoss, snake: SnakeBoss, tetra: TetraBoss, nova: NovaBoss, pulsor: PulsorBoss, zigzag: ZigzagBoss, phoenix: PhoenixBoss, electron: ElectronBoss };
 
 // Pre-allocated world-space hull pools — reused every frame, zero heap allocations.
 const MAX_BATCH = 20;
@@ -318,6 +323,8 @@ export class WaveManager {
     this._pulsorBullets = new PulsorBullets();
     this._zigzagBullets = new ZigzagBullets();
     this._phoenixFireballs = new PhoenixFireballs();
+    this._electronBolts = new ElectronBolts();
+    this._electronChains = new ElectronChains();
     this._rockets = new Rockets({
       onDetonate: (x, y) => {
         this._rocketeerParticles.emit(x, y);
@@ -381,6 +388,8 @@ export class WaveManager {
     this._firePulsorBullet = (ox, oy, angle, speed) => this._pulsorBullets.fire(ox, oy, angle, speed);
     this._fireZigzagBullet = (ox, oy, angle) => this._zigzagBullets.fire(ox, oy, angle);
     this._firePhoenixFireball = (ox, oy, tx, ty) => this._phoenixFireballs.fire(ox, oy, tx, ty);
+    this._fireElectronBolt = (ox, oy, tx, ty) => this._electronBolts.fire(ox, oy, tx, ty);
+    this._fireElectronChain = (ox, oy, tx, ty) => this._electronChains.fire(ox, oy, tx, ty);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
     // Passed into Enemy.js's repositioning so it picks a fresh rest point
     // that's already clear of other enemies, instead of a blind random one
@@ -408,6 +417,8 @@ export class WaveManager {
       firePulsorBullet: this._firePulsorBullet,
       fireZigzagBullet: this._fireZigzagBullet,
       firePhoenixFireball: this._firePhoenixFireball,
+      fireElectronBolt: this._fireElectronBolt,
+      fireElectronChain: this._fireElectronChain,
       fireDrifterProjectile: this._fireDrifterProjectile,
       barrierSurfaceY: this._barrierSurfaceY,
       onBarrierHit: this._onBarrierHit,
@@ -445,6 +456,8 @@ export class WaveManager {
     this._pulsorBullets.update(dt);
     this._zigzagBullets.update(dt);
     this._phoenixFireballs.update(dt);
+    this._electronBolts.update(dt);
+    this._electronChains.update(dt);
 
     if (this._waveClear) return;
 
@@ -555,6 +568,8 @@ export class WaveManager {
     this._pulsorBullets.render(renderer);
     this._zigzagBullets.render(renderer);
     this._phoenixFireballs.render(renderer);
+    this._electronBolts.render(renderer);
+    this._electronChains.render(renderer);
     this._rockets.render(renderer);
     this._drifterProjectiles.render(renderer);
   }
@@ -977,16 +992,23 @@ export class WaveManager {
     if (this._pulsorBullets.checkHit(x, y, hitRadius)) damage += Config.boss.pulsor.pulseDamage;
     if (this._zigzagBullets.checkHit(x, y, hitRadius)) damage += Config.boss.zigzag.bullet.damage;
     if (this._phoenixFireballs.checkHit(x, y, hitRadius)) damage += Config.boss.phoenix.fireball.damage;
+    if (this._electronBolts.checkHit(x, y, hitRadius)) damage += Config.boss.electron.bolt.damage;
+    if (this._electronChains.checkHit(x, y, hitRadius)) damage += Config.boss.electron.chain.damage;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
       // A regular Bouncer always deals contact damage; a boss opts in by
-      // exposing its own `.contactDamage` (currently only Bouncer Primal —
-      // see that class's doc) rather than every other boss needing a
-      // no-op getter just to be excluded here.
+      // exposing its own `.contactDamage` (currently Bouncer Primal/Phoenix's
+      // charge/Electron's surge — see each class's doc) rather than every
+      // other boss needing a no-op getter just to be excluded here. The
+      // circle radius defaults to the enemy's own `hitRadius` (the hull
+      // player bullets also test against) but a boss can override it via an
+      // optional `.contactRadius` (currently only Electron's surge, whose
+      // AOE reaches well past its hull) without inflating the hitbox real
+      // bullets collide against.
       if (e.type === 'bouncer' || e.contactDamage > 0) {
         const dx = e.x - x, dy = e.y - y;
-        const r  = e.hitRadius + hitRadius;
+        const r  = (e.contactRadius ?? e.hitRadius) + hitRadius;
         if (dx * dx + dy * dy <= r * r) {
           damage += e.type === 'bouncer' ? Config.enemy.bouncer.contactDamage : e.contactDamage;
         }
@@ -1136,6 +1158,9 @@ export class WaveManager {
     this._novaSeedBullets.clear();
     this._pulsorBullets.clear();
     this._zigzagBullets.clear();
+    this._phoenixFireballs.clear(); // was missing entirely — a pre-existing gap in this list, fixed alongside adding Electron's own pools below
+    this._electronBolts.clear();
+    this._electronChains.clear();
     this._rockets.clear();
     this._drifterProjectiles.clear();
   }
@@ -1237,7 +1262,9 @@ export class WaveManager {
       && !this._novaSeedBullets.active
       && !this._pulsorBullets.active
       && !this._zigzagBullets.active
-      && !this._phoenixFireballs.active;
+      && !this._phoenixFireballs.active
+      && !this._electronBolts.active
+      && !this._electronChains.active;
   }
 
   // ---------------------------------------------------------------------------

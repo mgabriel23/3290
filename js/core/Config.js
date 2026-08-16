@@ -3409,6 +3409,7 @@ export const Config = Object.freeze({
 		// appended at the end regardless, so it's in rotation either way.
 		everyNLevels: 1,
 		roster: Object.freeze([
+			"electron",
 			"phoenix",
 			"scout1",
 			"snake",
@@ -3426,7 +3427,8 @@ export const Config = Object.freeze({
 			"bouncerPrimal",
 			"snake",
 			"phoenix",
-		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/8th/9th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[7] "zigzag", 63→roster[8] "phoenix", 70→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
+			"electron",
+		]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/8th/9th/10th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[7] "zigzag", 63→roster[8] "phoenix", 70→roster[9] "electron", 77→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
 		killTrauma: 0.6, // screen-shake on the boss's own death — matches Config.gameOver.deathTrauma, the strongest non-player-death moment in the game
 
 		// Fraction of a boss's OWN max health the player's skill bomb deals
@@ -4488,6 +4490,188 @@ export const Config = Object.freeze({
 			sparksPerEmit: 42,
 			points: 3600,
 			gold: 175,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.8,
+				poolSize: 3,
+			}),
+		}),
+
+		/**
+		 * Boss #10 — "Electron". An original hull (see ElectronBoss.js's
+		 * ELECTRON_HULL_PTS — a sharp 4-point spark/sparkle star, alternating
+		 * outer spike-tip and inner core radius around a full circle, same
+		 * construction as Spiral's own N-pointed star just half the spikes and
+		 * a tighter inner ratio for a sharper "spark" read instead of Spiral's
+		 * rounder gear), same "original hull" lineage as Spiral/Tetra/Nova/
+		 * Pulsor/Zigzag/Phoenix. No engine flame (a floating spark has no
+		 * thruster) — a pulsing core-ring glow stands in for one, same
+		 * reasoning as every other turret-style original hull.
+		 *
+		 * A repeating TIMED loop between THREE phases (`_phase`/`_phaseAge`),
+		 * same shape as Phoenix's own 3-phase loop, but unlike Phoenix's
+		 * shared-rest-point design, only phase 3 ever leaves the rest point —
+		 * phases 1/2 both hold perfectly still at (restX, restY) (see
+		 * ElectronBoss.js's class doc):
+		 *
+		 *   phase 1 (`phase1Duration` seconds) — "Spark Barrage": tracks the
+		 *   player (`_angle = atan2(-dx, dy)`, same convention Nova/Scout/
+		 *   BossEnemy already use) and fires ONE bolt (`bolt`,
+		 *   ElectronBolts.js) straight at the player's CURRENT position — no
+		 *   lead prediction, same idiom as Nova's seed/Phoenix's fireball —
+		 *   every `bolt.fireInterval` seconds. Unlike Tetra/Spiral/Nova's own
+		 *   "slow bullet, dodge at leisure" bullets, this leans the other
+		 *   way: a moderate cadence but a FAST travel speed, so each
+		 *   individual bolt is the real threat, not sheer stream density.
+		 *
+		 *   phase 2 (`chain`) — "Chain Lash": fires `chain.chainCount`
+		 *   twin-sphere bolts (ElectronChains.js — two linked orbs,
+		 *   `chain.spacing` apart, oriented perpendicular to their own travel
+		 *   direction), `chain.chainInterval` seconds apart, each launched
+		 *   from the boss's OWN current (x, y) straight at the player's
+		 *   CURRENT position — same "aim once, no lead" idiom as phase 1's
+		 *   bolt, just two orbs instead of one. The connecting link between
+		 *   the two orbs is redrawn with a fresh random jitter every frame
+		 *   (see ElectronChains.render) for a crackling "real electricity"
+		 *   look; contact with either orb OR the link between them damages
+		 *   the player and consumes the whole bolt, same swap-remove-on-hit
+		 *   shape as every other boss bullet pool's own `checkHit`.
+		 *
+		 *   phase 3 (`surge`) — "Overcharge": the ONLY phase this boss
+		 *   actually moves — a wandering patrol (`moveSpeed`, seeking a fresh
+		 *   random point inside the bounds every time it arrives at its last
+		 *   one, see ElectronBoss._pickWanderTarget/_updateRoam — not a
+		 *   random-heading drift, which mostly loitered near wherever phase 3
+		 *   started instead of actually covering the area) rather than the
+		 *   fixed-point hold of phases 1/2. `boundMarginX`/`boundYMin`/
+		 *   `boundYMax` deliberately cover nearly the WHOLE arena — the same
+		 *   space the player themselves can move in, not a tucked-away upper
+		 *   band like every other patrolling boss — the only hard limit is
+		 *   staying clear of the barrier below (`boundYMax`, same
+		 *   margin-above-the-dome-peak reasoning Phoenix's own charge bounds
+		 *   use). While roaming it
+		 *   repeatedly "surges": every `surge.interval` seconds it telegraphs
+		 *   (a growing ring, harmless, for `surge.telegraphDuration` seconds
+		 *   — the same fairness window every other telegraphed attack in
+		 *   this game gives), then goes live for `surge.activeDuration`
+		 *   seconds dealing `surge.damage` to the player if they're within
+		 *   `surge.radius` — opts into WaveManager.checkPlayerHit's existing
+		 *   `.contactDamage` circle-test hook the same way Bouncer/Phoenix's
+		 *   charge already do, just paired with a NEW optional
+		 *   `.contactRadius` getter so the AOE can reach well past this
+		 *   boss's own `hitRadius` without inflating the hitbox player
+		 *   bullets test against (see WaveManager.checkPlayerHit's own doc
+		 *   for that one-line extension) — then `surge.recoverDuration`
+		 *   seconds fading out before the next telegraph. Once
+		 *   `phase3Duration` total seconds have passed it eases smoothly back
+		 *   to (restX, restY) over `returnDuration` seconds (smoothstep, same
+		 *   technique Phoenix's own charge-phase 'recover' beat uses) before
+		 *   phase 1 begins again — the fixed rest point phases 1/2 both
+		 *   expect to start from.
+		 *
+		 * Hit/death-flash/entry-glide rendering reuse the same shared
+		 * EnemyCombat.js functions every other boss/enemy class uses — see
+		 * that file's header for why those are plain functions rather than a
+		 * base class.
+		 */
+		electron: Object.freeze({
+			name: "ELECTRON",
+
+			size: 46, // vp — outer spike-tip radius (see ELECTRON_HULL_PTS)
+			innerRadiusRatio: 0.34, // core-ring radius as a fraction of `size` — tighter than Spiral's 0.45 for a sharper spike read
+			health: 600,
+			healthPerLevel: 75,
+			color: "#22E8FF", // electric cyan — distinct from every other boss color (red/violet/amber/green/blue/gold/coral/orange/crimson) and reads as raw current, not Tetra's cooler "electric blue" laser hue
+			fillColor: "#03181f",
+			lineWidth: 3,
+			glowBlur: 18,
+			hitGlowBlur: 30,
+			hitRadius: 46, // vp — matches `size`, same convention as Spiral's hitRadius
+
+			entrySpeed: 150,
+			// vp — shared rest point (with restX = arena center, set in
+			// ElectronBoss's constructor) that phases 1 AND 2 both hold
+			// perfectly still at — only phase 3 ever leaves it, easing back
+			// here via `returnDuration` once phase 3 ends. See class doc.
+			restY: 260,
+
+			// How long phases 1 and 3 last before advancing — phase 2 instead
+			// ends once its own `chain.chainCount` chains have fully played out
+			// (see ElectronBoss._updateChainPhase), not a raw duration.
+			phase1Duration: 7,
+			phase3Duration: 9,
+
+			// Phase 1 — dedicated bullet pool (ElectronBolts.js), fired
+			// straight at the player's current position — see class doc for
+			// why a fast travel speed (not sheer stream density) is this
+			// attack's real threat.
+			bolt: Object.freeze({
+				fireInterval: 0.45, // seconds between shots — a real single-target cadence, not a barrage
+				speed: 260, // vp/sec — noticeably faster than Tetra/Spiral/Nova's own "slow bullet" bosses, the actual threat here
+				color: "#22E8FF",
+				lineWidth: 4,
+				glowBlur: 12,
+				halfLen: 5,
+				poolSize: 40,
+				damage: 6, // matches a regular Scout bullet (Config.enemyBullet.damage)
+			}),
+
+			// Phase 2 — twin-sphere linked-bolt pool (ElectronChains.js). Each
+			// bolt is 2 orbs `spacing` apart (oriented perpendicular to its
+			// own travel direction, so the pair always reads as "wide" from
+			// the player's approach angle) launched from the boss's own
+			// current position straight at the player — see class doc.
+			chain: Object.freeze({
+				spacing: 70, // vp between the two linked orbs — a long connecting link, reads as a real hazard rather than a hairline
+				sphereRadius: 7, // vp — each orb's rendered radius
+				jitterAmount: 7, // vp — max per-frame random offset applied to the connecting link's midpoints, see ElectronChains.render
+				speed: 190, // vp/sec
+				chainCount: 12, // bolts fired per phase-2 visit
+				chainInterval: 0.42, // seconds between bolts (40% slower than the original 0.3) — also re-aims the next one at the player's CURRENT position
+				settleDuration: 1.0, // seconds after the last bolt fires before phase 3 begins — a breathing-room beat
+				halfWidth: 12, // vp — collision half-thickness (added to the player's own hitRadius) tested against the link between the two orbs
+				damage: 14, // player HP lost on contact — a single consuming hit (see ElectronChains.checkHit), not a per-frame tick
+				poolSize: 18, // generous vs. chainCount (12) — several of one visit's bolts can be in flight at once, plus stragglers from the last visit
+				color: "#22E8FF",
+				lineWidth: 5, // a little wider than a normal boss-bullet stroke — this is a "connection", not a thin capsule
+				glowBlur: 14,
+			}),
+
+			// Phase 3 — wandering patrol + periodic AOE pulse, see class doc.
+			// Bounds cover nearly the full arena — only `boundYMax` is a real
+			// constraint, keeping the boss clear of the barrier below.
+			moveSpeed: 160, // vp/sec — brisk enough to actually cross the much larger roam area between wander-target picks, see ElectronBoss._updateRoam
+			boundMarginX: 56, // vp from each side edge — just past `hitRadius`, so the hull's own spikes don't clip off-screen
+			boundYMin: 175, // vp — kept clear of the boss health bar above it
+			// vp — kept above the barrier (Config.barrier baseY 940, dome
+			// peak ~870 at center) with the same margin reasoning Phoenix's
+			// own charge attack bounds (`Config.boss.phoenix.charge.boundYMax`)
+			// already use for the identical concern.
+			boundYMax: 820,
+			surgeRotationSpeed: 2.0, // rad/sec — continuous hull spin through phase 3, purely cosmetic (no attack reads its facing)
+			returnDuration: 0.8, // seconds to smoothstep-ease back to (restX, restY) once phase 3 ends
+
+			surge: Object.freeze({
+				interval: 2.4, // seconds between surge pulses during phase 3
+				telegraphDuration: 0.6, // seconds the growing warning ring is up before the pulse goes live — the fairness/reaction window
+				activeDuration: 0.5, // seconds the AOE actually deals damage
+				recoverDuration: 0.4, // seconds the ring fades out afterward
+				radius: 110, // vp — AOE reach, well past `hitRadius` (see `.contactRadius`)
+				damage: 18,
+				color: "#22E8FF",
+			}),
+
+			// Pulsing core-ring glow at the center — stands in for an engine
+			// flame, same reasoning as every other original-hull boss
+			// (Spiral/Tetra/Nova/Pulsor/Zigzag's own `coreGlow*` fields).
+			coreRadius: 15, // vp
+			coreGlowLineWidth: 3,
+			coreGlowBlur: 12,
+			coreGlowPulseSpeed: 3, // rad/sec — breathing pulse
+
+			sparksPerEmit: 44,
+			points: 3700,
+			gold: 180,
 			audio: Object.freeze({
 				src: "assets/audio/explosion.mp3",
 				volume: 0.8,
