@@ -5954,8 +5954,11 @@ export const Config = Object.freeze({
 	 * since there are far fewer of them to fit. `toast` tunes the
 	 * celebratory pop-up (entities/AchievementToast.js) fired the moment a
 	 * tier unlocks mid-run — same three-phase pop/hold/fade shape as
-	 * Config.combo.banner, parked lower on screen (posY 460 vs combo's 380)
-	 * so the two can never visually collide if both fire close together.
+	 * Config.combo.banner, parked lower on screen (posY 460 vs combo's 380).
+	 * That static split alone isn't enough room once both are at full size
+	 * together, so `toast.comboClearanceOffsetY`/`comboOffsetRate` ease in
+	 * extra clearance while the combo banner is also active — see
+	 * AchievementToast's class doc.
 	 */
 	achievements: Object.freeze({
 		button: Object.freeze({
@@ -6048,6 +6051,13 @@ export const Config = Object.freeze({
 			popOvershoot: 2.0,
 			holdDuration: 1.4, // longer than Config.combo.banner's 0.85 — a rarer event, worth a beat longer to actually read
 			fadeOutDuration: 0.4,
+			// Extra downward push (added to posY) eased in while
+			// Config.combo.banner is also on screen, so a simultaneous
+			// combo-tier-up + achievement-unlock don't crowd each other's text
+			// — see AchievementToast._comboOffsetY. Eased rather than snapped
+			// so it doesn't visibly "pop" if the combo banner ends mid-toast.
+			comboClearanceOffsetY: 65, // vp
+			comboOffsetRate: 10, // 1/sec convergence rate — same exponential-ease shape as Config.level's duckInRate/duckOutRate
 		}),
 	}),
 

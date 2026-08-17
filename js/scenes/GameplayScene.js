@@ -468,7 +468,9 @@ export class GameplayScene {
     this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
     this._floatingText.update(effectiveDt);
     this._comboBanner.update(effectiveDt);
-    this._achievementToast.update(effectiveDt);
+    // Tells the toast whether it needs to make room for itself below the
+    // combo banner this frame — see AchievementToast's class doc.
+    this._achievementToast.update(effectiveDt, this._comboBanner.isActive());
     this._playerSkill.update(effectiveDt);
     this._updateMusicDuck(effectiveDt);
 

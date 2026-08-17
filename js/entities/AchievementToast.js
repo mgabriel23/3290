@@ -4,8 +4,8 @@
  * hard-to-miss pop-up fired the instant a badge tier unlocks mid-run, same
  * spirit and shape as ComboBanner's combo-streak "hype" banner (pop-in via
  * easeOutBack, hold, fade), just its own color and parked lower on screen
- * (Config.achievements.toast.posY) so the two can never collide if both
- * fire close together.
+ * (Config.achievements.toast.posY) — see the note further down on how it
+ * makes extra room for itself when both fire close together.
  *
  * Owns its own unlock detection rather than being told about it: `checkForUnlocks()`
  * is polled once a frame from GameplayScene.update() (same "poll and drain"
@@ -23,6 +23,17 @@
  * once (e.g. a boss kill bumps both `totalKills` and `bossKills`), so more
  * than one toast can become due in the same frame — each is shown in full
  * before the next starts, never overlapped or dropped.
+ *
+ * The fixed posY split from ComboBanner isn't quite enough breathing room
+ * on its own once both are actually at full size/opacity together, so
+ * `update()` also takes `comboActive` (GameplayScene passes
+ * `comboBanner.isActive()`) and smoothly eases in an extra downward offset
+ * (`Config.achievements.toast.comboClearanceOffsetY`, converging at
+ * `comboOffsetRate` — same exponential-ease shape as Config.level's
+ * duckInRate/duckOutRate) whenever the banner is also on screen, easing
+ * back out the moment it isn't. The lerp runs every frame regardless of
+ * whether a toast is currently showing, so the offset is already settled
+ * by the time one pops in rather than sliding into place after the fact.
  */
 import { Config } from '../core/Config.js';
 import { TRACKS, tierIndexFor } from '../core/Achievements.js';
@@ -35,6 +46,7 @@ export class AchievementToast {
     this._track = null;
     this._tierIndex = 0; // 0-based — indexes Config.achievements.tierLabels
     this._queue = [];
+    this._comboOffsetY = 0; // eased extra downward push while ComboBanner is also active — see class doc
 
     const stats = getStats();
     this._lastTiers = TRACKS.map((track) => tierIndexFor(track, track.getValue(stats)));
@@ -59,7 +71,12 @@ export class AchievementToast {
     this._age = 0;
   }
 
-  update(dt) {
+  /** @param {number} dt @param {boolean} comboActive  whether ComboBanner is currently on screen — see class doc */
+  update(dt, comboActive = false) {
+    const { comboClearanceOffsetY, comboOffsetRate } = Config.achievements.toast;
+    const target = comboActive ? comboClearanceOffsetY : 0;
+    this._comboOffsetY += (target - this._comboOffsetY) * (1 - Math.exp(-comboOffsetRate * dt));
+
     if (this._age < 0) return;
     const { popDuration, holdDuration, fadeOutDuration } = Config.achievements.toast;
     this._age += dt;
@@ -78,6 +95,7 @@ export class AchievementToast {
     const { width: vW } = Config.virtual;
     const t = this._age;
     const holdEnd = popDuration + holdDuration;
+    const y = posY + this._comboOffsetY;
 
     let scale, alpha;
     if (t < popDuration) {
@@ -92,13 +110,13 @@ export class AchievementToast {
     }
     if (alpha <= 0.02) return;
 
-    renderer.drawText(tagText, vW / 2, posY + tagOffsetY, {
+    renderer.drawText(tagText, vW / 2, y + tagOffsetY, {
       font: tagFont, color, alpha: alpha * 0.85, scale,
     });
-    renderer.drawText(this._track.title, vW / 2, posY, {
+    renderer.drawText(this._track.title, vW / 2, y, {
       font: titleFont, color, alpha, glowBlur, scale,
     });
-    renderer.drawText(`TIER ${Config.achievements.tierLabels[this._tierIndex]}`, vW / 2, posY + subOffsetY, {
+    renderer.drawText(`TIER ${Config.achievements.tierLabels[this._tierIndex]}`, vW / 2, y + subOffsetY, {
       font: subFont, color, alpha: alpha * 0.85, scale,
     });
   }

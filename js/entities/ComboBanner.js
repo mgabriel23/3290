@@ -35,6 +35,11 @@ export class ComboBanner {
     this._age = 0;
   }
 
+  /** Whether the banner is currently on screen — read by AchievementToast so it can make room for itself when both fire close together. */
+  isActive() {
+    return this._age >= 0;
+  }
+
   /** @param {number} dt */
   update(dt) {
     if (this._age < 0) return;
