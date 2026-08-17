@@ -146,11 +146,19 @@ export class SnakeSegment {
   }
 
   /**
-   * Register one bullet hit. Returns true if the hit was fatal.
+   * Register one bullet hit. Returns true if the hit was fatal. A no-op
+   * while the head is in its phase-2 burst (`_head._phase2Active`) — see
+   * SnakeBoss.js's class doc/Config.boss.snake.phase2. Reads the flag
+   * straight off `_head` rather than a local copy, so the whole chain goes
+   * invulnerable together with no per-segment broadcast needed. Safe even
+   * once the head is dead: a fatal hit can only land while `_phase2Active`
+   * is already false (see SnakeBoss.hit), so it can never be "stuck true"
+   * on an orphaned segment.
    * @param {number} [damage]
    * @returns {boolean}
    */
   hit(damage = 1) {
+    if (this._head._phase2Active) return false;
     return applyHit(this, damage);
   }
 }

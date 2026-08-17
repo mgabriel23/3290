@@ -817,6 +817,24 @@ export class WaveManager {
       fp[2][0] = fillRight;
       renderer.fillStrokePaths(_bossHealthFillPathArr, { fillColor: boss.color, strokeColor: boss.color, lineWidth: 1 });
     }
+
+    // Generic phase2/invulnerability indicator — see Config.boss.healthBar's
+    // own doc. Duck-typed on `boss.invulnerable` so this isn't Snake-specific
+    // code; any future boss with the same kind of mechanic gets it for free.
+    if (boss.invulnerable) {
+      const pulse = cfg.invulnerablePulseMin + (1 - cfg.invulnerablePulseMin)
+        * (0.5 + 0.5 * Math.sin(boss.age * cfg.invulnerablePulseSpeed));
+      renderer.strokePaths(_bossHealthTrackPathArr, {
+        color: cfg.invulnerableOutlineColor, lineWidth: cfg.invulnerableOutlineWidth,
+        glowBlur: cfg.invulnerableOutlineGlowBlur, glowColor: cfg.invulnerableOutlineColor,
+        alpha: pulse,
+      });
+      renderer.drawText(cfg.invulnerableText, cfg.x, _bhbBottom + cfg.invulnerableOffsetY, {
+        font: cfg.invulnerableFont, color: cfg.invulnerableColor,
+        glowBlur: cfg.invulnerableGlowBlur, glowColor: cfg.invulnerableColor,
+        alpha: pulse,
+      });
+    }
   }
 
   /**
@@ -889,8 +907,19 @@ export class WaveManager {
         this._particles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.scout.audio.volume);
       }
-      this._maybeDropPowerUp(enemy.x, enemy.y, dropChanceBonus);
-      this._maybeDropGold(enemy.x, enemy.y, reward.gold, dropChanceBonus);
+      // Snake segment kills fold in their own extra drop-chance multipliers
+      // on top of the combo bonus — see Config.boss.snake.segment.
+      // powerUpDropChanceMult/goldDropChanceMult's own doc for why (up to
+      // maxSegments individually-rollable kills in one fight).
+      const isSnakeSegment = enemy.type === 'snakeSegment';
+      const powerUpDropChanceBonus = isSnakeSegment
+        ? dropChanceBonus * Config.boss.snake.segment.powerUpDropChanceMult
+        : dropChanceBonus;
+      const goldDropChanceBonus = isSnakeSegment
+        ? dropChanceBonus * Config.boss.snake.segment.goldDropChanceMult
+        : dropChanceBonus;
+      this._maybeDropPowerUp(enemy.x, enemy.y, powerUpDropChanceBonus);
+      this._maybeDropGold(enemy.x, enemy.y, reward.gold, goldDropChanceBonus);
     }
     return killed;
   }

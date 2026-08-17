@@ -4455,11 +4455,13 @@ export const Config = Object.freeze({
 		/**
 		 * Boss #4 — "Snake". An upgraded, far-longer, tankier Sweeper: reuses
 		 * DrifterEnemy.js's own exported Sweeper path/sampler
-		 * (createSweeperPath/sampleSweeperPath) and body silhouette
-		 * (BODY_PTS) rather than authoring new movement or a new hull — the
-		 * "upgrade" is the chain's length, toughness, and a dynamic
-		 * gap-closing behavior no regular Drifter formation has (see
-		 * SnakeBoss.js's own doc for exactly how that works).
+		 * (createSweeperPath/sampleSweeperPath) rather than authoring new
+		 * movement — the "upgrade" is the chain's length, toughness, a
+		 * dynamic gap-closing behavior no regular Drifter formation has, and
+		 * its own dedicated hull (SnakeBoss.js's SEGMENT_PTS/HEAD_PTS — an
+		 * angular, tapered, banded plate chain with a distinct head, not
+		 * DrifterEnemy's rounded body silhouette) (see SnakeBoss.js's own
+		 * doc for exactly how the chain behavior works).
 		 *
 		 * The FRONT segment (`SnakeBoss`, chain index 0) is the actual boss —
 		 * own health/reward/health-bar, same as every other boss. Every
@@ -4467,12 +4469,15 @@ export const Config = Object.freeze({
 		 * a regular Sweeper clone but individually much cheaper, and only
 		 * every `attackInterval`-th one (fixed at spawn, ~1 in 10) actually
 		 * fires its own projectile at the player — the rest are pure physical
-		 * hazards. Starts at `initialSegments` and grows by
-		 * `growthBatchSize` every `growthInterval` seconds, up to
-		 * `maxSegments` — see SnakeBoss.update's growth tick, drained
-		 * into WaveManager's enemy list the same generic `drainSummons` way
-		 * Bouncer Primal's on-hit summons already are, just triggered by time
-		 * instead of a hit.
+		 * hazards. The full `maxSegments`-long chain is built all at once in
+		 * the constructor (no gradual mid-fight growth) and queued into
+		 * WaveManager's enemy list via the same generic `drainSummons`
+		 * interface Bouncer Primal's on-hit summons use — see SnakeBoss.js's
+		 * own doc.
+		 *
+		 * Also periodically enters "phase 2" — a temporary invulnerable,
+		 * blinking, faster-moving burst covering the whole chain at once, not
+		 * just the head — see `phase2` below and SnakeBoss.update/render.
 		 */
 		snake: Object.freeze({
 			name: "SNAKE",
@@ -4483,13 +4488,41 @@ export const Config = Object.freeze({
 			hitGlowBlur: 16,
 			hitRadius: 18, // vp — same as a regular Sweeper's own (Config.enemy.drifter.hitRadius)
 
+			// Head-only accents (SnakeBoss.render draws the head as its own
+			// distinct hull, separate from the batched body-plate pools, so
+			// the actual boss reads as a head rather than another identical
+			// plate — see SnakeBoss.js HEAD_PTS).
+			eyeColor: "#e8ffb0",
+			eyeRadius: 2.4,
+			eyeOffsetX: 6, // vp, local space, mirrored left/right
+			eyeOffsetY: -9,
+
 			// Shared-path chain formation — see class doc.
 			spacing: 34, // vp along the path between segments — tighter than a regular Sweeper's 50, so a fully-grown chain doesn't stretch absurdly far past both screen edges
-			speed: 190, // vp/sec along the path — a touch slower than a regular Sweeper's 220, reads as heavier
+			speed: 205, // vp/sec along the path — still under a regular Sweeper's 220 (reads heavier), nudged up from 190 for a bit more pace
 			// Gap-closing "catch-up" rate (vp/sec) — see SnakeSegment.update.
-			// Faster than `speed` so a segment visibly hurries to close a gap
-			// left by a dead neighbor rather than trailing it forever.
-			catchUpSpeed: 260,
+			// Faster than `speed` (and than `speed * phase2.speedMult`, its
+			// highest possible value) so a segment can both keep pace with the
+			// formation AND still visibly hurry to close a gap left by a dead
+			// neighbor, in either phase.
+			catchUpSpeed: 420,
+
+			// Phase 2 — a periodic invulnerable/blinking speed burst. Every
+			// `interval` seconds of normal time, the whole chain (head +
+			// every live segment, via each segment's own `_head` reference —
+			// see SnakeSegment.hit) goes invulnerable and moves at
+			// `speed * speedMult` for `duration` seconds, then reverts. The
+			// blink is a hard on/off alpha flicker (`dimAlpha` every other
+			// `blinkInterval`), not a continuous pulse, so it reads distinctly
+			// from every other "gentle breathing" alpha cue in the game — see
+			// SnakeBoss.update/render.
+			phase2: Object.freeze({
+				interval: 12, // seconds of normal-speed time between activations
+				duration: 5,
+				speedMult: 1.5,
+				blinkInterval: 0.12,
+				dimAlpha: 0.3,
+			}),
 
 			// vp — once the shared Sweeper path's leading edge would sink past
 			// this depth, sampleBoundedSweeperPath (DrifterEnemy.js) freezes the
@@ -4501,10 +4534,7 @@ export const Config = Object.freeze({
 			// Well clear of the barrier (baseY 940, dome peak ~870).
 			patrolDepthY: 700,
 
-			initialSegments: 15, // chain length (INCLUDING the head) at spawn — matches a regular Sweeper's own formationSize, so the fight visibly starts like "just a big Sweeper" before growing into something far larger
-			maxSegments: 90, // hard cap — trimmed down from 175 (itself trimmed from an initial 200) to keep the fight lighter
-			growthInterval: 1.2, // seconds between growth ticks while under the cap
-			growthBatchSize: 2, // new tail segments added per growth tick (~45s to grow from 15 to 90)
+			maxSegments: 200, // chain length (INCLUDING the head), spawned all at once
 
 			// Every segment at a chain-index divisible by this fires its own
 			// projectile at the player (reusing the shared DrifterProjectiles
@@ -4517,15 +4547,40 @@ export const Config = Object.freeze({
 			fireMaxInterval: 4.0,
 			engageRangeX: 160,
 
-			health: 350, // the front segment's (the actual boss) own health
+			health: 400, // the front segment's (the actual boss) own health — nudged up from 350 for a bit more toughness
 			healthPerLevel: 50,
 
 			segment: Object.freeze({
-				health: 8, // a regular Sweeper's own is 3 (+1/level) — noticeably tankier per "a more tanky one each"
+				health: 9, // a regular Sweeper's own is 3 (+1/level) — noticeably tankier per "a more tanky one each"; nudged up from 8
 				healthPerLevel: 1.2,
 				points: 20,
 				gold: 1,
 				sparksPerEmit: 6, // small — many can die in close succession
+
+				// Multiplies Config.powerUps.dropChance / Config.gold.dropChance
+				// (respectively) for a snakeSegment kill only (see
+				// WaveManager.handleBulletHit) — with up to Config.boss.snake.
+				// maxSegments individually-rollable kills in one fight, the flat
+				// per-kill chances would otherwise flood the screen with far more
+				// PowerUps/gold coins than any other single enemy wave could ever
+				// produce.
+				powerUpDropChanceMult: 0.3,
+				goldDropChanceMult: 0.3,
+
+				// Alternate plate fill, banded onto every other lane (odd
+				// `_lane`) so the chain reads as individual scaled plates
+				// rather than one flat-colored blob — see SnakeBoss.render's
+				// `_altHulls` pool.
+				altFillColor: "#15301c",
+
+				// Cosmetic size taper along the chain: plate scale shrinks
+				// from 1.0 at the head toward `taperFloor` as `_lane` grows,
+				// giving the tail a slightly leaner silhouette than the neck.
+				// Purely visual — hitRadius above stays constant for every
+				// segment regardless of its drawn scale.
+				taperFloor: 0.6,
+				taperRate: 0.008, // scale lost per lane — floor reached at lane 50
+
 				audio: Object.freeze({
 					src: "assets/audio/explosion.mp3",
 					volume: 0.12, // quiet — shared pool, up to 200 possible deaths over the fight
@@ -5421,6 +5476,25 @@ export const Config = Object.freeze({
 			labelColor: "#aab4d4",
 			nameFont: '400 15px "Audiowide", "Courier New", monospace',
 			nameGlowBlur: 6,
+
+			// Shown whenever the active boss exposes a truthy `invulnerable`
+			// getter (currently only SnakeBoss, during its phase2 burst — see
+			// Config.boss.snake.phase2) — a generic hook so any future boss
+			// with a similar temporary-invulnerability mechanic gets the same
+			// indicator for free, no per-boss WaveManager code needed. Reads
+			// the boss's own `age` (dt-accumulated, not wall-clock — see
+			// SnakeBoss's `_age`) to drive the pulse so it stays in lockstep
+			// with everything else in the game's frame-rate-independent timing.
+			invulnerableOutlineColor: "#ffe873",
+			invulnerableOutlineWidth: 3,
+			invulnerableOutlineGlowBlur: 14,
+			invulnerableText: "INVULNERABLE",
+			invulnerableFont: '400 13px "Audiowide", "Courier New", monospace',
+			invulnerableColor: "#ffe873",
+			invulnerableGlowBlur: 8,
+			invulnerableOffsetY: 22, // vp below the bar's own y
+			invulnerablePulseSpeed: 6, // rad/sec — fast/urgent, distinct from the slower "alive breathing" pulses elsewhere in the game
+			invulnerablePulseMin: 0.35, // alpha floor so the outline/text never fully vanish mid-pulse
 		}),
 
 		// Extra subtitle shown under the "LEVEL N" indicator on a boss level,
