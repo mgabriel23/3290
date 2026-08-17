@@ -30,12 +30,16 @@
  * Two modes (constructor `mode`, default 'survival' — see Config.mission,
  * MissionSelectScene.js): Survival Mode is the original endless behavior,
  * always starting at level 1 and auto-advancing forever. Mission Mode
- * starts at a specific `level` and ends the instant that ONE level's wave
- * clears, freezing behind a "MISSION COMPLETE" overlay (`_missionComplete`
- * — see `_triggerMissionComplete`/`_renderMissionComplete`) instead of
- * advancing — the same "freeze, dim, full-screen result, tap to continue"
- * shape `_isGameOver` already uses, and just as mutually exclusive with it
- * (a cleared wave can't also be the fatal hit that ended the run).
+ * starts at a specific `level` and, once ONE level's wave clears, doesn't
+ * freeze right away — `_missionClearPending` keeps gameplay running (player
+ * still steerable, gold/power-ups still magnet-pulling in) so nothing
+ * dropped by the last few kills goes to waste, and only once every pickup
+ * is gone (collected or expired) does it freeze behind a "MISSION COMPLETE"
+ * overlay (`_missionComplete` — see `_triggerMissionComplete`/
+ * `_renderMissionComplete`) instead of advancing — the same "freeze, dim,
+ * full-screen result, tap to continue" shape `_isGameOver` already uses,
+ * and just as mutually exclusive with it (a cleared wave can't also be the
+ * fatal hit that ended the run).
  *
  * Impact feedback: this scene owns a `ScreenShake` (see core/ScreenShake.js)
  * and a `_hitStopTimer` — a kill triggers both (see `_checkCollisions`),
@@ -351,6 +355,10 @@ export class GameplayScene {
     // Mission Mode's victory overlay — see _triggerMissionComplete/_renderMissionComplete.
     this._missionComplete    = false;
     this._missionCompleteAge = 0;
+    // True from the instant the wave clears until every drop is gone (either
+    // collected or expired) — see the isDone handling in update() and
+    // _triggerMissionComplete's own doc for why this waits before firing.
+    this._missionClearPending = false;
     // Plays once per "LEVEL N" indicator — right here for level 1 (the scene
     // always starts in 'intro'), and again at the wave-cleared transition in
     // update() for every level after that.
@@ -476,7 +484,12 @@ export class GameplayScene {
       // the next level intro; Mission Mode ends here instead (see class doc).
       if (this._waveManager.isDone) {
         if (this._mode === 'mission') {
-          this._triggerMissionComplete();
+          // Don't freeze the run yet — flag it and keep looping so the
+          // player can still fly around and magnet-pull any gold/power-ups
+          // still falling from the last few kills instead of losing them.
+          // See the pending check below, which is what actually fires
+          // _triggerMissionComplete once nothing but the player is left.
+          this._missionClearPending = true;
         } else {
           this.barrier.heal(Config.barrier.healPerWaveClear);
           this._level++;
@@ -491,6 +504,15 @@ export class GameplayScene {
           // a fresh instance below once 'active' begins again.
           this._levelAudio.play();
         }
+      }
+
+      // Holds Mission Mode's victory overlay/stinger back until every
+      // dropped pickup is gone — collected via the magnet-pull above, or
+      // naturally expired/off-screen (PowerUps.maxLife/GoldPickups.maxLife
+      // both bound this to a few seconds, so this can never hang the run).
+      if (this._missionClearPending && !this._powerUps.active && !this._goldPickups.active) {
+        this._missionClearPending = false;
+        this._triggerMissionComplete();
       }
     }
   }
@@ -924,7 +946,8 @@ export class GameplayScene {
 
   /**
    * Mission Mode only (see `_mode`, class doc) — called from update()'s
-   * wave-clear handling instead of advancing to the next level. Freezes
+   * `_missionClearPending` check once every dropped pickup is gone, not
+   * directly from the wave-clear itself (see there for why). Freezes
    * gameplay behind a "MISSION COMPLETE" overlay (see
    * `_renderMissionComplete`) until the player taps to continue, at which
    * point `onMissionComplete` (Game.js: persists completion, returns to
