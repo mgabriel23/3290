@@ -38,6 +38,19 @@ export class Game {
     this._lastTimestamp = 0;
     this._consecutiveTickErrors = 0; // see _tick's doc — trips _showFatalError after too many in a row
 
+    // Mission Mode's special-skill (bomb) cooldown, carried across separate
+    // missions — see PlayerSkill.js's own class doc and `_startGameplay`'s
+    // `skillCooldown` option. Lives here (like `_themeAudio`) because it
+    // must outlive any single GameplayScene/mission: using the bomb near the
+    // end of one mission should still leave it recharging at the start of
+    // the next, not reset to ready just because a fresh GameplayScene was
+    // constructed. Updated from GameplayScene's `onGameOver`/
+    // `onMissionComplete` callbacks each time a mission-mode run ends,
+    // whichever way it ends. Survival Mode never reads or writes this — its
+    // own GameplayScene instance already persists its PlayerSkill across
+    // level-ups on its own.
+    this._missionSkillCooldown = 0;
+
     this._tick = this._tick.bind(this);
 
     // Forward gestures to whichever scene is currently active — the
@@ -251,7 +264,9 @@ export class Game {
    * just calls this again — a fresh `GameplayScene` is by construction a
    * clean run (full health, zero score, and the same starting level the
    * previous attempt had — level 1 for Survival Mode, whichever mission
-   * was chosen for Mission Mode, since `mode`/`level` are closed over).
+   * was chosen for Mission Mode, since `mode`/`level` are closed over) —
+   * EXCEPT Mission Mode's special-skill cooldown, which deliberately is NOT
+   * reset here; see `_missionSkillCooldown`'s own doc.
    *
    * `_themeAudio`/`_themeFader` construction is guarded (only ever built
    * once), but `.play()` and the fade-in ramp both run every time this
@@ -298,12 +313,20 @@ export class Game {
       this.scene = new GameplayScene(this.renderer, {
         mode,
         level,
-        onGameOver: () => this._startGameplay({ mode, level }),
+        // Mission Mode only (see `_missionSkillCooldown`'s own doc) — Survival
+        // Mode's GameplayScene instance already persists its own PlayerSkill
+        // across level-ups, so it never needs a hand-me-down value here.
+        skillCooldown: mode === 'mission' ? this._missionSkillCooldown : 0,
+        onGameOver: (skillCooldownRemaining) => {
+          if (mode === 'mission') this._missionSkillCooldown = skillCooldownRemaining;
+          this._startGameplay({ mode, level });
+        },
         // Mission Mode only — fires once that single level's wave clears
         // (see GameplayScene._triggerMissionComplete). Persists the
         // completion (unlocking the next mission — see MissionProgress.js)
         // and returns to the select screen. Survival Mode never calls this.
-        onMissionComplete: mode === 'mission' ? () => {
+        onMissionComplete: mode === 'mission' ? (skillCooldownRemaining) => {
+          this._missionSkillCooldown = skillCooldownRemaining;
           completeMission(level);
           this._startMissionSelect();
         } : undefined,

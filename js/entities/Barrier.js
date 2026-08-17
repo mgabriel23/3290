@@ -45,8 +45,19 @@ import { AudioPool } from '../core/AudioPool.js';
 import { dangerColor } from '../core/Settings.js';
 
 export class Barrier {
-  constructor() {
-    this._level = 1; // current wave level — drives `maxHealth`'s scaling, see setLevel/Config.barrier.maxHealthPerLevel. Must be set before the `this.maxHealth` read below.
+  /**
+   * @param {number} [level]  starting wave level — drives `maxHealth`'s
+   *   scaling (Config.barrier.maxHealthPerLevel), and `health` starts full
+   *   at THIS level's ceiling, not level 1's. Mission Mode can start on any
+   *   level directly (unlike Survival Mode, which always begins at 1), so
+   *   resolving the correct starting ceiling up front matters here — a
+   *   Mission Mode run used to construct at level 1's small ceiling (100%
+   *   full) and only raise the ceiling afterward via `setLevel`, leaving
+   *   `health` stranded far below the level's real max and reading as
+   *   already-damaged from the very first frame.
+   */
+  constructor(level = 1) {
+    this._level = level; // current wave level — drives `maxHealth`'s scaling, see setLevel/Config.barrier.maxHealthPerLevel. Must be set before the `this.maxHealth` read below.
     this.health = this.maxHealth; // 0–maxHealth; written by gameplay systems, read by this render method
     this._pulseX = 0;
     this._pulseT = -1; // -1 = no ripple in progress

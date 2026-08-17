@@ -1301,12 +1301,23 @@ export const Config = Object.freeze({
 	 * tap prompt) since it's the same "freeze gameplay, show a full-screen
 	 * result, tap to continue" pattern — just a win instead of a loss, so
 	 * the color reads as success (soft green, matching Config.powerUps.health/
-	 * Shop's OWNED color) rather than the alarm red of GAME OVER. No
-	 * explosion delay — nothing to wait out, the fade-in starts immediately.
+	 * Shop's OWNED color) rather than the alarm red of GAME OVER.
+	 *
+	 * `revealDelay` holds the overlay back briefly after the wave actually
+	 * clears — same `Math.max(0, age - delay)` fade-clock idiom
+	 * `_renderGameOver` uses for its own `explosionDelay` — so the player
+	 * gets a clear beat on the just-cleared, undimmed screen (no more
+	 * enemies, no new wave) before the result popup covers it, rather than
+	 * the popup slamming in the instant the last enemy dies.
 	 */
 	missionComplete: Object.freeze({
+		revealDelay: 0.6, // seconds the cleared screen sits undimmed before the overlay starts fading in
 		fadeInDuration: 0.6,
 		dimAlpha: 0.75,
+		// Covers revealDelay + fadeInDuration (1.2s) with a small margin, same
+		// reasoning as Config.gameOver.minRestartDelay — a tap can't continue
+		// before the overlay has even finished appearing.
+		minContinueDelay: 1.3,
 		titleText: "MISSION COMPLETE",
 		titleFont: '400 44px "Audiowide", "Courier New", monospace',
 		titleColor: "#4DFF8A",
@@ -6190,7 +6201,17 @@ export const Config = Object.freeze({
 	 * readout (~x=421) and the right anchor post (x=540).
 	 */
 	playerSkill: Object.freeze({
-		cooldown: 85, // seconds before it can be used again — see PlayerSkill.use()
+		// Cooldown seconds before the bomb can be used again — kept independent
+		// per mode (see PlayerSkill.use()/Config.mission's own doc for why
+		// mode configs are kept separate throughout this file), so either can
+		// be tuned without touching the other. Mission Mode's is 20s shorter
+		// than Survival's: missions are short, discrete engagements (one wave
+		// each) rather than an endless run, so the panic button needs to come
+		// back around faster to matter more than once or twice a campaign.
+		cooldown: Object.freeze({
+			survival: 85,
+			mission: 65,
+		}),
 		x: 490,
 		y: 860,
 		radius: 26,

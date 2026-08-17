@@ -178,7 +178,7 @@ import { WaveManager } from '../entities/WaveManager.js';
 export class GameplayScene {
   /**
    * @param {import('../core/Renderer.js').Renderer} renderer
-   * @param {{ mode?: 'mission'|'survival', level?: number, onGameOver?: () => void, onMissionComplete?: () => void, onMusicDuck?: (multiplier: number) => void, onMusicStop?: () => void, onMusicResume?: () => void }} [options]
+   * @param {{ mode?: 'mission'|'survival', level?: number, skillCooldown?: number, onGameOver?: (skillCooldownRemaining: number) => void, onMissionComplete?: (skillCooldownRemaining: number) => void, onMusicDuck?: (multiplier: number) => void, onMusicStop?: () => void, onMusicResume?: () => void }} [options]
    *   `mode` (default 'survival') — 'survival' keeps the original endless
    *   behavior (wave-clear always advances to `level + 1`, forever).
    *   'mission' plays exactly `level` and, once its wave clears, freezes on
@@ -186,24 +186,37 @@ export class GameplayScene {
    *   `_triggerMissionComplete`/Config.mission) rather than an ordinary
    *   game-over restart. `level` (default 1) — which level to start on;
    *   Survival Mode always passes/omits this (always 1), Mission Mode
-   *   passes the chosen mission's number.
+   *   passes the chosen mission's number. `skillCooldown` (default 0) —
+   *   seconds already remaining on the special-skill bomb's cooldown (see
+   *   PlayerSkill.js's own class doc) — Mission Mode only, threaded through
+   *   by Game.js so using the bomb near the end of one mission leaves it
+   *   still recharging at the start of the next, rather than resetting to
+   *   ready just because a brand-new GameplayScene was constructed; Survival
+   *   Mode always passes/omits this (its own GameplayScene instance already
+   *   persists across level-ups, so only a real restart resets it, same as
+   *   always).
    *   `onGameOver` called once, on the restart tap after the player's health
-   *   reaches 0 — see class doc. `onMissionComplete` called once, mission
-   *   mode only, on the continue tap after that level's wave clears — see
-   *   `_triggerMissionComplete`. `onMusicDuck` called every frame with a
+   *   reaches 0 — see class doc, passed this run's final remaining skill
+   *   cooldown (`_playerSkill.cooldownRemaining`) so Game.js can carry it
+   *   into the restart. `onMissionComplete` called once, mission mode only,
+   *   on the continue tap after that level's wave clears — see
+   *   `_triggerMissionComplete` — passed the same remaining skill cooldown so
+   *   Game.js can carry it into whichever mission is picked next. `onMusicDuck` called every frame with a
    *   0-1 multiplier for the gameplay bg music's volume — GameplayScene
    *   doesn't own that Audio element (Game.js does, since it persists
    *   across restarts), so ducking it during the level indicator has to be
    *   relayed out through this callback rather than touched directly — see
    *   `_updateMusicDuck`. `onMusicStop` called once, the instant death
-   *   triggers (`_triggerGameOver`) — same ownership reasoning, but this one
-   *   is a hard stop (Game.js pauses the Audio element outright), not a duck.
+   *   triggers (`_triggerGameOver`) OR, mission mode only, the instant a
+   *   mission's wave clears (`_triggerMissionComplete`) — same ownership
+   *   reasoning, but this one is a hard stop (Game.js pauses the Audio
+   *   element outright), not a duck.
    *   `onMusicResume` called once, on a successful paid revive (`_tryRevive`)
    *   — undoes `onMusicStop` in place, same ownership reasoning, without
    *   going through `onGameOver` (which would construct a brand-new
    *   GameplayScene and lose the current run's state).
    */
-  constructor(renderer, { mode = 'survival', level = 1, onGameOver, onMissionComplete, onMusicDuck, onMusicStop, onMusicResume } = {}) {
+  constructor(renderer, { mode = 'survival', level = 1, skillCooldown = 0, onGameOver, onMissionComplete, onMusicDuck, onMusicStop, onMusicResume } = {}) {
     this.renderer = renderer;
     this._mode = mode;
     this._onGameOver = onGameOver;
@@ -212,7 +225,7 @@ export class GameplayScene {
     this._onMusicStop = onMusicStop;
     this._onMusicResume = onMusicResume;
     this.starfield = new Starfield();
-    this.barrier = new Barrier();
+    this.barrier = new Barrier(level); // starts full at THIS level's max health — Mission Mode can start anywhere, so this has to be explicit rather than assumed (see Barrier's own constructor doc)
     this.player = new Player();
     // Daily-reward one-shot flags, each consumed (cleared) exactly once
     // here — see core/DailyReward.js's own doc. Both are no-ops (false)
@@ -252,7 +265,7 @@ export class GameplayScene {
     this._codex = new EnemyCodex();
     this._shop = new Shop(this.hud, this.player);
     this._playback = new PlaybackControls();
-    this._playerSkill = new PlayerSkill();
+    this._playerSkill = new PlayerSkill(mode, skillCooldown);
     this._screenShake = new ScreenShake();
     this._hitStopTimer = 0; // seconds of gameplay-time freeze remaining — see update()'s effectiveDt
     this._damageFlashTimer = 0; // seconds remaining on the full-screen damage flash — see _checkPlayerHit/_renderDamageFlash
@@ -333,7 +346,6 @@ export class GameplayScene {
     // (Survival Mode only — see the `isDone` handling in update() for how
     // Mission Mode diverges instead of advancing to `level + 1`).
     this._level      = level;
-    this.barrier.setLevel(level); // Barrier defaults to level 1 internally — Mission Mode can start anywhere, so this has to be explicit rather than assumed
     this._levelState = 'intro';
     this._levelAge   = 0; // seconds spent in the current level state
     // Mission Mode's victory overlay — see _triggerMissionComplete/_renderMissionComplete.
@@ -639,24 +651,25 @@ export class GameplayScene {
    * Game over and mission-complete both win first — once either is showing,
    * nothing else is interactible (mirrors why mute/pause/codex/shop are all
    * mutually exclusive below, just one level higher; the two can't both be
-   * true at once — see `render`'s own doc). `minRestartDelay` guards
-   * against the residual tap that triggered the fatal hit being immediately
-   * reinterpreted as input; mission-complete has no equivalent guard since
-   * nothing fatal just happened. Once past that delay, game-over's REVIVE
-   * button (see `_tryRevive`) wins if tapped — resuming THIS run in place —
-   * a near-miss just outside it (`_isNearReviveButton`'s padding, see
-   * Config.gameOver.continue.deadZonePadding) is swallowed rather than
-   * read as "restart," so a fat-fingered tap at the CTA can't accidentally
-   * end the run; any OTHER tap restarts, same as before. Mission-complete
-   * has no such button, any tap just continues (`onMissionComplete`). Otherwise:
-   * mute always wins next — it never opens an overlay, so it's always safe
-   * to toggle. Pause, the Codex, and the Shop are mutually exclusive
-   * full-screen overlays: opening any one of them is ignored while another
-   * is already open, so their dimming layers can never stack. If the Shop
-   * or Codex is open its own tap handling takes over entirely; otherwise,
-   * if paused, nothing further below responds (a paused game shouldn't fire
-   * the skill). Last: the skill button, but only during 'active' state —
-   * see `_useSkill`.
+   * true at once — see `render`'s own doc). `minRestartDelay`/
+   * `minContinueDelay` both guard against the residual tap that triggered
+   * the wave-clear/fatal-hit being immediately reinterpreted as input —
+   * mission-complete's own guard doubles as the wait for its overlay to
+   * actually finish appearing (see `_renderMissionComplete`'s `revealDelay`).
+   * Once past that delay, game-over's REVIVE button (see `_tryRevive`) wins
+   * if tapped — resuming THIS run in place — a near-miss just outside it
+   * (`_isNearReviveButton`'s padding, see Config.gameOver.continue.deadZonePadding)
+   * is swallowed rather than read as "restart," so a fat-fingered tap at the
+   * CTA can't accidentally end the run; any OTHER tap restarts, same as
+   * before. Mission-complete has no such button, any tap (once past its own
+   * delay) just continues (`onMissionComplete`). Otherwise: mute always wins
+   * next — it never opens an overlay, so it's always safe to toggle. Pause,
+   * the Codex, and the Shop are mutually exclusive full-screen overlays:
+   * opening any one of them is ignored while another is already open, so
+   * their dimming layers can never stack. If the Shop or Codex is open its
+   * own tap handling takes over entirely; otherwise, if paused, nothing
+   * further below responds (a paused game shouldn't fire the skill). Last:
+   * the skill button, but only during 'active' state — see `_useSkill`.
    */
   handleTap(x, y) {
     if (this._isGameOver) {
@@ -665,12 +678,13 @@ export class GameplayScene {
       if (this._isNearReviveButton(x, y)) return; // near-miss on the CTA — absorbed, not read as "restart"
       if (this._isInsideShareButton(x, y)) { playButtonClick(); this._shareScore(); return; }
       this._commitLifetimeStats();
-      this._onGameOver?.();
+      this._onGameOver?.(this._playerSkill.cooldownRemaining);
       return;
     }
     if (this._missionComplete) {
+      if (this._missionCompleteAge < Config.missionComplete.minContinueDelay) return;
       this._commitLifetimeStats();
-      this._onMissionComplete?.();
+      this._onMissionComplete?.(this._playerSkill.cooldownRemaining);
       return;
     }
     if (this._playback.isInsideMuteButton(x, y)) {
@@ -912,14 +926,25 @@ export class GameplayScene {
    * gameplay behind a "MISSION COMPLETE" overlay (see
    * `_renderMissionComplete`) until the player taps to continue, at which
    * point `onMissionComplete` (Game.js: persists completion, returns to
-   * MissionSelectScene) fires — see `handleTap`. Reuses the level-up chime
-   * (`_levelAudio`) rather than a dedicated asset; no screen shake — this
-   * is a calm result screen, not an impact.
+   * MissionSelectScene) fires — see `handleTap`. No screen shake — this is
+   * a calm result screen, not an impact. Deliberately silent (unlike
+   * `_triggerGameOver`, which plays its own stinger) — this used to reuse
+   * the level-up chime (`_levelAudio`), but that's the exact sound
+   * `_levelState`'s 'intro' → 'active' transition uses to announce a NEW
+   * wave incoming, so playing it here read as "another wave is coming"
+   * right when nothing was, which is backwards for a screen that means the
+   * opposite. Also stops the gameplay bg music via `onMusicStop` (same call
+   * `_triggerGameOver` makes) — without it, the just-finished mission's
+   * theme track kept playing straight through this overlay AND
+   * MissionSelectScene (which is meant to sit in silence — see that scene's
+   * own class doc), still going when the next mission started instead of
+   * getting its own clean fade-in. The overlay itself doesn't appear right
+   * away either — see `_renderMissionComplete`'s `revealDelay`.
    */
   _triggerMissionComplete() {
     this._missionComplete    = true;
     this._missionCompleteAge = 0;
-    this._levelAudio.play();
+    this._onMusicStop?.();
   }
 
   /** Gold cost of the NEXT revive this run — doubles with each one already used, up to `maxRevives`. See Config.gameOver.continue. */
@@ -1163,15 +1188,20 @@ export class GameplayScene {
   /**
    * "MISSION COMPLETE" overlay (Mission Mode only — see
    * `_triggerMissionComplete`) — same dim-and-fade-in shape as
-   * `_renderGameOver`, no explosion delay to wait out and no revive button
-   * (there's nothing to revive from), just a title and a tap-to-continue
-   * prompt. A tap here (any tap, once visible — no debounce needed since
-   * nothing fatal just happened) fires `onMissionComplete` — see `handleTap`.
+   * `_renderGameOver`, no revive button (there's nothing to revive from),
+   * just a title and a tap-to-continue prompt. Held back for `revealDelay`
+   * seconds first, same `Math.max(0, age - delay)` fade-clock idiom
+   * `_renderGameOver` uses for its own `explosionDelay` — see
+   * Config.missionComplete's own doc for why. `handleTap`'s own
+   * `minContinueDelay` guard keeps a tap from firing `onMissionComplete`
+   * before the overlay has even finished appearing.
    */
   _renderMissionComplete() {
     const { width: vW, height: vH } = Config.virtual;
     const cfg = Config.missionComplete;
-    const alpha = Math.min(this._missionCompleteAge / cfg.fadeInDuration, 1);
+    const revealAge = Math.max(0, this._missionCompleteAge - cfg.revealDelay);
+    const alpha = Math.min(revealAge / cfg.fadeInDuration, 1);
+    if (alpha <= 0) return; // still inside revealDelay — let the cleared screen read clearly first
 
     this.renderer.clear(Config.colors.void, cfg.dimAlpha * alpha);
     this.renderer.drawText(cfg.titleText, vW / 2, vH / 2, {
