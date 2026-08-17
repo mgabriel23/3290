@@ -1326,6 +1326,9 @@ export const Config = Object.freeze({
 		promptFont: '400 18px "Audiowide", "Courier New", monospace',
 		promptColor: "#aab4d4",
 		promptOffsetY: 60,
+		// Plays once, on trigger — see GameplayScene._triggerMissionComplete.
+		audioSrc: "assets/audio/success.mp3",
+		audioVolume: 0.7,
 	}),
 
 	/**

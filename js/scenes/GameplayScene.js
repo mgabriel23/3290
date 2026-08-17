@@ -356,6 +356,8 @@ export class GameplayScene {
     // update() for every level after that.
     this._levelAudio = new AudioPool(Config.level.audioSrc, 4, Config.level.audioVolume);
     this._levelAudio.play();
+    // Mission Mode's victory stinger — see _triggerMissionComplete.
+    this._missionCompleteAudio = new AudioPool(Config.missionComplete.audioSrc, 4, Config.missionComplete.audioVolume);
     this._musicDuck = 1; // 0-1 bg-music volume multiplier — see _updateMusicDuck
 
     /** @type {WaveManager|null} created when a level's active phase begins */
@@ -927,13 +929,16 @@ export class GameplayScene {
    * `_renderMissionComplete`) until the player taps to continue, at which
    * point `onMissionComplete` (Game.js: persists completion, returns to
    * MissionSelectScene) fires — see `handleTap`. No screen shake — this is
-   * a calm result screen, not an impact. Deliberately silent (unlike
-   * `_triggerGameOver`, which plays its own stinger) — this used to reuse
-   * the level-up chime (`_levelAudio`), but that's the exact sound
+   * a calm result screen, not an impact. Plays its own stinger
+   * (`_missionCompleteAudio`, Config.missionComplete.audioSrc) rather than
+   * reusing the level-up chime (`_levelAudio`) — that's the exact sound
    * `_levelState`'s 'intro' → 'active' transition uses to announce a NEW
    * wave incoming, so playing it here read as "another wave is coming"
    * right when nothing was, which is backwards for a screen that means the
-   * opposite. Also stops the gameplay bg music via `onMusicStop` (same call
+   * opposite. Survival Mode never calls this — its wave-clear instead loops
+   * back into a fresh 'intro' (see update()), so this stinger is mission-only
+   * by construction, not by an explicit mode check. Also stops the gameplay
+   * bg music via `onMusicStop` (same call
    * `_triggerGameOver` makes) — without it, the just-finished mission's
    * theme track kept playing straight through this overlay AND
    * MissionSelectScene (which is meant to sit in silence — see that scene's
@@ -945,6 +950,7 @@ export class GameplayScene {
     this._missionComplete    = true;
     this._missionCompleteAge = 0;
     this._onMusicStop?.();
+    this._missionCompleteAudio.play();
   }
 
   /** Gold cost of the NEXT revive this run — doubles with each one already used, up to `maxRevives`. See Config.gameOver.continue. */
