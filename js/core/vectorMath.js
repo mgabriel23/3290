@@ -54,3 +54,21 @@ export function distanceToSegment(px, py, x1, y1, x2, y2) {
   const ey = py - (y1 + t * dy);
   return Math.sqrt(ex * ex + ey * ey);
 }
+
+/**
+ * The point where a ray cast from (x, y) in direction (dx, dy) first exits
+ * the axis-aligned box [0,0]-(w,h) — used by SpiralBoss's phase-2 charge
+ * telegraph to mark, right on the screen edge, exactly where each locked
+ * laser direction is about to sweep in from. Assumes (x, y) starts INSIDE
+ * the box, true for every boss (always kept within its own patrol/
+ * repositioning bounds, well inside the virtual canvas).
+ * @returns {{x: number, y: number}}
+ */
+export function rayRectExit(x, y, dx, dy, w, h) {
+  let t = Infinity;
+  if (dx > 0) t = Math.min(t, (w - x) / dx);
+  else if (dx < 0) t = Math.min(t, (0 - x) / dx);
+  if (dy > 0) t = Math.min(t, (h - y) / dy);
+  else if (dy < 0) t = Math.min(t, (0 - y) / dy);
+  return { x: x + dx * t, y: y + dy * t };
+}

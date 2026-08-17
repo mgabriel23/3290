@@ -4394,22 +4394,56 @@ export const Config = Object.freeze({
 
 		/**
 		 * Boss #2 — "Spiral". An original radial-turret/orb silhouette (see
-		 * SpiralBoss.js's SPIRAL_HULL_PTS — an N-pointed star/gear, not a
-		 * reskin of any existing enemy, unlike boss #1's giant Scout) that
-		 * continuously spins in place while firing a slow bullet on every
-		 * `fireInterval` tick, always aimed along whatever direction it
-		 * currently faces rather than at the player — because the fire angle
-		 * keeps rotating between shots, the individual straight-line bullets
-		 * fan out into a visible spiral as they travel outward, with no
-		 * curved-path math needed. After `fireDuration` seconds of that it
-		 * relocates to a new random spot (`repositionMarginX`/`YMin`/`YMax`)
-		 * and resumes — "occasionally moves to a different position to fire
-		 * again."
+		 * SpiralBoss.js's SPIRAL_HULL_PTS — a 4-pointed star/gear, matching
+		 * `fireDirections` below 1:1 so every spike tip lines up with one
+		 * spiral arm, not a reskin of any existing enemy, unlike boss #1's
+		 * giant Scout).
+		 *
+		 * A repeating TIMED loop between two phases (same "never settles
+		 * permanently, loops for the whole fight" convention TetraBoss uses,
+		 * not a one-way health-gated escalation):
+		 *
+		 *   phase 1 (`phase1Duration` seconds — deliberately short, roughly
+		 *   one firing/reposition subcycle) — holds its firing spot, spinning
+		 *   at `rotationSpeed` while firing a slow bullet on every
+		 *   `fireInterval` tick, always aimed along whatever direction it
+		 *   currently faces rather than at the player — because the fire
+		 *   angle keeps rotating between shots, the individual straight-line
+		 *   bullets fan out into a visible spiral as they travel outward,
+		 *   with no curved-path math needed. `fireDuration` is deliberately
+		 *   short (about one full rotation) so it relocates to a new random
+		 *   spot (`repositionMarginX`/`YMin`/`YMax`) often rather than
+		 *   camping one spot.
+		 *
+		 *   phase 2 — a charge telegraph, THEN live rotating lasers:
+		 *
+		 *     charging (`laser.chargeDuration` seconds) — holds its current
+		 *     spot with rotation completely FROZEN (the fire angle it froze
+		 *     at is exactly where the beams will start from) while a warning
+		 *     telegraph plays for each of the SPIKES upcoming beam
+		 *     directions — a faint dashed preview line plus a pulsing ring
+		 *     marking exactly where that beam will cross the screen edge
+		 *     (SpiralBoss._renderChargeWarning, core/vectorMath.js's
+		 *     rayRectExit) — dealing no damage yet.
+		 *
+		 *     lasering (`phase2Duration` seconds) — the charge resolves into
+		 *     4 continuous, damaging laser beams (`laser`), one rigidly
+		 *     attached to each hull spike, extending straight outward past
+		 *     the screen edge — same beam mechanic TetraBoss's own phase 2
+		 *     uses (live point-to-segment test each frame, not a pooled
+		 *     projectile — see checkLaserHit). Rotation resumes here, but at
+		 *     `phase2RotationSpeed` — much SLOWER than phase 1's own spin, a
+		 *     slow, readable sweep rather than a blur. Also unlike phase 1's
+		 *     hold-still-and-occasionally-relocate rhythm, this sub-phase
+		 *     never stops moving: it bounces around the same play-area
+		 *     bounds like a DVD logo (`phase2MoveSpeed`,
+		 *     `SpiralBoss._updatePatrol`), so the beams sweep AND drift at
+		 *     once. Loops back to phase 1 once `phase2Duration` elapses.
 		 */
 		spiral: Object.freeze({
 			name: "SPIRAL",
 			size: 55, // vp — outer spike-tip radius of the hull
-			spikeCount: 8, // symmetric points around the hull
+			spikeCount: 4, // symmetric points around the hull — matches `fireDirections` below, one spike per spiral arm
 			innerRadiusRatio: 0.45, // core-ring radius as a fraction of `size`
 			health: 400,
 			healthPerLevel: 55,
@@ -4426,18 +4460,67 @@ export const Config = Object.freeze({
 			// this is only where it first settles.
 			restY: 290,
 
-			rotationSpeed: 1.1, // rad/sec — continuous spin; also drives each shot's fire angle
+			rotationSpeed: 1.1, // rad/sec — phase 1 continuous spin; also drives each shot's fire angle
+			phase2RotationSpeed: 0.35, // rad/sec — MUCH slower than phase 1's own spin, once the live beams start sweeping (frozen entirely before that, during the charge telegraph — see laser.chargeDuration) — a slow, readable sweep the player can actually track, not a blur
 			fireInterval: 0.12, // seconds between fire ticks — ~47.6 ticks per full rotation at this rotationSpeed, tight enough for each arm to read as one continuous spiral
 			// Bullets fired per tick, evenly spaced around the turret (e.g. 4 →
 			// one every 90°) — all four rotate together with the hull, so the
 			// pattern reads as 4 interleaved spiral arms rather than 1. See
-			// SpiralBoss._updateFiring.
+			// SpiralBoss._fireDirection.
 			fireDirections: 4,
-			fireDuration: 11, // seconds spent firing at one spot before relocating (~1.9 full rotations)
+			fireDuration: 6, // seconds spent firing at one spot before relocating — deliberately close to one full rotation (2π/rotationSpeed ≈ 5.7s) so it reads as "complete a loop, then move" rather than camping
 			moveDuration: 1.3, // seconds to glide to the next firing spot — same easeOutCubic curve Enemy.js's own mid-fight repositioning uses
-			repositionMarginX: 80, // vp from each screen edge — keeps the hull's own radius from clipping off-screen
-			repositionYMin: 250, // vp — keeps the hull's topmost spike clear of the boss health bar above it
+			repositionMarginX: 80, // vp from each screen edge — keeps the hull's own radius from clipping off-screen; also phase 2's own patrol bounds, see phase2MoveSpeed
+			repositionYMin: 250, // vp — keeps the hull's topmost spike clear of the boss health bar above it; also phase 2's own patrol bounds
 			repositionYMax: 430,
+
+			// Phase loop timing — see class doc. phase1Duration is only
+			// checked at a firing-burst boundary (~7.3s apart, fireDuration +
+			// moveDuration), so this triggers escalation at the very next
+			// burst once at least this much time has passed — roughly one
+			// firing/reposition subcycle, deliberately short so phase 2 comes
+			// around often. phase2Duration is the LIVE beam duration only —
+			// laser.chargeDuration below runs BEFORE it, as a separate
+			// harmless telegraph, not counted against it.
+			phase1Duration: 8, // seconds of spiral bullets before phase 2 can begin
+			phase2Duration: 9, // seconds the live, damaging beams sweep for once the charge telegraph ends
+
+			// Phase 2 — continuous bouncing patrol, reflecting off the same
+			// bounds phase 1's repositioning uses (repositionMarginX/YMin/
+			// YMax above). Same DVD-logo-bounce technique as TetraBoss's own
+			// `_updatePatrol`, just phase-2-only here rather than running the
+			// whole fight.
+			phase2MoveSpeed: 110, // vp/sec
+
+			// Phase 2 — 4 continuous rotating laser beams, rigidly attached to
+			// the hull's spikes. Collision is a live point-to-segment test
+			// (vectorMath.distanceToSegment) against the player each frame,
+			// not a pooled projectile — see SpiralBoss.checkLaserHit, read
+			// generically by WaveManager.checkPlayerHit the same optional-hook
+			// way TetraBoss's own laser already is.
+			laser: Object.freeze({
+				// The charge telegraph — SpiralBoss holds still, rotation
+				// frozen, for this long before the live beams below actually
+				// extend and start dealing damage. See
+				// SpiralBoss._renderChargeWarning/_chargeWarningPaths and
+				// core/vectorMath.js's rayRectExit.
+				chargeDuration: 1.4, // seconds
+				warningLineWidth: 3, // vp — thin dashed preview line traced along each locked beam direction during the charge
+				warningLineDash: Object.freeze([10, 8]), // vp on/off pattern for the dashed preview line
+				warningMarkerRadius: 10, // vp — pulsing ring drawn exactly where each beam will cross the screen edge (rayRectExit's result)
+				warningMarkerLineWidth: 3,
+				warningMarkerGlowBlur: 12,
+				chargePulseSpeed: 6, // rad/sec — faster than the boss's own coreGlowPulseSpeed (3), reads as more urgent/alarmed
+
+				length: 1300, // vp — comfortably longer than the virtual canvas's own diagonal (~1101vp) from anywhere within the patrol bounds, so a beam always reaches past every edge regardless of the boss's current position
+				halfWidth: 6, // vp — collision half-thickness (added to the player's own hitRadius)
+				damage: 14, // player HP lost per overlapping frame — throttled by Config.player.invulnDuration same as any other contact damage
+				color: "#BF5FFF",
+				coreColor: "#ffffff", // bright white inner line, laid over the colored outer glow for a "hot" beam core; also the charge telegraph's warning-marker color
+				lineWidth: 10, // outer glow stroke width
+				coreLineWidth: 3,
+				glowBlur: 16,
+			}),
 
 			// Pulsing core-ring glow at the center — stands in for an engine
 			// flame (a hovering orb has no thruster, unlike the ship-family

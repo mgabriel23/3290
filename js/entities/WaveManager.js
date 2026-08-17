@@ -1043,9 +1043,10 @@ export class WaveManager {
    * check invulnerability — Player.takeDamage already no-ops while
    * invulnerable, so a hit source here just gets consumed (bullet removed,
    * etc.) even during that window, same as a real impact would be. The one
-   * exception is a boss's own `checkLaserHit` (currently only Tetra's phase-2
-   * beams) — nothing to consume, it's a live geometry test re-run every
-   * frame the beam is up, same as Bouncer's circle-based `contactDamage`.
+   * exception is a boss's own `checkLaserHit` (currently Tetra's phase-2
+   * beams and Spiral's own phase-2 beams) — nothing to consume, it's a live
+   * geometry test re-run every frame the beam is up, same as Bouncer's
+   * circle-based `contactDamage`.
    * @param {{ x: number, y: number, hitRadius: number }} player
    * @returns {number}
    */
@@ -1086,9 +1087,10 @@ export class WaveManager {
           damage += (e.type === 'bouncer' ? Config.enemy.bouncer.contactDamage : e.contactDamage) * mult;
         }
       }
-      // A boss with a continuous beam attack (currently only Tetra's phase-2
-      // lasers) opts in by exposing `.checkLaserHit`, a live point-to-segment
-      // test rather than a circle — see TetraBoss.checkLaserHit's own doc.
+      // A boss with a continuous beam attack (currently Tetra's and Spiral's
+      // own phase-2 lasers) opts in by exposing `.checkLaserHit`, a live
+      // point-to-segment test rather than a circle — see
+      // TetraBoss.checkLaserHit/SpiralBoss.checkLaserHit's own docs.
       if (e.checkLaserHit) damage += e.checkLaserHit(x, y, hitRadius) * mult;
     }
 
