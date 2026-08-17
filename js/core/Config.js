@@ -418,8 +418,13 @@ export const Config = Object.freeze({
 		glowBlur: 16, // wider halo than normal UI — makes the text feel heavy and threatening; kept at 16 (47% cheaper than 22 per blur cost ∝ radius²)
 		// Plays once each time a "LEVEL N" indicator appears — see
 		// GameplayScene's constructor (level 1) and its wave-cleared
-		// transition (every level after that).
-		audioSrc: "assets/audio/level.m4a",
+		// transition (every level after that). Which of the two fires depends
+		// on whether the entered level is a boss level (Config.bossSchedule) —
+		// see GameplayScene._isBossLevel.
+		normalAudioSrc: "assets/audio/normal-level.mp3",
+		bossAudioSrc: "assets/audio/boss-level.mp3",
+		normalRepeatCount: 3, // normal-level stinger loops back-to-back this many times (AudioPool.play's repeatCount) — the clip alone reads as too short/abrupt
+		bossRepeatCount: 2, // boss-level stinger loops back-to-back this many times — same reasoning, fewer repeats since the boss clip reads as more substantial on its own
 		audioVolume: 0.6,
 
 		// Gameplay bg-music ducking while the indicator (and its sound) is on
@@ -5502,7 +5507,7 @@ export const Config = Object.freeze({
 	 */
 	barrier: Object.freeze({
 		maxHealth: 150, // barrier HP at level 1 — see Barrier.js's takeDamage/heal. Bumped from 100 (+50) so the shield has more of a cushion across a 30-level campaign.
-		maxHealthPerLevel: 50, // +50 max HP per wave level beyond 1 — see Barrier.maxHealth/setLevel. Same "base + (level-1)*perLevel" shape as Config.player.damage/damagePerLevel.
+		maxHealthPerLevel: 30, // +30 max HP per wave level beyond 1 — see Barrier.maxHealth/setLevel. Same "base + (level-1)*perLevel" shape as Config.player.damage/damagePerLevel.
 		// A small guaranteed top-up applied once per wave clear (see
 		// GameplayScene's isDone handling) — on top of, not instead of, the
 		// rare shield PowerUp drop (Config.powerUps.shield.healAmount, 20).

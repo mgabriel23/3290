@@ -88,8 +88,14 @@ export class AudioPool {
    * kills, and the screen-shake/hit-stop they trigger, with no visible
    * error and no plausible way to connect the symptom back to "audio."
    * @param {number} [volume]  overrides this instance's volume for this play only
+   * @param {number} [repeatCount]  play the clip back-to-back this many
+   *   times with no gap — implemented via the native `loop` flag plus a
+   *   scheduled `stop()` at `repeatCount * buffer.duration`, rather than
+   *   manually chaining separate `play()` calls, so the repeats stay
+   *   sample-accurate instead of drifting from setTimeout jitter. Omit for
+   *   the default single play.
    */
-  play(volume) {
+  play(volume, repeatCount = 1) {
     try {
       if (isMuted()) return; // skip entirely — no fetch, no decode, no playback
       if (!this._bufferPromise) this._bufferPromise = _loadBuffer(this._src);
@@ -105,7 +111,13 @@ export class AudioPool {
           const gain = ctx.createGain();
           gain.gain.value = (volume !== undefined ? volume : this._volume) * getVolume();
           source.connect(gain).connect(ctx.destination);
-          source.start();
+          if (repeatCount > 1) {
+            source.loop = true;
+            source.start();
+            source.stop(ctx.currentTime + buffer.duration * repeatCount);
+          } else {
+            source.start();
+          }
         } catch {
           // Node creation/playback failed for some device/browser-specific
           // reason — degrade silently, same as a failed load above.

@@ -361,9 +361,11 @@ export class GameplayScene {
     this._missionClearPending = false;
     // Plays once per "LEVEL N" indicator — right here for level 1 (the scene
     // always starts in 'intro'), and again at the wave-cleared transition in
-    // update() for every level after that.
-    this._levelAudio = new AudioPool(Config.level.audioSrc, 4, Config.level.audioVolume);
-    this._levelAudio.play();
+    // update() for every level after that. Two separate pools since normal
+    // and boss levels use different stingers — see _isBossLevel.
+    this._normalLevelAudio = new AudioPool(Config.level.normalAudioSrc, 4, Config.level.audioVolume);
+    this._bossLevelAudio   = new AudioPool(Config.level.bossAudioSrc, 4, Config.level.audioVolume);
+    this._playLevelAudio();
     // Mission Mode's victory stinger — see _triggerMissionComplete.
     this._missionCompleteAudio = new AudioPool(Config.missionComplete.audioSrc, 4, Config.missionComplete.audioVolume);
     this._musicDuck = 1; // 0-1 bg-music volume multiplier — see _updateMusicDuck
@@ -502,7 +504,7 @@ export class GameplayScene {
           // around through the intro purely so the pickup-collection block
           // above still has a `_waveManager` to call into. Overwritten with
           // a fresh instance below once 'active' begins again.
-          this._levelAudio.play();
+          this._playLevelAudio();
         }
       }
 
@@ -954,7 +956,7 @@ export class GameplayScene {
    * MissionSelectScene) fires — see `handleTap`. No screen shake — this is
    * a calm result screen, not an impact. Plays its own stinger
    * (`_missionCompleteAudio`, Config.missionComplete.audioSrc) rather than
-   * reusing the level-up chime (`_levelAudio`) — that's the exact sound
+   * reusing the level-up chime (`_playLevelAudio`) — that's the exact sound
    * `_levelState`'s 'intro' → 'active' transition uses to announce a NEW
    * wave incoming, so playing it here read as "another wave is coming"
    * right when nothing was, which is backwards for a screen that means the
@@ -1029,6 +1031,20 @@ export class GameplayScene {
     this._onMusicResume?.();
   }
 
+  /** True when the current `_level` is a boss level for this scene's mode — see Config.bossSchedule. */
+  _isBossLevel() {
+    return this._level % Config.bossSchedule[this._mode].everyNLevels === 0;
+  }
+
+  /** Plays the normal or boss level-indicator stinger, whichever fits the current `_level` — see `_isBossLevel`. Each repeats a different number of times (Config.level.normalRepeatCount/bossRepeatCount). */
+  _playLevelAudio() {
+    if (this._isBossLevel()) {
+      this._bossLevelAudio.play(undefined, Config.level.bossRepeatCount);
+    } else {
+      this._normalLevelAudio.play(undefined, Config.level.normalRepeatCount);
+    }
+  }
+
   /**
    * Full-screen "LEVEL N" announcement at the start of each wave.
    *
@@ -1042,7 +1058,7 @@ export class GameplayScene {
    * A micro y-tremor (±1.5 vp, very fast sine) runs throughout the hold
    * to add a physical instability on top of the alpha flicker.
    *
-   * `_levelAudio` plays once per indicator, not from here — it fires the
+   * `_playLevelAudio` plays once per indicator, not from here — it fires the
    * instant `_levelState` becomes 'intro' (constructor for level 1, the
    * wave-cleared transition in `update()` for every level after), not on
    * every render() call this method makes while the indicator is on screen.
@@ -1075,7 +1091,7 @@ export class GameplayScene {
       font, color, alpha, glowBlur,
     });
 
-    if (this._level % Config.bossSchedule[this._mode].everyNLevels === 0) {
+    if (this._isBossLevel()) {
       const b = Config.boss.intro;
       this.renderer.drawText(b.text, vW / 2, vH / 2 + jitter + b.offsetY, {
         font: b.font, color: dangerColor(b.color), alpha, glowBlur: b.glowBlur,
