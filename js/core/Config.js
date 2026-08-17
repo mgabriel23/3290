@@ -495,6 +495,10 @@ export const Config = Object.freeze({
 	 */
 	missionWaves: Object.freeze({
 		simultaneous: true,
+		// Seconds of breathing room after a level (re)starts before the first
+		// enemy group's spawn timer begins counting down — see Config.waves'
+		// own `startDelay` doc for why this lives per-mode alongside `simultaneous`.
+		startDelay: 2,
 		levels: Object.freeze([
 			// ---- Chapter 1 — First Contact (boss: Scout Prime, L5) ----
 			// Level 1 — {Scout}. Easy on purpose — three small, escalating
@@ -2899,6 +2903,11 @@ export const Config = Object.freeze({
 	 */
 	waves: Object.freeze({
 		simultaneous: true,
+		// Seconds of breathing room after a level (re)starts before the first
+		// enemy group's spawn timer begins counting down (WaveManager seeds
+		// `_spawnTimer` with this instead of 0) — gives the player a beat to
+		// get oriented (barrier/HUD state, own position) before anything fires.
+		startDelay: 2,
 		// Ten levels, rebuilt around OVERLAP as the main hype/difficulty lever.
 		// Every level uses `simultaneous: true` (the default — none of them
 		// override it): groups spawn on their own independent timers regardless

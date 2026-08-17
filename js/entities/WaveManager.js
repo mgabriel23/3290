@@ -218,7 +218,10 @@ export class WaveManager {
     this._totalToSpawn = this._waveCfg.enemies.reduce((s, g) => s + g.count, 0);
     this._spawnIdx   = 0;
     this._allSpawned = false;
-    this._spawnTimer = 0;
+    // Seeded with a short delay (Config.waves/missionWaves.startDelay) rather
+    // than 0 so the player gets a beat to breathe before the level's first
+    // enemy group starts spawning — see _resolveLevelAndBoss for `_wavesCfg`.
+    this._spawnTimer = this._wavesCfg.startDelay ?? 0;
 
     // Accumulates damage from sources whose "did it hit the player" check
     // naturally happens inside their own update() (Rockets/DrifterProjectiles
