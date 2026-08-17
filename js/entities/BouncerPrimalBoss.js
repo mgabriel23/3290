@@ -23,9 +23,11 @@
  * damage, and the newly summoned Bouncer becomes a normal, independent
  * hazard/target the instant it's queued — it bounces, deals barrier/
  * contact damage, and must be killed like any other enemy before the wave
- * can clear, same as a Splitter's fragments already work. `drainSummons`
- * is how WaveManager actually collects the queue and adds it to the live
- * enemy list (see WaveManager.handleBulletHit).
+ * can clear, same as a Splitter's fragments already work, including the
+ * same solved-vy0 launch (see `hit`) so a summon bounces with a normal
+ * Bouncer's full range instead of weakly falling from wherever the boss
+ * happened to be. `drainSummons` is how WaveManager actually collects the
+ * queue and adds it to the live enemy list (see WaveManager.handleBulletHit).
  *
  * Independently, every hit also has a separate `powerUpDropChance` chance
  * to queue a PowerUp drop (`drainPowerUpDrops`, collected by that same
@@ -128,8 +130,17 @@ export class BouncerPrimalBoss {
     if (this._summonCooldown <= 0 && Math.random() < cfg.summonChance) {
       summonHealth = Math.round(cfg.summonHealthMin + Math.random() * (cfg.summonHealthMax - cfg.summonHealthMin));
       this._summonCooldown = cfg.summonCooldown;
+
+      // Same "solve vy0 so the apex lands at the top edge" trick
+      // BouncerEnemy.spawnFragments() uses — without it a summon spawning
+      // at the boss's current (often mid-screen) y with the default vy0=0
+      // would fall weakly instead of bouncing with a normal Bouncer's full
+      // screen-spanning range.
+      const bouncerCfg = Config.enemy.bouncer;
+      const vy = -Math.sqrt(2 * bouncerCfg.gravity * (this.y + bouncerCfg.radius));
       this._pendingSummons.push(new BouncerEnemy({
         x: this.x, y: this.y,
+        vy,
         health: summonHealth,
       }));
     }

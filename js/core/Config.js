@@ -4403,8 +4403,8 @@ export const Config = Object.freeze({
 			name: "BOUNCER PRIMAL",
 			radius: 65, // vp — well above even Splitter's 40; the biggest hull of any Bouncer variant
 			sides: 6, // hexagon — same family silhouette as every Bouncer variant
-			health: 12000,
-			healthPerLevel: 1800,
+			health: 8400, // lowered ~30% from 12000 — fight was running too long
+			healthPerLevel: 1260, // lowered ~30% from 1800, matching the base health cut
 			color: "#FFB020", // same amber as the whole Bouncer/Splitter family — the giant-reskin lineage, same idea as Boss #1 reusing Scout's magenta
 			lineWidth: 3,
 			glowBlur: 10,
