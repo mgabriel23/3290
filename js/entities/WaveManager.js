@@ -214,6 +214,12 @@ export class WaveManager {
 
     // Player bullet damage scales with level — see Config.player.damage/damagePerLevel.
     this._playerDamage = Config.player.damage + (level - 1) * Config.player.damagePerLevel;
+    // Every enemy attack's damage-to-player scales up the same way, on the
+    // enemy side — see Config.enemy.damageGrowthPerLevel's own doc. Applied
+    // at the point checkPlayerHit/the rocket+drifter onPlayerHit callbacks
+    // below tally damage, not baked into each Config field, so every attack
+    // source (including every boss's) gets it for free from one place.
+    this._enemyDamageMultiplier = 1 + (level - 1) * Config.enemy.damageGrowthPerLevel;
 
     this._totalToSpawn = this._waveCfg.enemies.reduce((s, g) => s + g.count, 0);
     this._spawnIdx   = 0;
@@ -352,7 +358,7 @@ export class WaveManager {
         this._rocketeerParticles.emit(x, y);
         this._playExplosionSfx(Config.enemy.rocketeer.audio.volume);
       },
-      onPlayerHit: () => { this._pendingPlayerDamage += Config.rocket.damage; },
+      onPlayerHit: () => { this._pendingPlayerDamage += Config.rocket.damage * this._enemyDamageMultiplier; },
     });
     this._drifterProjectiles = new DrifterProjectiles({
       onImpact: (x, y, color) => {
@@ -362,7 +368,7 @@ export class WaveManager {
         else if (color === Config.enemy.drifter.weaver.color) particles = this._weaverParticles;
         particles.emit(x, y);
       },
-      onPlayerHit: () => { this._pendingPlayerDamage += Config.enemy.drifter.projectileDamage; },
+      onPlayerHit: () => { this._pendingPlayerDamage += Config.enemy.drifter.projectileDamage * this._enemyDamageMultiplier; },
     });
   }
 
@@ -1046,18 +1052,19 @@ export class WaveManager {
     this._pendingPlayerDamage = 0;
 
     const { x, y, hitRadius } = player;
+    const mult = this._enemyDamageMultiplier;
 
-    if (this._enemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemyBullet.damage;
-    if (this._sniperBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.sniper.bullet.damage;
-    if (this._spiralBullets.checkHit(x, y, hitRadius)) damage += Config.boss.spiral.bullet.damage;
-    if (this._tetraBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.bullet.damage;
-    if (this._novaBullets.checkHit(x, y, hitRadius)) damage += Config.boss.nova.fragment.damage;
-    if (this._novaSeedBullets.checkHit(x, y, hitRadius)) damage += Config.boss.nova.seed.damage;
-    if (this._pulsorBullets.checkHit(x, y, hitRadius)) damage += Config.boss.pulsor.pulseDamage;
-    if (this._zigzagBullets.checkHit(x, y, hitRadius)) damage += Config.boss.zigzag.bullet.damage;
-    if (this._phoenixFireballs.checkHit(x, y, hitRadius)) damage += Config.boss.phoenix.fireball.damage;
-    if (this._electronBolts.checkHit(x, y, hitRadius)) damage += Config.boss.electron.bolt.damage;
-    if (this._electronChains.checkHit(x, y, hitRadius)) damage += Config.boss.electron.chain.damage;
+    if (this._enemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemyBullet.damage * mult;
+    if (this._sniperBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.sniper.bullet.damage * mult;
+    if (this._spiralBullets.checkHit(x, y, hitRadius)) damage += Config.boss.spiral.bullet.damage * mult;
+    if (this._tetraBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.bullet.damage * mult;
+    if (this._novaBullets.checkHit(x, y, hitRadius)) damage += Config.boss.nova.fragment.damage * mult;
+    if (this._novaSeedBullets.checkHit(x, y, hitRadius)) damage += Config.boss.nova.seed.damage * mult;
+    if (this._pulsorBullets.checkHit(x, y, hitRadius)) damage += Config.boss.pulsor.pulseDamage * mult;
+    if (this._zigzagBullets.checkHit(x, y, hitRadius)) damage += Config.boss.zigzag.bullet.damage * mult;
+    if (this._phoenixFireballs.checkHit(x, y, hitRadius)) damage += Config.boss.phoenix.fireball.damage * mult;
+    if (this._electronBolts.checkHit(x, y, hitRadius)) damage += Config.boss.electron.bolt.damage * mult;
+    if (this._electronChains.checkHit(x, y, hitRadius)) damage += Config.boss.electron.chain.damage * mult;
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
@@ -1074,13 +1081,13 @@ export class WaveManager {
         const dx = e.x - x, dy = e.y - y;
         const r  = (e.contactRadius ?? e.hitRadius) + hitRadius;
         if (dx * dx + dy * dy <= r * r) {
-          damage += e.type === 'bouncer' ? Config.enemy.bouncer.contactDamage : e.contactDamage;
+          damage += (e.type === 'bouncer' ? Config.enemy.bouncer.contactDamage : e.contactDamage) * mult;
         }
       }
       // A boss with a continuous beam attack (currently only Tetra's phase-2
       // lasers) opts in by exposing `.checkLaserHit`, a live point-to-segment
       // test rather than a circle — see TetraBoss.checkLaserHit's own doc.
-      if (e.checkLaserHit) damage += e.checkLaserHit(x, y, hitRadius);
+      if (e.checkLaserHit) damage += e.checkLaserHit(x, y, hitRadius) * mult;
     }
 
     return damage;

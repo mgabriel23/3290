@@ -1968,18 +1968,40 @@ export const Config = Object.freeze({
 		// frame pointer-event jitter.
 		leadVelocitySmoothing: 8,
 
+		// Every enemy attack that can hit the player (Config.enemyBullet.damage,
+		// enemy.sniper.bullet.damage, rocket.damage, enemy.bouncer.contactDamage,
+		// enemy.drifter.projectileDamage, every boss bullet/contact type) is
+		// authored as its LEVEL-1 value and scaled up at the point WaveManager
+		// tallies player damage (checkPlayerHit, and the rocket/drifter onPlayerHit
+		// callbacks) by `1 + damageGrowthPerLevel × (level-1)` — the same flat
+		// additive-per-level shape as Config.player.damagePerLevel, just on the
+		// enemy side. Added alongside the healthPerLevel bump documented in the
+		// EffortScore comment below, for the same reason: Player.maxHealth now
+		// grows up to 2.6x via the Shop's `engine` upgrade (Config.player.engine),
+		// so a hit that felt threatening at level 1 would otherwise decay toward
+		// harmless chip damage for a tanky late-run ship. 0.02 (+2%/level,
+		// unbounded — matches damagePerLevel's own never-caps shape) reaches
+		// +58% by level 30 ("The Reckoning", where Survival's hand-authored
+		// content ends and only numbers keep climbing) and keeps compounding
+		// through the true endless tail beyond it, deliberately NOT fully
+		// canceling out a maxed engine's 2.6x survivability — buying engine
+		// levels should still make the ship meaningfully tankier, just not
+		// immune to the run's own escalation.
+		damageGrowthPerLevel: 0.02,
+
 		/**
 		 * How every type's `points`/`gold` below were derived — not
-		 * independently hand-picked per type. There's currently no way for the
-		 * player to take damage anywhere in the game (no player health field,
-		 * no enemy-projectile-vs-player collision check exists), so "difficulty"
-		 * can't be modeled as danger-to-player — it's modeled as verified
-		 * effort-to-kill instead:
+		 * independently hand-picked per type. Difficulty is modeled as
+		 * verified effort-to-kill (danger-to-player is a separate axis, now
+		 * covered by `damageGrowthPerLevel` above rather than folded into this
+		 * score — see that field's own doc):
 		 *
 		 *   1. hitsToKill = ceil((health + healthPerLevel×(debutLevel-1)) /
 		 *      (player.damage + player.damagePerLevel×(debutLevel-1))) — real
 		 *      numbers from this file, evaluated at the level each type first
-		 *      appears in Config.waves.levels.
+		 *      appears in Config.waves.levels (Survival Mode's array — the
+		 *      default/primary mode; Mission Mode's independent debut order,
+		 *      Config.missionWaves, isn't used for this calibration).
 		 *   2. EffortScore = hitsToKill × mobilityMultiplier × engagementMultiplier
 		 *        mobility:   1.0 stationary-after-entry (Scout/Rocketeer/Sniper)
 		 *                    1.15 smooth path movement (Drifter family)
@@ -2001,8 +2023,31 @@ export const Config = Object.freeze({
 		 * objective term — stays dominant. Scout and Rocketeer land equal on
 		 * purpose: identical hits-to-kill, identical stationary mobility,
 		 * identical mandatory-kill status — the homing rocket has no measurable
-		 * extra difficulty today without a player-damage system. Revisit this
-		 * whole model if/when the player can actually take damage.
+		 * extra difficulty today without a player-damage system.
+		 *
+		 * Shop-compensation note: every `healthPerLevel` below is the type's
+		 * "raw" per-level growth × 1.65 (SHOP_HEALTH_FACTOR, a constant only
+		 * expressed here in the comment, not a separate Config field — it was
+		 * folded into each number below once, not re-applied at runtime).
+		 * Added because the Shop (Config.player.wings/cannon/missiles) lets a
+		 * player push effective bullet DPS well past what `player.damage`/
+		 * `damagePerLevel` alone assume — cannon's damageMult alone reaches
+		 * 1.82x at max level, wings' fireRateMult (plus its level-8 side
+		 * bullets) pushes noticeably higher, and missiles add a wholly separate
+		 * damage stream once unlocked. Left uncompensated, hitsToKill for every
+		 * type would visibly erode over a run as a player buys upgrades,
+		 * trivializing exactly the levels meant to feel hardest. 1.65 is a
+		 * deliberate midpoint, not the full ~2.7x+ a maxed cannon+wings
+		 * combination could reach: `health` (the level-1 base, untouched here)
+		 * is what a fresh, zero-Shop-investment player meets, so inflating
+		 * healthPerLevel all the way to match a FULLY maxed ship would make
+		 * early-to-mid levels feel unfairly tanky for anyone still saving up
+		 * gold. 1.65 keeps early debuts close to their original feel while
+		 * still meaningfully compensating by the point a run reaches its later
+		 * levels, where sustained kills have had time to fund real Shop
+		 * progress — matching this file's own preference for moderate,
+		 * legible adjustments over precise theoretical maximization (see the
+		 * mobility/engagement multipliers' own "kept small" reasoning above).
 		 *
 		 * healthPerLevel note: most types share this file's implicit
 		 * convention of one `healthPerLevel` per family, EXCEPT
@@ -2012,7 +2057,7 @@ export const Config = Object.freeze({
 		 * tankiness over a plain Bouncer decays toward zero over a long
 		 * endless-mode run, since a flat health head-start becomes
 		 * proportionally smaller as player damage keeps climbing. Sniper
-		 * sidesteps this the same way structurally (its own `healthPerLevel: 2`
+		 * sidesteps this the same way structurally (its own `healthPerLevel`
 		 * is already a dedicated per-type field, not shared with anything).
 		 */
 
@@ -2023,7 +2068,7 @@ export const Config = Object.freeze({
 		scout: Object.freeze({
 			size: 22,
 			health: 3,
-			healthPerLevel: 1, // +1 health per level beyond 1
+			healthPerLevel: 1.65, // +1.65 health per level beyond 1 — 1 × SHOP_HEALTH_FACTOR, see the methodology comment above
 			color: "#ff3ec9", // magenta
 			fillColor: "#1a0a20",
 			lineWidth: 1.5,
@@ -2074,7 +2119,7 @@ export const Config = Object.freeze({
 		sniper: Object.freeze({
 			size: 22,
 			health: 8,
-			healthPerLevel: 2, // +2 health per level beyond 1 — already tanky, scales faster
+			healthPerLevel: 3.3, // +3.3 health per level beyond 1 — already tanky, scales faster; 2 × SHOP_HEALTH_FACTOR, see the methodology comment above
 			color: "#BF5FFF", // electric violet — reads as energy weapon
 			fillColor: "#110022",
 			lineWidth: 1.8,
@@ -2093,11 +2138,11 @@ export const Config = Object.freeze({
 			recoverTurnRate: 4, // rad/sec — slow turn back toward the player during recovery
 			hitRadius: 24,
 			minSeparation: 64,
-			// EffortScore 8.00 (hitsToKill 8, stationary, mandatory) — highest
+			// EffortScore 11.00 (hitsToKill 11, stationary, mandatory) — highest
 			// hits-to-kill of any single-stage enemy in the roster. See the
 			// methodology comment above `hitFlashDuration`.
-			points: 270,
-			gold: 13,
+			points: 370,
+			gold: 18,
 
 			// Nose charge-orb visual tuning (see SniperEnemy.renderCore)
 			chargeOrbStartRadius: 3, // radius at t=0 while charging
@@ -2166,7 +2211,7 @@ export const Config = Object.freeze({
 		rocketeer: Object.freeze({
 			size: 22,
 			health: 2,
-			healthPerLevel: 1, // +1 health per level beyond 1
+			healthPerLevel: 1.65, // +1.65 health per level beyond 1 — 1 × SHOP_HEALTH_FACTOR, see the methodology comment above
 			color: "#FFB020", // amber/gold — warm, distinct from scout magenta
 			fillColor: "#1a1000", // very dark amber
 			lineWidth: 1.5,
@@ -2211,7 +2256,7 @@ export const Config = Object.freeze({
 		 */
 		drifter: Object.freeze({
 			health: 3,
-			healthPerLevel: 1, // +1 health per level beyond 1 — applies to all varieties (sweeper/diver/weaver share `health`)
+			healthPerLevel: 1.65, // +1.65 health per level beyond 1 — applies to all varieties (sweeper/diver/weaver share `health`); 1 × SHOP_HEALTH_FACTOR, see the methodology comment above `hitFlashDuration`
 			color: "#FFB020", // amber/gold — matches Rocketeer
 			fillColor: "#1a1000",
 			eyeColor: "#FFE0A0",
@@ -2259,13 +2304,13 @@ export const Config = Object.freeze({
 			engageRetryInterval: 0.3, // seconds before re-checking range after a would-be lash was withheld
 
 			hitRadius: 18,
-			// EffortScore 5.29 (hitsToKill 4, path-moving ×1.15, optional-to-
+			// EffortScore 6.61 (hitsToKill 5, path-moving ×1.15, optional-to-
 			// engage ×1.15) — identical to Sweeper/Diver/Weaver below, which all
 			// share this same base health/healthPerLevel and only differ in
 			// path/palette, not actual difficulty. See the methodology comment
 			// above `hitFlashDuration`.
-			points: 180,
-			gold: 9,
+			points: 220,
+			gold: 11,
 			audio: Object.freeze({
 				// Lower than Rocketeer/Sniper (0.45) — formations of up to 8 clones
 				// can die in close succession, and the shared SFX pool would
@@ -2325,8 +2370,8 @@ export const Config = Object.freeze({
 				// Same EffortScore/hits-to-kill as base Drifter — 15 clones per
 				// formation vs 8 means total wave reward scales up proportionately
 				// on its own; no separate per-clone discount needed.
-				points: 180,
-				gold: 9,
+				points: 220,
+				gold: 11,
 			}),
 
 			/**
@@ -2378,8 +2423,8 @@ export const Config = Object.freeze({
 				sparksPerEmit: 10,
 
 				// Same EffortScore as base Drifter/Sweeper/Weaver — same hits-to-kill.
-				points: 180,
-				gold: 9,
+				points: 220,
+				gold: 11,
 
 				// Diver dives straight down and reaches the barrier if not killed
 				// first — a one-shot impact (the clone is destroyed on contact,
@@ -2426,8 +2471,8 @@ export const Config = Object.freeze({
 				sparksPerEmit: 10,
 
 				// Same EffortScore as base Drifter/Sweeper/Diver — same hits-to-kill.
-				points: 180,
-				gold: 9,
+				points: 220,
+				gold: 11,
 
 				// Weaver descends all the way down like Diver and reaches the
 				// barrier if not killed first — same one-shot-impact treatment,
@@ -2475,7 +2520,7 @@ export const Config = Object.freeze({
 			// are recalculated via the EffortScore formula so the reward keeps
 			// pace with the added tankiness — see the methodology comment above.
 			health: 6,
-			healthPerLevel: 1.5, // +1.5 health per level beyond 1 — used by the plain Bouncer (variant 1) and, via the shared `health` fallback above, Shielded's core; Splitter/Shielded scale their OWN healthPerLevel below at 1.5x this rate
+			healthPerLevel: 2.475, // +2.475 health per level beyond 1 — used by the plain Bouncer (variant 1) and, via the shared `health` fallback above, Shielded's core; Splitter/Shielded scale their OWN healthPerLevel below at 1.5x this rate. 1.5 × SHOP_HEALTH_FACTOR, see the methodology comment above `hitFlashDuration`
 			color: "#FFB020", // amber — same family as Rocketeer/Drifter #1
 			lineWidth: 2,
 			glowBlur: 5,
@@ -2502,11 +2547,11 @@ export const Config = Object.freeze({
 				poolSize: 4,
 			}),
 			sparksPerEmit: 10,
-			// EffortScore 7.80 (hitsToKill 6, erratic-bounce mobility ×1.3,
+			// EffortScore 11.70 (hitsToKill 9, erratic-bounce mobility ×1.3,
 			// mandatory so no engagement bonus). See the methodology comment
 			// above `hitFlashDuration`.
-			points: 260,
-			gold: 13,
+			points: 390,
+			gold: 20,
 
 			splitter: Object.freeze({
 				radius: 40, // vp — ~2x the base hull size
@@ -2517,8 +2562,10 @@ export const Config = Object.freeze({
 				// Bouncer becomes proportionally smaller every level (player
 				// damage keeps growing, the gap doesn't) — its relative tankiness
 				// would decay toward parity with a plain Bouncer over a long
-				// endless-mode run instead of staying a real step up.
-				healthPerLevel: 2.25,
+				// endless-mode run instead of staying a real step up. 3.7125 =
+				// 2.25 × SHOP_HEALTH_FACTOR, see the methodology comment above
+				// `hitFlashDuration`.
+				healthPerLevel: 3.7125,
 
 				fragmentCount: 3,
 				// vp — smaller than the base Bouncer (20), but bumped from 12 so
@@ -2542,20 +2589,21 @@ export const Config = Object.freeze({
 				fragmentHealthPerLevel: 2,
 				fragmentSpeedMax: 200, // vp/sec — horizontal fan-out speed (vy is solved per-fragment, see spawnFragments)
 
-				// EffortScore 15.60 (hitsToKill 12 from 20 HP @ healthPerLevel
-				// 2.25, erratic-bounce ×1.3) — the single highest-value type in
-				// the roster. Fragment reward below is its own separate, smaller
-				// EffortScore, now recalculated off the level-scaled fragment
-				// health above: EffortScore 9.10 (hitsToKill 7 from 32 HP @
-				// Splitter's own mission debut level 16, erratic-bounce ×1.3) —
-				// no extra "split bonus" stacked onto Splitter's own value, since
-				// the 3 spawned fragments already each earn their own reward when
-				// they're individually killed. See the methodology comment above
-				// `hitFlashDuration`.
-				points: 520,
-				gold: 26,
-				fragmentPoints: 300,
-				fragmentGold: 15,
+				// EffortScore 22.10 (hitsToKill 17 from 20 HP @ healthPerLevel
+				// 3.7125, evaluated at Survival's real debut level 9 — see the
+				// "survival 9 / mission 16" note above — erratic-bounce ×1.3) —
+				// the single highest-value type in the roster. Fragment reward
+				// below is its own separate, smaller EffortScore, recalculated
+				// off the level-scaled fragment health above: EffortScore 7.80
+				// (hitsToKill 6 from 18 HP @ Splitter's own Survival debut level
+				// 9, erratic-bounce ×1.3) — no extra "split bonus" stacked onto
+				// Splitter's own value, since the 3 spawned fragments already
+				// each earn their own reward when they're individually killed.
+				// See the methodology comment above `hitFlashDuration`.
+				points: 740,
+				gold: 37,
+				fragmentPoints: 260,
+				fragmentGold: 13,
 			}),
 
 			shielded: Object.freeze({
@@ -2567,14 +2615,16 @@ export const Config = Object.freeze({
 				// Own healthPerLevel for the core, same 1.5x rationale as Splitter
 				// above — the shield's flat absorbed-hit count doesn't decay on
 				// its own, but the core underneath was scaling at the same rate
-				// as a plain Bouncer's core.
-				healthPerLevel: 2.25,
+				// as a plain Bouncer's core. 3.7125 = 2.25 × SHOP_HEALTH_FACTOR,
+				// see the methodology comment above `hitFlashDuration`.
+				healthPerLevel: 3.7125,
 
-				// EffortScore 16.90 (hitsToKill 13 total — 4 shield-absorbed hits
-				// + 9 core hits @ healthPerLevel 2.25 — × erratic-bounce ×1.3).
-				// See the methodology comment above `hitFlashDuration`.
-				points: 560,
-				gold: 28,
+				// EffortScore 22.10 (hitsToKill 17 total — 4 shield-absorbed hits
+				// + 13 core hits @ healthPerLevel 3.7125, evaluated at Survival's
+				// real debut level 10 — × erratic-bounce ×1.3). See the
+				// methodology comment above `hitFlashDuration`.
+				points: 740,
+				gold: 37,
 			}),
 		}),
 	}),
