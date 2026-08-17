@@ -2521,7 +2521,12 @@ export const Config = Object.freeze({
 				healthPerLevel: 2.25,
 
 				fragmentCount: 3,
-				fragmentRadius: 12, // vp — smaller than the base Bouncer (20)
+				// vp — smaller than the base Bouncer (20), but bumped from 12 so
+				// the fixed 16px healthFont has room to sit inside the hull once
+				// fragmentHealth scales past 2 digits over a long endless-mode
+				// run (see fragmentHealthPerLevel below) instead of crowding a
+				// too-small hexagon.
+				fragmentRadius: 18,
 				// fragmentHealth (level 1) + fragmentHealthPerLevel×(level-1) =
 				// exactly 2× the current wave/survival level at every level —
 				// e.g. 18 HP at level 9, 32 HP at level 16. Previously a flat 1,
