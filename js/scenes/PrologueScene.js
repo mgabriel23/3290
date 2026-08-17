@@ -253,7 +253,7 @@ export class PrologueScene {
         if (this._dailyRewardPanel.isOpen) return this._dailyRewardPanel.render(this.renderer);
         this._renderTitle();
         this._settingsPanel.render(this.renderer);
-        this._achievementsPanel.render(this.renderer);
+        this._achievementsPanel.render(this.renderer, this._settingsPanel.isOpen);
         // Settings/achievements now paint a fully opaque backdrop (see their
         // own class docs), so this reminder must stay hidden while either is
         // open — otherwise it reads as a stray title-screen element floating

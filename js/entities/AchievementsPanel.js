@@ -83,9 +83,15 @@ export class AchievementsPanel {
         && Math.abs(y - arrowY) <= arrowHalfSize;
   }
 
-  render(renderer) {
+  /**
+   * `hideButton` lets PrologueScene suppress the 🏆 while SettingsPanel's
+   * fully-opaque overlay is open — that overlay renders first and covers the
+   * whole screen, so without this the button would still float visibly on
+   * top of it despite handleTap already refusing to route taps to it there.
+   */
+  render(renderer, hideButton = false) {
     if (this._open) this._renderOverlay(renderer);
-    this._renderButton(renderer);
+    if (!hideButton) this._renderButton(renderer);
   }
 
   _renderButton(renderer) {
