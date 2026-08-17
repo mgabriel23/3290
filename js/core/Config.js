@@ -5967,7 +5967,11 @@ export const Config = Object.freeze({
 	 * That static split alone isn't enough room once both are at full size
 	 * together, so `toast.comboClearanceOffsetY`/`comboOffsetRate` ease in
 	 * extra clearance while the combo banner is also active — see
-	 * AchievementToast's class doc.
+	 * AchievementToast's class doc. `tierRewards` is the flat gold payout
+	 * (index 0-2, same tier ladder as tierLabels) credited to the HUD wallet
+	 * the instant AchievementToast sees a tier crossed — same amount
+	 * regardless of which TRACK, previewed in the panel's `pip.reward*` line
+	 * and confirmed live in the toast's own sub-text.
 	 */
 	achievements: Object.freeze({
 		button: Object.freeze({
@@ -5983,6 +5987,10 @@ export const Config = Object.freeze({
 			pulseDepth: 0.3,
 		}),
 		tierLabels: Object.freeze(["I", "II", "III"]),
+		// Gold credited straight to the HUD wallet the instant a tier unlocks
+		// (AchievementToast.checkForUnlocks) — flat per tier level regardless
+		// of which track, indexed 0-2 alongside tierLabels I/II/III.
+		tierRewards: Object.freeze([250, 500, 1000]),
 		overlay: Object.freeze({
 			fadeInDuration: 0.2,
 
@@ -6045,6 +6053,10 @@ export const Config = Object.freeze({
 			thresholdsFont: '400 11px "Courier New", monospace',
 			thresholdsColor: "#aab4d4",
 			thresholdsY: 548, // dim reference line listing all 3 thresholds
+
+			rewardFont: '400 12px "Audiowide", "Courier New", monospace',
+			rewardColor: "#FFD24D",
+			rewardY: 578, // gold ladder, same flat reward for every track — see Config.achievements.tierRewards
 		}),
 		toast: Object.freeze({
 			posY: 460,

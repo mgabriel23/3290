@@ -463,7 +463,11 @@ export class GameplayScene {
       // kill (WaveManager.handleBulletHit) or a pickup (just above) — both
       // already happened this frame by this point, so checking once here
       // catches everything without re-deriving progress per event.
-      this._achievementToast.checkForUnlocks();
+      const achievementReward = this._achievementToast.checkForUnlocks();
+      if (achievementReward > 0) {
+        this.hud.gold += achievementReward;
+        this._floatingText.spawn(this.player.x, this.player.y - 30, `+${achievementReward} GOLD`, Config.gold.color);
+      }
     }
     this.hud.update(effectiveDt); // drives the health bar's low-health pulse clock only
     this._floatingText.update(effectiveDt);

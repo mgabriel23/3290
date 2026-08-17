@@ -17,6 +17,14 @@
  * just cross a threshold." The tier snapshot is taken fresh at construction
  * (one per GameplayScene/run), so a badge already unlocked in a previous
  * session never re-fires here — only a tier crossed DURING this run does.
+ * That same "only ever fires once, exactly on the crossing" guarantee is why
+ * this is also where each tier's Config.achievements.tierRewards gold amount
+ * is tallied up — `checkForUnlocks()` returns the total (0 most frames), and
+ * GameplayScene credits it to `hud.gold` and spawns a "+N GOLD" FloatingText
+ * at the player, same return-a-raw-amount-and-let-the-caller-apply-it shape
+ * WaveManager.checkGoldPickup already uses for coin pickups — no separate
+ * claimed/granted flag needed, unlike DailyReward.js's calendar (which can't
+ * rely on a threshold crossing to know "once").
  *
  * Single-instance with its own small FIFO queue rather than one-shot like
  * ComboBanner: a single kill can plausibly cross two tracks' thresholds at
@@ -57,16 +65,28 @@ export class AchievementToast {
     return this._age >= 0 || this._queue.length > 0;
   }
 
-  /** Poll once per frame — a single Stats read (cheap: a handful of numbers), same cost class as WaveManager's own per-frame pickup polls. */
+  /**
+   * Poll once per frame — a single Stats read (cheap: a handful of numbers),
+   * same cost class as WaveManager's own per-frame pickup polls.
+   * @returns {number} total gold earned by any tier(s) crossed this call — 0
+   *   on almost every frame; see class doc for why the caller applies it.
+   */
   checkForUnlocks() {
     const stats = getStats();
+    let reward = 0;
     for (let i = 0; i < TRACKS.length; i++) {
       const track = TRACKS[i];
       const tier = tierIndexFor(track, track.getValue(stats));
-      for (let t = this._lastTiers[i] + 1; t <= tier; t++) this._queue.push({ track, tierIndex: t });
+      for (let t = this._lastTiers[i] + 1; t <= tier; t++) {
+        // t is tierIndexFor's 1-based count of thresholds passed; _tierIndex
+        // (see field doc + _advance) is 0-based, indexing tierLabels/tierRewards.
+        this._queue.push({ track, tierIndex: t - 1 });
+        reward += Config.achievements.tierRewards[t - 1];
+      }
       this._lastTiers[i] = tier;
     }
     if (this._age < 0 && this._queue.length > 0) this._advance();
+    return reward;
   }
 
   _advance() {
@@ -121,7 +141,8 @@ export class AchievementToast {
     renderer.drawText(this._track.title, vW / 2, y, {
       font: titleFont, color, alpha, glowBlur, scale,
     });
-    renderer.drawText(`TIER ${Config.achievements.tierLabels[this._tierIndex]}`, vW / 2, y + subOffsetY, {
+    const reward = Config.achievements.tierRewards[this._tierIndex];
+    renderer.drawText(`TIER ${Config.achievements.tierLabels[this._tierIndex]} · +${reward} GOLD`, vW / 2, y + subOffsetY, {
       font: subFont, color, alpha: alpha * 0.85, scale,
     });
   }

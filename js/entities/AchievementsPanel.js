@@ -208,6 +208,14 @@ export class AchievementsPanel {
     renderer.drawText(thresholdsText, vW / 2, cfg.thresholdsY, {
       font: cfg.thresholdsFont, color: cfg.thresholdsColor, alpha: alpha * 0.8,
     });
+
+    // Same flat gold ladder for every track (Config.achievements.tierRewards)
+    // — credited to the HUD wallet the instant AchievementToast sees a tier
+    // crossed, see that class's doc.
+    const rewardText = Config.achievements.tierRewards.map((g) => `+${g}`).join(' · ') + ' GOLD';
+    renderer.drawText(rewardText, vW / 2, cfg.rewardY, {
+      font: cfg.rewardFont, color: cfg.rewardColor, alpha: alpha * 0.9,
+    });
   }
 
   /** Same arrow shape as EnemyCodex._renderArrow. */
