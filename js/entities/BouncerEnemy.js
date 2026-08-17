@@ -177,9 +177,14 @@ export class BouncerEnemy {
    * normal Bouncer ("losing bounce power"). To give fragments the same
    * full-screen bounce range regardless of where their parent died, vy0 is
    * solved so the apex lands exactly at the top edge, same as variant 1.
+   * @param {number} [healthBonus]  added to each fragment's base health — see
+   *   Config...bouncer.splitter.fragmentHealthPerLevel; passed in by
+   *   WaveManager (which owns the current level) rather than read from
+   *   Config directly here, same "caller owns the level" shape `opts.healthBonus`
+   *   already uses on the constructor for every other variant.
    * @returns {BouncerEnemy[]}
    */
-  spawnFragments() {
+  spawnFragments(healthBonus = 0) {
     const cfg = Config.enemy.bouncer;
     const { fragmentCount, fragmentRadius, fragmentSpeedMax } = cfg.splitter;
     const fragments = [];
@@ -191,6 +196,7 @@ export class BouncerEnemy {
         variant: 'fragment',
         x: this.x, y: this.y,
         vx, vy,
+        healthBonus,
       }));
     }
     return fragments;

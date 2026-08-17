@@ -171,7 +171,7 @@ const ENTRIES = [
 
   { buildOrder: 11, type: 'fragment', name: 'Splitter Fragment', family: 'Bouncer family (spawned only)', kind: 'bouncer',
     color: Config.enemy.bouncer.color,
-    hp: Config.enemy.bouncer.splitter.fragmentHealth, hpPerLevel: 0,
+    hp: Config.enemy.bouncer.splitter.fragmentHealth, hpPerLevel: Config.enemy.bouncer.splitter.fragmentHealthPerLevel,
     points: Config.enemy.bouncer.splitter.fragmentPoints, gold: Config.enemy.bouncer.splitter.fragmentGold,
     description: 'A small, low-health shard spawned only when a Splitter dies — not something you can place in a level directly.' },
 ];

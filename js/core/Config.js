@@ -2469,8 +2469,13 @@ export const Config = Object.freeze({
 		 * for the same simultaneous-kill-burst reason as Diver/Weaver.
 		 */
 		bouncer: Object.freeze({
-			health: 4,
-			healthPerLevel: 1.2, // +1.2 health per level beyond 1 — used by the plain Bouncer (variant 1) and, via the shared `health` fallback above, Shielded's core; Splitter/Shielded scale their OWN healthPerLevel below at 1.5x this rate
+			// Bumped from 4/1.2 — Bouncer/Splitter/Shielded are meant to be a
+			// sustained bounce-off-the-barrier threat, not a one-or-two-hit
+			// speed bump; dying too fast undercuts that role. Points/gold below
+			// are recalculated via the EffortScore formula so the reward keeps
+			// pace with the added tankiness — see the methodology comment above.
+			health: 6,
+			healthPerLevel: 1.5, // +1.5 health per level beyond 1 — used by the plain Bouncer (variant 1) and, via the shared `health` fallback above, Shielded's core; Splitter/Shielded scale their OWN healthPerLevel below at 1.5x this rate
 			color: "#FFB020", // amber — same family as Rocketeer/Drifter #1
 			lineWidth: 2,
 			glowBlur: 5,
@@ -2497,59 +2502,74 @@ export const Config = Object.freeze({
 				poolSize: 4,
 			}),
 			sparksPerEmit: 10,
-			// EffortScore 6.50 (hitsToKill 5, erratic-bounce mobility ×1.3,
+			// EffortScore 7.80 (hitsToKill 6, erratic-bounce mobility ×1.3,
 			// mandatory so no engagement bonus). See the methodology comment
 			// above `hitFlashDuration`.
-			points: 220,
-			gold: 11,
+			points: 260,
+			gold: 13,
 
 			splitter: Object.freeze({
 				radius: 40, // vp — ~2x the base hull size
-				health: 14, // ~3.5x base health
-				// Own healthPerLevel, 1.5x the base Bouncer's 1.2 (read by
+				health: 20, // ~3.33x base health
+				// Own healthPerLevel, 1.5x the base Bouncer's 1.5 (read by
 				// WaveManager._spawnNext — NOT the base bouncer.healthPerLevel).
 				// Without this, Splitter's flat HP head start over a plain
 				// Bouncer becomes proportionally smaller every level (player
 				// damage keeps growing, the gap doesn't) — its relative tankiness
 				// would decay toward parity with a plain Bouncer over a long
 				// endless-mode run instead of staying a real step up.
-				healthPerLevel: 1.8,
+				healthPerLevel: 2.25,
 
 				fragmentCount: 3,
 				fragmentRadius: 12, // vp — smaller than the base Bouncer (20)
-				fragmentHealth: 1,
+				// fragmentHealth (level 1) + fragmentHealthPerLevel×(level-1) =
+				// exactly 2× the current wave/survival level at every level —
+				// e.g. 18 HP at level 9, 32 HP at level 16. Previously a flat 1,
+				// which was a dead knob in practice: by the earliest level a
+				// Splitter can appear (survival 9 / mission 16), player damage
+				// per hit is already >=3, so a flat-1 fragment always died in
+				// exactly one hit regardless of how much later it was actually
+				// killed — it could never read as a real (if small) threat late
+				// into a run. Scaling with level keeps it a minor-but-real mop-up
+				// fight instead of a freebie. WaveManager passes the level-scaled
+				// bonus into BouncerEnemy.spawnFragments(); see fragmentHealthPerLevel below.
+				fragmentHealth: 2,
+				fragmentHealthPerLevel: 2,
 				fragmentSpeedMax: 200, // vp/sec — horizontal fan-out speed (vy is solved per-fragment, see spawnFragments)
 
-				// EffortScore 13.00 (hitsToKill 10 from 14 HP @ healthPerLevel 1.8,
-				// erratic-bounce ×1.3) — the single highest-value type in the
-				// roster. Fragment reward below is its own separate, smaller
-				// EffortScore (1.30) — no extra "split bonus" stacked onto
-				// Splitter's own value, since the 3 spawned fragments already each
-				// earn their own reward when they're individually killed. See the
-				// methodology comment above `hitFlashDuration`.
-				points: 430,
-				gold: 22,
-				fragmentPoints: 40,
-				fragmentGold: 2,
+				// EffortScore 15.60 (hitsToKill 12 from 20 HP @ healthPerLevel
+				// 2.25, erratic-bounce ×1.3) — the single highest-value type in
+				// the roster. Fragment reward below is its own separate, smaller
+				// EffortScore, now recalculated off the level-scaled fragment
+				// health above: EffortScore 9.10 (hitsToKill 7 from 32 HP @
+				// Splitter's own mission debut level 16, erratic-bounce ×1.3) —
+				// no extra "split bonus" stacked onto Splitter's own value, since
+				// the 3 spawned fragments already each earn their own reward when
+				// they're individually killed. See the methodology comment above
+				// `hitFlashDuration`.
+				points: 520,
+				gold: 26,
+				fragmentPoints: 300,
+				fragmentGold: 15,
 			}),
 
 			shielded: Object.freeze({
 				shieldRadius: 32, // vp — outer ring radius (core uses the base `radius` above)
-				shieldHits: 2, // bullet hits absorbed before the core starts taking damage
+				shieldHits: 4, // bullet hits absorbed before the core starts taking damage
 				shieldColor: "#6FE0FF", // ice-blue — visually distinct from the amber core
 				shieldGlowBlur: 5,
 				shieldHitGlowBlur: 12,
 				// Own healthPerLevel for the core, same 1.5x rationale as Splitter
-				// above — the shield's +2 flat hits don't decay on their own, but
-				// the core underneath was scaling at the same rate as a plain
-				// Bouncer's core.
-				healthPerLevel: 1.8,
+				// above — the shield's flat absorbed-hit count doesn't decay on
+				// its own, but the core underneath was scaling at the same rate
+				// as a plain Bouncer's core.
+				healthPerLevel: 2.25,
 
-				// EffortScore 11.70 (hitsToKill 9 total — 2 shield-absorbed hits +
-				// 7 core hits @ healthPerLevel 1.8 — × erratic-bounce ×1.3). See
-				// the methodology comment above `hitFlashDuration`.
-				points: 390,
-				gold: 20,
+				// EffortScore 16.90 (hitsToKill 13 total — 4 shield-absorbed hits
+				// + 9 core hits @ healthPerLevel 2.25 — × erratic-bounce ×1.3).
+				// See the methodology comment above `hitFlashDuration`.
+				points: 560,
+				gold: 28,
 			}),
 		}),
 	}),

@@ -906,7 +906,8 @@ export class WaveManager {
         this._bouncerParticles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.bouncer.audio.volume);
         if (enemy._variant === 2) {
-          for (const fragment of enemy.spawnFragments()) this._enemies.push(fragment);
+          const fragmentHealthBonus = this._healthBonus({ healthPerLevel: Config.enemy.bouncer.splitter.fragmentHealthPerLevel });
+          for (const fragment of enemy.spawnFragments(fragmentHealthBonus)) this._enemies.push(fragment);
         }
       } else if (enemy.type === 'boss') {
         this._bossParticles.emit(enemy.x, enemy.y);
