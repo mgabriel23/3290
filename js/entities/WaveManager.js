@@ -394,11 +394,13 @@ export class WaveManager {
   /** Pre-binds every fire callback (zero closures per frame) and bundles the boss-facing subset into `_bossContext`. Reads the projectile pools and barrier callbacks, so must run after both are built. */
   _buildFireCallbacks() {
     this._fireBullet = (ox, oy, tx, ty) => this._enemyBullets.fire(ox, oy, tx, ty);
-    // `sizeMult` is only ever passed by BossEnemy.js's rocketeer phase (see
-    // Config.boss.scout1.rocketeerPhase.rocketSizeMult) — a regular
-    // Rocketeer's onFire call omits it, so `Rockets.fire`'s own default (1)
-    // applies and its rocket's rendered size is unaffected.
-    this._fireRocket = (ox, oy, tx, ty, sizeMult) => this._rockets.fire(ox, oy, tx, ty, sizeMult);
+    // `sizeMult`/`swingAngle`/`homingDelay` are only ever passed by
+    // BossEnemy.js's occasional rocket pod (see Config.boss.scout1.
+    // rocketPod) — a regular Rocketeer's onFire call omits them, so
+    // `Rockets.fire`'s own defaults (1/0/0) apply and its rocket is
+    // unaffected.
+    this._fireRocket = (ox, oy, tx, ty, sizeMult, swingAngle, homingDelay) =>
+      this._rockets.fire(ox, oy, tx, ty, sizeMult, swingAngle, homingDelay);
     // `speedMult` is only ever passed by BossEnemy.js's sniper phase (see
     // Config.boss.scout1.sniperPhase.bulletSpeedMult) — a regular
     // SniperEnemy's onFire call omits it, so `SniperBullets.fire`'s own

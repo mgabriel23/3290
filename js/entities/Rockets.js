@@ -1,6 +1,7 @@
 /**
  * Rockets.js
- * Homing rocket pool — fired by Rocketeer enemies.
+ * Homing rocket pool — fired by Rocketeer enemies, and (occasionally) by
+ * BossEnemy.js's "Scout Prime" rocket pod (see that file's doc).
  *
  * Each rocket launches toward the player's position at fire time, then
  * continuously steers to track wherever the player moves. Detonation
@@ -25,13 +26,24 @@
  *
  * `fire`'s optional `sizeMult` scales only the rendered body silhouette
  * (proximity/damage/trail are untouched) — this is what lets BossEnemy.js's
- * rocketeer phase (Config.boss.scout1.rocketeerPhase.rocketSizeMult) fire a
+ * occasional rocket pod (Config.boss.scout1.rocketPod.rocketSizeMult) fire a
  * visually smaller rocket through this exact same shared pool, without
  * touching Config.rocket itself and shrinking every regular Rocketeer's
  * rocket too. Same pattern as SniperBullets.js's `speedMult`.
+ *
+ * `fire`'s optional `swingAngle`/`homingDelay` are deliberately modeled on
+ * PlayerMissiles.js's own launch behavior: rather than homing from frame
+ * one, the rocket's initial heading is rotated `swingAngle` radians off the
+ * target (see core/vectorMath.js's rotateAround) and holds that heading dead
+ * straight for `homingDelay` seconds (see the per-rocket `_homingDelay`
+ * countdown in `update`) before the existing cross-product homing engages —
+ * reads as "swing out, then hook in" rather than beelining immediately. Both
+ * default to 0 (no swing, no delay — homing engages on frame one), so a
+ * regular Rocketeer's own `fire` call is completely unaffected; only
+ * BossEnemy.js's rocket pod passes non-zero values (see its own doc).
  */
 import { Config } from '../core/Config.js';
-import { directionalVelocity } from '../core/vectorMath.js';
+import { directionalVelocity, rotateAround } from '../core/vectorMath.js';
 
 const MAX          = Config.rocket.poolSize;
 const TRAIL_HIST   = Config.rocket.trailHistory; // stored history positions per rocket
@@ -71,6 +83,7 @@ export class Rockets {
     this._vy   = new Float32Array(MAX);
     this._age  = new Float32Array(MAX);
     this._sizeMult = new Float32Array(MAX); // per-rocket body-render scale — see fire()'s doc
+    this._homingDelay = new Float32Array(MAX); // seconds remaining before homing engages — see fire()'s doc
     this._count = 0;
 
     // Position history ring buffers — flat layout: rocket i uses [i*TRAIL_HIST .. (i+1)*TRAIL_HIST)
@@ -105,11 +118,14 @@ export class Rockets {
    * @param {number} ox @param {number} oy  origin (rocketeer centre)
    * @param {number} tx @param {number} ty  initial target (player centre at fire time)
    * @param {number} [sizeMult]  scales this rocket's rendered body silhouette — see class doc
+   * @param {number} [swingAngle]  radians to rotate the initial launch heading off `(tx,ty)` — see class doc
+   * @param {number} [homingDelay]  seconds the rocket flies that swung heading dead straight before homing engages — see class doc
    */
-  fire(ox, oy, tx, ty, sizeMult = 1) {
+  fire(ox, oy, tx, ty, sizeMult = 1, swingAngle = 0, homingDelay = 0) {
     if (this._count >= MAX) return;
     const { speed } = Config.rocket;
-    const [vx, vy] = directionalVelocity(ox, oy, tx, ty, speed);
+    const [aimX, aimY] = swingAngle === 0 ? [tx, ty] : rotateAround(ox, oy, tx, ty, swingAngle);
+    const [vx, vy] = directionalVelocity(ox, oy, aimX, aimY, speed);
     const i = this._count++;
 
     this._x[i]    = ox;
@@ -118,6 +134,7 @@ export class Rockets {
     this._vy[i]   = vy;
     this._age[i]  = 0;
     this._sizeMult[i] = sizeMult;
+    this._homingDelay[i] = homingDelay;
     this._hHead[i] = 0;
     this._hTick[i] = 0;
 
@@ -144,30 +161,38 @@ export class Rockets {
       this._hTick[i] += dt;
 
       // ── Homing: vector cross-product steering — no atan2/cos/sin ──────────
-      // vx/vy always has magnitude ≈ speed (enforced by the renorm below),
-      // so dividing by speed gives the unit current direction directly.
-      const ux   = this._vx[i] / speed;
-      const uy   = this._vy[i] / speed;
+      // Held off for the first `_homingDelay` seconds of flight (see fire())
+      // so a swung-off launch heading actually flies straight for a beat
+      // instead of starting to correct the instant it leaves the barrel —
+      // same PlayerMissiles.js behavior this was built to match. vx/vy
+      // always has magnitude ≈ speed (enforced by the renorm below), so
+      // dividing by speed gives the unit current direction directly.
+      if (this._homingDelay[i] > 0) {
+        this._homingDelay[i] -= dt;
+      } else {
+        const ux   = this._vx[i] / speed;
+        const uy   = this._vy[i] / speed;
 
-      const ddx  = playerX - this._x[i];
-      const ddy  = playerY - this._y[i];
-      const dlen = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
-      const tx   = ddx / dlen;   // unit target direction
-      const ty   = ddy / dlen;
+        const ddx  = playerX - this._x[i];
+        const ddy  = playerY - this._y[i];
+        const dlen = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+        const tx   = ddx / dlen;   // unit target direction
+        const ty   = ddy / dlen;
 
-      // Cross product = sin(angle from current to target) — sign tells which way to turn.
-      // For |turn| ≤ 0.037 rad (turnRate=2.2 at 60fps), sin ≈ angle to < 0.1% error.
-      const cross = ux * ty - uy * tx;
-      const maxT  = turnRate * dt;
-      const turn  = cross >= 0 ? Math.min(cross, maxT) : Math.max(cross, -maxT);
+        // Cross product = sin(angle from current to target) — sign tells which way to turn.
+        // For |turn| ≤ 0.037 rad (turnRate=2.2 at 60fps), sin ≈ angle to < 0.1% error.
+        const cross = ux * ty - uy * tx;
+        const maxT  = turnRate * dt;
+        const turn  = cross >= 0 ? Math.min(cross, maxT) : Math.max(cross, -maxT);
 
-      // Rotate by `turn` radians — small-angle linear approximation (exact for |turn|≤0.04)
-      const nux  = ux - turn * uy;
-      const nuy  = uy + turn * ux;
-      // Renormalize to prevent float-point drift accumulating over seconds
-      const nlen = Math.sqrt(nux * nux + nuy * nuy) || 1;
-      this._vx[i] = (nux / nlen) * speed;
-      this._vy[i] = (nuy / nlen) * speed;
+        // Rotate by `turn` radians — small-angle linear approximation (exact for |turn|≤0.04)
+        const nux  = ux - turn * uy;
+        const nuy  = uy + turn * ux;
+        // Renormalize to prevent float-point drift accumulating over seconds
+        const nlen = Math.sqrt(nux * nux + nuy * nuy) || 1;
+        this._vx[i] = (nux / nlen) * speed;
+        this._vy[i] = (nuy / nlen) * speed;
+      }
 
       // ── Move ────────────────────────────────────────────────────────────────
       this._x[i] += this._vx[i] * dt;
@@ -198,6 +223,7 @@ export class Rockets {
         this._x[w]    = this._x[i];    this._y[w]    = this._y[i];
         this._vx[w]   = this._vx[i];   this._vy[w]   = this._vy[i];
         this._age[w]  = this._age[i];  this._sizeMult[w] = this._sizeMult[i];
+        this._homingDelay[w] = this._homingDelay[i];
         this._hHead[w] = this._hHead[i];
         this._hTick[w] = this._hTick[i];
         this._hx.copyWithin(w * TRAIL_HIST, i * TRAIL_HIST, (i + 1) * TRAIL_HIST);

@@ -22,9 +22,9 @@ export function directionalVelocity(ox, oy, tx, ty, speed) {
 
 /**
  * Rotate point (tx, ty) by `angle` radians around pivot (ox, oy) — used to
- * fan a simultaneous salvo of projectiles out from a single aimed point
- * (see BossEnemy.js's missile-swarm phase) without hand-deriving the
- * rotation matrix at each call site.
+ * swing a homing projectile's initial launch heading off its aimed target
+ * (see PlayerMissiles.js's `_fire` and Rockets.js's own `fire`) without
+ * hand-deriving the rotation matrix at each call site.
  * @returns {[number, number]}
  */
 export function rotateAround(ox, oy, tx, ty, angle) {

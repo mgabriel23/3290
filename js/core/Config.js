@@ -4211,13 +4211,16 @@ export const Config = Object.freeze({
 	 *
 	 * `scout1` is the first boss ("Scout Prime") — a giant reskin of the
 	 * Scout hull (BossEnemy.js reuses SCOUT_HULL_PTS's exact authored
-	 * proportions, just at a much bigger `size`) whose attack cycles through
-	 * the three "ship-family" enemies it's built from: an aimed Scout-style
-	 * burst (`scoutPhase`), a Rocketeer-style homing-missile salvo
-	 * (`rocketeerPhase`), then a Sniper-style charge/lock/fire
-	 * (`sniperPhase`) — looping back to the first once all three have run.
-	 * Later boss encounters (level 56, 105, ... — this boss is roster[0], so
-	 * it recurs every 7th boss encounter once the roster cycles) reuse this
+	 * proportions, just at a much bigger `size`) whose attack cycles between
+	 * the two "ship-family" enemies it's built from: an aimed Scout-style
+	 * burst (`scoutPhase`) fired from a pair of dedicated shoulder-cannon
+	 * hull points, then a Sniper-style charge/lock/fire (`sniperPhase`) —
+	 * looping back to the first once both have run. A Rocketeer-style rocket
+	 * launches occasionally on its own timer (`rocketPod`) from a separate
+	 * pair of wing-pod hull points, layered on top of the scout phase rather
+	 * than a dedicated phase of its own. Later boss encounters (level 56,
+	 * 105, ... — this boss is roster[0], so it recurs every 7th boss
+	 * encounter once the roster cycles) reuse this
 	 * same boss for now, scaled up via `healthPerLevel` like every regular
 	 * enemy — future reiterations (a giant Rocketeer or Sniper build) are a
 	 * later addition.
@@ -4239,7 +4242,7 @@ export const Config = Object.freeze({
 		scout1: Object.freeze({
 			name: "SCOUT PRIME", // boss health-bar label
 
-			size: 58, // vp — same authored hull proportions as Scout (Enemy.js's SCOUT_HULL_PTS), just ~2.6x Scout's 22 (trimmed down from an initial 70 — read as too large)
+			size: 44, // vp — same authored hull proportions as Scout (Enemy.js's SCOUT_HULL_PTS), just 2x Scout's 22 (trimmed down again from 58 — still read as too large at that scale)
 			health: 450,
 			healthPerLevel: 60, // later boss encounters (level 35, 63, ...) scale up like every regular enemy's healthPerLevel
 			color: "#ff3b3b", // same danger-red as Config.player.lowHealth/Config.gameOver — a boss reads as the threat, not another squad member
@@ -4251,28 +4254,41 @@ export const Config = Object.freeze({
 			flameColor: "#ff3b3b",
 			flameHalfWidth: 9,
 
-			entrySpeed: 150, // vp/sec — slower than a regular Scout's 320, sells the weight of something this big
-			// Pushed down from an initial 190 — combined with `orbitAmplitudeY`
-			// below, the hull's own nose tip could swing up into the boss
-			// health bar (Config.boss.healthBar) at the top of its orbit; 245
-			// keeps the highest point of the loop clear of it with margin.
-			restY: 245, // vp — fixed rest height (not randomized, unlike regular enemies)
-			hitRadius: 46, // vp — big collision circle matching the huge hull, scaled down alongside `size`
-			// Idle flight path while fighting (phases 0/1 — frozen during phase
-			// 2, see BossEnemy.update): a figure-8/infinity loop laid on its
-			// side ("landscape" — wide left-right, shallow up-down), traced by
-			// the lemniscate-of-Gerono parametric form x=cos(t), y=sin(t)cos(t)
-			// — see BossEnemy._updateOrbit. `orbitAmplitudeX` is deliberately
-			// well above `orbitAmplitudeY` so the loop reads as flat/wide
-			// rather than a tall vertical 8.
-			orbitAmplitudeX: 140, // vp — horizontal reach
-			orbitAmplitudeY: 30, // vp — vertical reach — trimmed from 45 alongside the `restY` bump above, same reason
-			orbitSpeed: 0.4, // rad/sec — how fast it traces the full loop
+			entrySpeed: 120, // vp/sec — slowed again from 150, itself already well under a regular Scout's 320 — sells the weight of something this big
+			// Pushed down from an initial 190 — the hull's own nose tip
+			// otherwise swings up into the boss health bar
+			// (Config.boss.healthBar) at the top of `repositionYMin` below;
+			// 245 keeps clear of it with margin.
+			restY: 245, // vp — initial rest height (only moves via the occasional reposition below, same as a regular Scout — not randomized at spawn like a regular enemy)
+			hitRadius: 35, // vp — big collision circle matching the huge hull, scaled down alongside `size`
 
-			// Phases 1 & 3 of the cycle (see class doc) — Scout-style aimed
+			// Movement while fighting: holds perfectly still at its rest
+			// point — same as a regular parked Scout — rather than any
+			// continuous idle drift. The only motion is an occasional
+			// reposition: once a full scout+sniper attack cycle finishes (see
+			// BossEnemy._maybeBeginReposition, called from the sniper phase's
+			// last shot), a `repositionChance` roll may send it gliding
+			// (`repositionDuration`, eased with core/animation.js's
+			// easeOutCubic — the same curve Enemy.js's own mid-fight
+			// repositioning and SpiralBoss's between-volley relocation both
+			// use) to a fresh random spot instead of resuming its gunnery
+			// from the same place. `repositionChance` is deliberately lower
+			// than a regular Scout's own 0.5 — combined with this roll only
+			// happening once per full ~12s attack cycle instead of every
+			// ~3.4s burst/reload, repositioning reads as a rare, deliberate
+			// relocation rather than constant fidgeting.
+			repositionChance: 0.35,
+			repositionDuration: 1.1, // seconds to ease to the new rest point — a touch slower than Scout's own 0.9, sells the weight of something this big
+			repositionMarginX: 70, // vp from each screen edge — keeps the hull's own half-width clear of the edge
+			repositionYMin: 200, // vp — keeps the hull's topmost point clear of the boss health bar, same margin `restY` was originally tuned for
+			repositionYMax: 320, // vp — stays clearly in the upper play area
+
+			// Phase 1 of 2 in the cycle (see class doc) — Scout-style aimed
 			// burst fire, mirroring Enemy.js's own aim→burst cycle at boss
 			// scale: more rounds per burst, repeated `volleys` times before
-			// the cycle moves on to the next phase.
+			// the cycle moves on to the next phase. Each shot alternates
+			// between the hull's two shoulder-cannon points (see BossEnemy.js's
+			// GUN_L/GUN_R anchors) instead of firing from dead-center.
 			scoutPhase: Object.freeze({
 				aimPause: 0.3,
 				burstCount: 10,
@@ -4282,47 +4298,51 @@ export const Config = Object.freeze({
 				cooldown: 1, // between volleys
 			}),
 
-			// Phase 2 — Rocketeer-style missile swarm: `missileCount` homing
-			// rockets launched one after another, `missileInterval` seconds
-			// apart (NOT simultaneously — a readable stagger, not one instant
-			// wall of missiles), fanned across `spreadAngle` radians so they
-			// don't all launch on an identical initial heading (they still
-			// home in and converge on the player after launch, same as a
-			// regular Rocketeer's single rocket).
-			rocketeerPhase: Object.freeze({
-				aimPause: 0.8,
-				missileCount: 5,
-				missileInterval: 0.3, // seconds between each rocket's launch within a salvo — a bit more breathing room now that there are 5 of them
-				spreadAngle: 0.6, // radians, total fan width across the salvo
-				salvos: 2,
-				cooldown: 1.4, // between salvos
+			// Occasional rocket, layered on top of the scout phase rather than
+			// a dedicated phase of its own (see class doc) — fires one homing
+			// rocket every `minInterval`-`maxInterval` seconds (randomized)
+			// while the boss is in its scout phase, alternating between the
+			// hull's two outer wing-pod points (see BossEnemy.js's POD_L/POD_R
+			// anchors). `swingAngleMin/Max`/`homingDelay` are passed straight
+			// through to the shared Rockets pool's optional launch-swing
+			// params (see Rockets.fire's doc) using the EXACT same values
+			// Config.player.missiles uses, so this rocket launches swung off
+			// its aim point and flies that heading for a beat before curving
+			// in — the same "swing out, then hook in" read as the player's
+			// own missile — rather than snapping onto a beeline the instant
+			// it fires, unlike a regular Rocketeer's rocket.
+			rocketPod: Object.freeze({
+				minInterval: 4.5,
+				maxInterval: 7.5,
+				swingAngleMin: 1.05,
+				swingAngleMax: 1.75,
+				homingDelay: 0.15,
 				// Scales down the shared Rockets pool's rendered body silhouette
-				// ONLY for rockets launched from this phase (see Rockets.fire's
+				// ONLY for rockets launched from this pod (see Rockets.fire's
 				// optional `sizeMult` param) — a regular Rocketeer's own rocket
 				// is unaffected, since Config.rocket itself isn't touched.
 				// Cosmetic only — detonation proximity/damage stay the same.
 				rocketSizeMult: 0.75,
 			}),
 
-			// Phase 3 — Sniper-style charge/lock/fire, repeated `shots` times
-			// before looping back to phase 1. Same telegraph LANGUAGE as
+			// Phase 2 of 2 — Sniper-style charge/lock/fire, repeated `shots`
+			// times before looping back to phase 1. Same telegraph LANGUAGE as
 			// SniperEnemy (a nose orb that fills, then a locked "!" marker) —
-			// see BossEnemy.js's renderCore/renderExtras — just its own
-			// tuning, scaled for the giant hull, rather than reused directly
-			// off Config.enemy.sniper. The boss also holds perfectly still for
-			// this entire phase (see BossEnemy.update's sway-freeze) — a
-			// stationary aim to match the faster strike pace below.
+			// see BossEnemy.js's renderCore/renderExtras — AND now the same
+			// angle-lock/reangle timing: `chargeWarmup`/`recoverDuration`
+			// match Config.enemy.sniper's own values exactly (same fire-rate
+			// interval as a regular SniperEnemy, just at boss scale), and the
+			// nose freezes on firing for the shared `Config.enemy.sniper.
+			// bullet.accelDelay` window (see BossEnemy.update's angle-tracking
+			// block) rather than snapping free the instant the shot leaves the
+			// barrel. The boss also holds perfectly still for this entire
+			// phase (see BossEnemy.update's sway-freeze) — a stationary aim to
+			// match the fast strike pace below.
 			sniperPhase: Object.freeze({
-				// Lengthened back up from an initial 1.0, then a too-fast 0.8 —
-				// a big ship snapping onto the player's position that quickly
-				// read as wrong for its scale; this is the "wind-up" before it
-				// locks on, not the gap between shots (see `recoverDuration`
-				// below, which stays fast — the strikes themselves are still
-				// quick once the fight is underway, only the LOCK itself is
-				// slower and more deliberate).
-				chargeWarmup: 1.4,
-				warningDuration: 0.7, // unchanged — this is the fairness/reaction window, not part of the "interval"
-				recoverDuration: 0.25, // shortened from 0.5 — faster back-to-back strikes
+				chargeWarmup: 0.85, // matches Config.enemy.sniper.chargeWarmup — same fire-rate interval as a regular Sniper
+				warningDuration: 0.7, // matches Config.enemy.sniper.warningDuration — the fairness/reaction window
+				recoverDuration: 0.45, // matches Config.enemy.sniper.recoverDuration
+				recoverTurnRate: 4, // rad/sec — matches Config.enemy.sniper.recoverTurnRate; how fast the nose eases back toward the player once the angle freeze expires
 				shots: 3,
 
 				// Multiplies the shared SniperBullets pool's `maxSpeed` ONLY for
@@ -4332,7 +4352,8 @@ export const Config = Object.freeze({
 				// touched. The initial crawl (`startSpeed`) stays identical; only
 				// the boosted top speed the bullet ramps up to is faster, so the
 				// boss's version reads as "the same telegraph, a harder kick."
-				bulletSpeedMult: 1.6,
+				// Bumped from 1.6 for an even harder kick.
+				bulletSpeedMult: 2.2,
 
 				orbStartRadius: 5,
 				orbGrowth: 14,
