@@ -13,7 +13,15 @@
  *
  * Movement reuses DrifterEnemy.js's own exported Sweeper path/sampler
  * (createSweeperPath/sampleSweeperPath) wholesale — this boss doesn't
- * invent new movement, it's explicitly "an upgraded Sweeper."
+ * invent new movement, it's explicitly "an upgraded Sweeper." One
+ * difference: a regular Sweeper formation is fine to eventually sink off
+ * the bottom of the screen and despawn (a throwaway wave), but this boss
+ * must stay on screen and killable for the whole fight — so both the head
+ * (below) and every segment (SnakeSegment.js) sample position through
+ * DrifterEnemy.sampleBoundedSweeperPath instead of the plain sampler, which
+ * freezes the row once the chain's leading edge reaches `Config.boss.snake.
+ * patrolDepthY` and folds any further travel into patrolling that same row
+ * left-right forever (see CAP_DIST below and that function's own doc).
  *
  * The chain and its gap-closing: `_chain` is an array of every live
  * segment, THIS HEAD INCLUDED — the head is not a special fixed anchor,
@@ -44,7 +52,7 @@
  *
  * Growth: starts at `initialSegments` (matching a regular Sweeper's own
  * formation size) and, every `growthInterval` seconds while under
- * `maxSegments` (175), appends `growthBatchSize` fresh tail segments at
+ * `maxSegments`, appends `growthBatchSize` fresh tail segments at
  * the next unused lane (`_nextLane`, which only ever increases — it does
  * NOT reuse lanes vacated by the backward-shift mechanic above) — queued
  * in `_pendingSummons` and drained by WaveManager via the exact same
@@ -60,9 +68,18 @@
  * from a regular Drifter's full tentacle-lash).
  */
 import { Config } from '../core/Config.js';
-import { createSweeperPath, sampleSweeperPath, BODY_PTS } from './DrifterEnemy.js';
+import { createSweeperPath, sampleSweeperPath, sampleBoundedSweeperPath, BODY_PTS } from './DrifterEnemy.js';
 import { SnakeSegment } from './SnakeSegment.js';
 import { applyHit, tickDeathState } from './EnemyCombat.js';
+
+// Path-distance depth at which the shared Sweeper path's descent freezes
+// into a patrol — see Config.boss.snake.patrolDepthY and
+// DrifterEnemy.sampleBoundedSweeperPath's own doc. Computed once from Config
+// (fixed for every Snake fight): chosen so it always lands exactly on a
+// row's start (patrolDepthY - startY is an exact multiple of `step`).
+const _sweeperCfg = Config.enemy.drifter.sweeper;
+const _cycleLen = (Config.virtual.width - 2 * _sweeperCfg.margin) + _sweeperCfg.step;
+const CAP_DIST = Math.round((Config.boss.snake.patrolDepthY - _sweeperCfg.startY) / _sweeperCfg.step) * _cycleLen;
 
 export class SnakeBoss {
   /**
@@ -108,7 +125,7 @@ export class SnakeBoss {
     this._chain = [this];
     this._pendingSummons = [];
     for (let lane = 1; lane < cfg.initialSegments; lane++) {
-      const seg = new SnakeSegment(this, this._path, lane, this._u - lane * cfg.spacing, this._segmentHealthBonus);
+      const seg = new SnakeSegment(this, this._path, lane, this._u - lane * cfg.spacing, this._segmentHealthBonus, CAP_DIST);
       this._chain.push(seg);
       this._pendingSummons.push(seg);
     }
@@ -183,7 +200,7 @@ export class SnakeBoss {
     // no lag).
     this._u += cfg.speed * dt;
     const posU = this._u - this._lane * cfg.spacing;
-    const { x, y, heading } = sampleSweeperPath(this._path, posU);
+    const { x, y, heading } = sampleBoundedSweeperPath(this._path, posU, CAP_DIST);
     this.x = x;
     this.y = y;
     this._angle = heading;
@@ -212,7 +229,7 @@ export class SnakeBoss {
         const n = Math.min(cfg.growthBatchSize, cfg.maxSegments - this._chain.length);
         for (let i = 0; i < n; i++) {
           const lane = this._nextLane++;
-          const seg = new SnakeSegment(this, this._path, lane, this._u - lane * cfg.spacing, this._segmentHealthBonus);
+          const seg = new SnakeSegment(this, this._path, lane, this._u - lane * cfg.spacing, this._segmentHealthBonus, CAP_DIST);
           this._chain.push(seg);
           this._pendingSummons.push(seg);
         }
@@ -260,7 +277,7 @@ export class SnakeBoss {
    * (this head included) into pre-allocated hull pools and draws them in
    * one or two `fillStrokePaths` calls, the same shadow-blur-flattening
    * trick WaveManager's own Scout/Rocketeer/Sniper/Drifter batching already
-   * uses — essential at up to 175 instances. A small pulsing ring marks
+   * uses — essential at up to `maxSegments` instances. A small pulsing ring marks
    * each attacker segment afterward (cheap at ~1-in-10 density) so the
    * player can tell which pieces of the chain actually shoot.
    */

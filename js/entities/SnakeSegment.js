@@ -36,19 +36,19 @@
  * the player (no tentacle wind-up, unlike a regular Drifter's lash)
  * through the same shared DrifterProjectiles pool every Drifter-family
  * enemy already uses. Deliberately simplified from DrifterEnemy's own
- * tentacle animation/lash-wind-up: at up to ~17 simultaneous attackers,
- * the full per-clone tentacle machinery would be both a visual and a
- * performance step too far for something this numerous.
+ * tentacle animation/lash-wind-up: at up to `maxSegments / attackInterval`
+ * simultaneous attackers, the full per-clone tentacle machinery would be
+ * both a visual and a performance step too far for something this numerous.
  *
  * Rendering: a segment does NOT render itself — SnakeBoss batches every
  * live, visible segment's body hull into its own pre-allocated pools and
  * draws them in one or two `fillStrokePaths` calls per frame (see
  * SnakeBoss.render), the same shadow-blur-flattening trick WaveManager
- * already uses for Scout/Rocketeer/Sniper/Drifter — at up to 175
+ * already uses for Scout/Rocketeer/Sniper/Drifter — at up to `maxSegments`
  * instances, an individual glow pass per segment would be far too expensive.
  */
 import { Config } from '../core/Config.js';
-import { sampleSweeperPath } from './DrifterEnemy.js';
+import { sampleBoundedSweeperPath } from './DrifterEnemy.js';
 import { applyHit, tickDeathState } from './EnemyCombat.js';
 
 export class SnakeSegment {
@@ -58,20 +58,22 @@ export class SnakeSegment {
    * @param {number} initialLane  this segment's distance-from-head (in `spacing` units) the moment it was created — seeds `_lane` AND fixes `_isAttacker` forever, even as `_lane` itself later changes (see class doc)
    * @param {number} u  initial path-distance — always `headU - initialLane * spacing` at the moment of creation, for both the initial formation and later mid-fight growth
    * @param {number} healthBonus  added to Config.boss.snake.segment.health — WaveManager/SnakeBoss scale this by level, same convention as every regular enemy
+   * @param {number} capDist  SnakeBoss's own CAP_DIST — see DrifterEnemy.sampleBoundedSweeperPath and SnakeBoss.js's class doc; threaded through the constructor (rather than imported back from SnakeBoss.js) to avoid a circular module import
    */
-  constructor(head, path, initialLane, u, healthBonus) {
+  constructor(head, path, initialLane, u, healthBonus, capDist) {
     const cfg = Config.boss.snake;
     this._cfg  = cfg;
     this._type = 'snakeSegment';
     this._head = head;
     this._path = path;
+    this._capDist = capDist;
 
     this._u = u;
     this._targetU = u;
     this._lane = initialLane; // mutated by SnakeBoss.update when a segment ahead of this one dies — see class doc
     this._isAttacker = initialLane % cfg.attackInterval === 0;
 
-    const start = sampleSweeperPath(path, u);
+    const start = sampleBoundedSweeperPath(path, u, capDist);
     this.x = start.x;
     this.y = start.y;
     this._angle = start.heading;
@@ -115,7 +117,7 @@ export class SnakeSegment {
       this._u += cfg.speed * dt; // orphaned — keep slithering under its own steam
     }
 
-    const { x, y, heading } = sampleSweeperPath(this._path, this._u);
+    const { x, y, heading } = sampleBoundedSweeperPath(this._path, this._u, this._capDist);
     this.x = x;
     this.y = y;
     this._angle = heading;

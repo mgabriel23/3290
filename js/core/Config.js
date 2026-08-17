@@ -4469,7 +4469,7 @@ export const Config = Object.freeze({
 		 * fires its own projectile at the player — the rest are pure physical
 		 * hazards. Starts at `initialSegments` and grows by
 		 * `growthBatchSize` every `growthInterval` seconds, up to
-		 * `maxSegments` (175) — see SnakeBoss.update's growth tick, drained
+		 * `maxSegments` — see SnakeBoss.update's growth tick, drained
 		 * into WaveManager's enemy list the same generic `drainSummons` way
 		 * Bouncer Primal's on-hit summons already are, just triggered by time
 		 * instead of a hit.
@@ -4484,17 +4484,27 @@ export const Config = Object.freeze({
 			hitRadius: 18, // vp — same as a regular Sweeper's own (Config.enemy.drifter.hitRadius)
 
 			// Shared-path chain formation — see class doc.
-			spacing: 34, // vp along the path between segments — tighter than a regular Sweeper's 50, so a 200-long chain doesn't stretch absurdly far past both screen edges
+			spacing: 34, // vp along the path between segments — tighter than a regular Sweeper's 50, so a fully-grown chain doesn't stretch absurdly far past both screen edges
 			speed: 190, // vp/sec along the path — a touch slower than a regular Sweeper's 220, reads as heavier
 			// Gap-closing "catch-up" rate (vp/sec) — see SnakeSegment.update.
 			// Faster than `speed` so a segment visibly hurries to close a gap
 			// left by a dead neighbor rather than trailing it forever.
 			catchUpSpeed: 260,
 
+			// vp — once the shared Sweeper path's leading edge would sink past
+			// this depth, sampleBoundedSweeperPath (DrifterEnemy.js) freezes the
+			// row and folds any further travel into a left-right patrol of that
+			// same row instead of continuing to step downward forever — keeps
+			// the head (and by extension every segment chasing it) on screen
+			// and killable for the rest of the fight instead of eventually
+			// sinking below the bottom edge for good, invisible and unkillable.
+			// Well clear of the barrier (baseY 940, dome peak ~870).
+			patrolDepthY: 700,
+
 			initialSegments: 15, // chain length (INCLUDING the head) at spawn — matches a regular Sweeper's own formationSize, so the fight visibly starts like "just a big Sweeper" before growing into something far larger
-			maxSegments: 175, // hard cap — trimmed down from an initial 200
+			maxSegments: 90, // hard cap — trimmed down from 175 (itself trimmed from an initial 200) to keep the fight lighter
 			growthInterval: 1.2, // seconds between growth ticks while under the cap
-			growthBatchSize: 4, // new tail segments added per growth tick (~55s to grow from 15 to 200)
+			growthBatchSize: 2, // new tail segments added per growth tick (~45s to grow from 15 to 90)
 
 			// Every segment at a chain-index divisible by this fires its own
 			// projectile at the player (reusing the shared DrifterProjectiles

@@ -143,6 +143,38 @@ export function sampleSweeperPath(p, dist) {
 }
 
 /**
+ * Same sweeper path, but with a floor: once `dist` would carry the point
+ * past `capDist`, the row it lands on freezes and the excess distance folds
+ * into a back-and-forth patrol of that same row (a triangle wave) instead of
+ * continuing to step downward forever. `capDist` is always chosen to land
+ * exactly on a row's start (see callers), so this is continuous with the
+ * plain sampler at the handoff — no snap.
+ *
+ * Used by Boss #4 "Snake" (SnakeBoss.js/SnakeSegment.js): a regular Sweeper
+ * formation is fine to eventually sink off the bottom and despawn (it's a
+ * throwaway wave), but the Snake boss's head must stay on screen and
+ * killable for the whole fight rather than eventually sinking below the
+ * bottom edge for good, invisible and unkillable.
+ */
+export function sampleBoundedSweeperPath(path, dist, capDist) {
+  if (dist <= capDist) return sampleSweeperPath(path, dist);
+  const cfg   = Config.enemy.drifter.sweeper;
+  const { width: vW } = Config.virtual;
+  const range = vW - 2 * cfg.margin;
+
+  const cap    = sampleSweeperPath(path, capDist); // {x, y, heading} of the row's start — heading is always a horizontal-leg value here since capDist lands exactly on one
+  const capDir = cap.heading === Math.PI / 2 ? 1 : -1;
+
+  const period  = range * 2;
+  const phase   = (dist - capDist) % period;
+  const onReturn = phase > range;
+  const offset  = onReturn ? period - phase : phase;
+  const dir     = onReturn ? -capDir : capDir;
+
+  return { x: cap.x + capDir * offset, y: cap.y, heading: dir > 0 ? Math.PI / 2 : -Math.PI / 2 };
+}
+
+/**
  * Build the shared "anchor" for a "Diver" formation (variety #3): a
  * V-shaped wedge that drops straight down from a random horizontal spawn
  * point, accelerating as it falls. Like the sweeper path, this has no fixed
