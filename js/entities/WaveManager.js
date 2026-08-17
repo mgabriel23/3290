@@ -549,10 +549,22 @@ export class WaveManager {
       for (const summon of this._boss.drainSummons()) this._enemies.push(summon);
     }
 
-    // Remove dead enemies (compact in-place, no allocation)
+    // Remove dead enemies (compact in-place, no allocation). A non-finite
+    // x/y (which should never happen, but see the warning below if it ever
+    // does) is treated as dead too — such an enemy can never again be
+    // rendered, hit by a player bullet, or reached by the skill bomb's own
+    // bounds check (every comparison against NaN is false, so it would
+    // otherwise silently pass that check forever) — left alone it would sit
+    // in `_enemies` permanently blocking wave-clear with nothing visibly
+    // wrong on screen to explain why.
     let w = 0;
     for (let i = 0; i < this._enemies.length; i++) {
-      if (this._enemies[i].alive) {
+      const e = this._enemies[i];
+      if (e.alive && (!Number.isFinite(e.x) || !Number.isFinite(e.y))) {
+        console.warn(`WaveManager: dropping stuck enemy (type=${e.type}) with a non-finite position (${e.x}, ${e.y})`);
+        e.alive = false;
+      }
+      if (e.alive) {
         if (w !== i) this._enemies[w] = this._enemies[i];
         w++;
       }

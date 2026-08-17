@@ -2562,6 +2562,7 @@ export const Config = Object.freeze({
 		glowBlur: 8,
 		poolSize: 32,
 		damage: 6, // player HP lost per hit — see Player.maxHealth
+		maxLife: 4, // seconds before self-destruct (safety net — it should always long since have hit or left the screen; same convention as Config.enemy.sniper.bullet.maxLife)
 	}),
 
 	/**

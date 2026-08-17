@@ -17,10 +17,11 @@ const MAX = 64;
 
 export class EnemyBullets {
   constructor() {
-    this._x  = new Float32Array(MAX); // world x
-    this._y  = new Float32Array(MAX); // world y
-    this._vx = new Float32Array(MAX); // velocity x (px/sec)
-    this._vy = new Float32Array(MAX); // velocity y (px/sec)
+    this._x   = new Float32Array(MAX); // world x
+    this._y   = new Float32Array(MAX); // world y
+    this._vx  = new Float32Array(MAX); // velocity x (px/sec)
+    this._vy  = new Float32Array(MAX); // velocity y (px/sec)
+    this._age = new Float32Array(MAX); // seconds since fired — see maxLife cull in update()
     this._count = 0;
 
     this._pool = Array.from({ length: MAX }, () => ({
@@ -42,25 +43,33 @@ export class EnemyBullets {
     const { speed } = Config.enemyBullet;
     const [vx, vy] = directionalVelocity(ox, oy, tx, ty, speed);
     const i = this._count++;
-    this._x[i]  = ox;
-    this._y[i]  = oy;
-    this._vx[i] = vx;
-    this._vy[i] = vy;
+    this._x[i]   = ox;
+    this._y[i]   = oy;
+    this._vx[i]  = vx;
+    this._vy[i]  = vy;
+    this._age[i] = 0;
   }
 
   /** @param {number} dt */
   update(dt) {
     const { width: vW, height: vH } = Config.virtual;
+    const { maxLife } = Config.enemyBullet;
     let w = 0;
     for (let i = 0; i < this._count; i++) {
       this._x[i] += this._vx[i] * dt;
       this._y[i] += this._vy[i] * dt;
-      // Keep alive while inside a generous screen margin
-      if (this._x[i] > -30 && this._x[i] < vW + 30 &&
+      this._age[i] += dt;
+      // Keep alive while inside a generous screen margin AND under maxLife —
+      // the age cutoff is a safety net for a bullet that (through some bug
+      // upstream, e.g. a zero-length aim vector) never actually travels out
+      // of bounds on its own, same convention as SniperBullets/Rockets.
+      if (this._age[i] < maxLife &&
+          this._x[i] > -30 && this._x[i] < vW + 30 &&
           this._y[i] > -30 && this._y[i] < vH + 30) {
         if (w !== i) {
           this._x[w]  = this._x[i];  this._y[w]  = this._y[i];
           this._vx[w] = this._vx[i]; this._vy[w] = this._vy[i];
+          this._age[w] = this._age[i];
         }
         w++;
       }
@@ -92,6 +101,7 @@ export class EnemyBullets {
         if (i < this._count) {
           this._x[i]  = this._x[this._count];  this._y[i]  = this._y[this._count];
           this._vx[i] = this._vx[this._count]; this._vy[i] = this._vy[this._count];
+          this._age[i] = this._age[this._count];
         }
         return true;
       }
