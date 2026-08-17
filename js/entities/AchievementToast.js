@@ -52,6 +52,11 @@ export class AchievementToast {
     this._lastTiers = TRACKS.map((track) => tierIndexFor(track, track.getValue(stats)));
   }
 
+  /** True while a toast is on screen or another is queued behind it — used by GameplayScene to hold Mission Mode's victory overlay back until this has finished, same as PowerUps/GoldPickups' own `active`. */
+  get active() {
+    return this._age >= 0 || this._queue.length > 0;
+  }
+
   /** Poll once per frame — a single Stats read (cheap: a handful of numbers), same cost class as WaveManager's own per-frame pickup polls. */
   checkForUnlocks() {
     const stats = getStats();

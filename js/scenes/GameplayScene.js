@@ -522,8 +522,14 @@ export class GameplayScene {
       // Holds Mission Mode's victory overlay/stinger back until every
       // dropped pickup is gone — collected via the magnet-pull above, or
       // naturally expired/off-screen (PowerUps.maxLife/GoldPickups.maxLife
-      // both bound this to a few seconds, so this can never hang the run).
-      if (this._missionClearPending && !this._powerUps.active && !this._goldPickups.active) {
+      // both bound this to a few seconds, so this can never hang the run)
+      // — AND until the combo banner and any queued achievement toast(s)
+      // have finished, so the victory overlay never slams over a still-
+      // playing "hype" popup. Both are short, self-terminating animations
+      // (a few seconds each, achievements draining their own queue), so
+      // this can never hang the run either.
+      if (this._missionClearPending && !this._powerUps.active && !this._goldPickups.active
+        && !this._comboBanner.isActive() && !this._achievementToast.active) {
         this._missionClearPending = false;
         this._triggerMissionComplete();
       }
