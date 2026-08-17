@@ -2084,9 +2084,9 @@ export const Config = Object.freeze({
 			restXMargin: 80,
 			restYMin: 0.08,
 			restYMax: 0.35,
-			chargeWarmup: 1.0, // seconds of nose charge before ! appears — shortened from 1.5 for a faster fire rate
+			chargeWarmup: 0.85, // seconds of nose charge before ! appears — eased back up slightly from 0.7, a touch slower fire rate
 			warningDuration: 0.7, // seconds ! is shown before the shot fires — kept as-is, this is the fairness/reaction window
-			recoverDuration: 0.6, // seconds after firing before player-tracking resumes — shortened from 1.0 for a faster fire rate
+			recoverDuration: 0.45, // seconds after firing before the recovery turn-back can start — eased back up slightly from 0.35, a touch slower fire rate; actual tracking resume is also gated on the shot starting to accelerate, see SniperEnemy's _angleFreezeRemaining
 			recoverTurnRate: 4, // rad/sec — slow turn back toward the player during recovery
 			hitRadius: 24,
 			minSeparation: 64,
@@ -2142,8 +2142,8 @@ export const Config = Object.freeze({
 			bullet: Object.freeze({
 				startSpeed: 35, // vp/sec — super slow, clearly crawling
 				maxSpeed: 900, // vp/sec — bumped again from 700 for an even more dramatic jet kick
-				accelDelay: 0.35, // seconds spent at startSpeed before the jet kicks in
-				accelDuration: 0.25, // seconds to ramp from startSpeed to maxSpeed — shortened again from 0.3 so the kick lands even snappier
+				accelDelay: 0.35, // seconds spent at startSpeed before the jet kicks in — also how long SniperEnemy freezes its angle after firing, see SniperEnemy's _angleFreezeRemaining
+				accelDuration: 0.1, // seconds to ramp from startSpeed to maxSpeed — shortened again from 0.15 for an even sharper, faster acceleration kick
 				maxLife: 3.5, // seconds before self-destruct (safety net — it should always long since have hit or left the screen)
 				halfLenMin: 4, // vp — drawn half-length while crawling (reads as a small dot)
 				halfLenMax: 22, // vp — drawn half-length at full speed (reads as a streaking bolt)

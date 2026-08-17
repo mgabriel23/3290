@@ -11,17 +11,26 @@
  * has a real (if brief) window before it's actually dangerous.
  *
  * Shot cycle (repeats immediately):
- *   charging (1.5s) — nose orb grows; ship tracks player as normal
- *   locked   (0.7s) — target locked to the player's CURRENT position; nose
- *                      SNAPS to face target and STOPS tracking player; !
- *                      marker shown on canvas; nose orb blinks at full size
- *   → fires the bullet, then → recovering (resumes player tracking)
+ *   charging (`chargeWarmup`) — nose orb grows; ship tracks player as normal
+ *   locked   (`warningDuration`) — target locked to the player's CURRENT
+ *                      position; nose SNAPS to face target and STOPS
+ *                      tracking player; ! marker shown on canvas; nose orb
+ *                      blinks at full size
+ *   → fires the bullet, then → recovering (angle stays frozen — see below)
  *
  * Angle convention: same as Scout — atan2(-dx, dy) makes the NOSE face AWAY
  * from the player during normal tracking. In locked, the angle is frozen at
  * whatever it last tracked to (which, thanks to update()'s ordering, is
  * already facing away from the just-locked target — see the angle-tracking
  * block below).
+ *
+ * Post-fire freeze: the ship does NOT resume tracking/turning the instant it
+ * fires — `_angleFreezeRemaining` (set to `Config.enemy.sniper.bullet.
+ * accelDelay` the instant the shot fires) keeps the angle frozen only
+ * through the bullet's initial crawl, however many state transitions
+ * (recovering → charging → even a new locked) that spans. The moment the
+ * bullet actually starts accelerating, the ship is free to turn again — see
+ * update()'s angle-tracking block.
  *
  * Entry-glide, hit/death-flash, and engine flame/core rendering are shared
  * with Enemy.js via EnemyCombat.js — see that file's header for why.
@@ -76,6 +85,11 @@ export class SniperEnemy {
     // ── Locked target — the player's position at the instant 'charging' ends ──
     this._targetX = 0;
     this._targetY = 0;
+
+    // Set to Config.enemy.sniper.bullet.accelDelay the instant a shot fires
+    // — while positive, the angle-tracking block below freezes _angle
+    // instead of turning, regardless of state (see update()'s doc for why).
+    this._angleFreezeRemaining = 0;
   }
 
   get type()  { return this._type;  }
@@ -103,7 +117,14 @@ export class SniperEnemy {
     // direction is independent of the ship's visual orientation. Recovering:
     // slowly turns back to face away from the player again, so the post-fire
     // reorientation reads as a deliberate motion, not an instant snap.
-    if (this._state === 'recovering') {
+    // While _angleFreezeRemaining is still counting down, the just-fired
+    // shot is still crawling at its slow startSpeed, so ALL tracking/turning
+    // is skipped (regardless of state) — the ship holds its locked
+    // orientation until the bullet actually begins accelerating, then
+    // resumes normally.
+    if (this._angleFreezeRemaining > 0) {
+      this._angleFreezeRemaining = Math.max(0, this._angleFreezeRemaining - dt);
+    } else if (this._state === 'recovering') {
       const dx          = playerX - this.x;
       const dy          = playerY - this.y;
       const targetAngle = Math.atan2(-dx, dy);
@@ -145,6 +166,8 @@ export class SniperEnemy {
         const noseX = this.x + c * GUN_LX - s * GUN_LY;
         const noseY = this.y + s * GUN_LX + c * GUN_LY;
         onFire(noseX, noseY, this._targetX, this._targetY);
+        this._angleFreezeRemaining = cfg.bullet.accelDelay;
+
         setState(this, 'recovering');
       }
 
