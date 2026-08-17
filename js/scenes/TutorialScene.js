@@ -2,9 +2,9 @@
  * TutorialScene.js
  * Tutorial overlay that plays once between the title screen and the player's
  * first gameplay session. The full gameplay backdrop — starfield, barrier
- * (with its permanent SHIELD health readout), HUD (score/gold/health), the
- * Enemy Codex button, the mute/pause buttons, and the special-skill button —
- * is visible behind a dimming overlay, so every hint highlights the real UI
+ * (with its permanent SHIELD readout), HUD (score/gold/health), the Enemy
+ * Codex button, the mute/pause buttons, and the special-skill button — is
+ * visible behind a dimming overlay, so every hint highlights the real UI
  * element it describes rather than a mock diagram. Codex/PlaybackControls/
  * PlayerSkill are constructed here purely as inert display chrome — their
  * `_open`/`_paused`/cooldown state never gets touched (this scene never
@@ -12,10 +12,19 @@
  * they only ever render their idle always-visible/always-ready button, never
  * an overlay or a mid-cooldown state.
  *
- * Eight sequential hints advance on tap or swipe-up. The first tap/swipe
- * during a still-typing hint fast-forwards the typewriter to completion;
- * the second advances to the next hint. After the last hint `onContinue`
- * fires and GameplayScene takes over, which starts the normal player fly-in.
+ * Nine sequential hints — movement/auto-fire, score/combo, health, the
+ * barrier's shield, earning gold, spending it in the Shop, rarer power-up
+ * drops, the Enemy Codex + mute/pause row (merged into one hint — they're
+ * three buttons in a single adjacent row, see UTILITY_BOX below), and the
+ * special-skill bomb last — advance on tap or swipe-up, but only once a
+ * hint's text has fully finished typing out; taps/swipes while it's still
+ * revealing are ignored outright (see `_advance`), so the player can't blow
+ * past a line before ever reading it. The very first hint additionally
+ * suppresses swipe-up entirely (see `handleSwipeUp`) — its own copy invites
+ * an exploratory "drag anywhere," and an upward drag is a likely first thing
+ * to try, which would otherwise silently self-advance the tutorial the
+ * instant that hint finishes typing. After the last hint `onContinue` fires
+ * and GameplayScene takes over, which starts the normal player fly-in.
  *
  * Typewriter reveal + blip pool: the same word-at-a-time pattern as
  * PrologueScene's briefing beat — see that file for the design rationale.
@@ -33,8 +42,9 @@
  * highlight rather than a static hole in the dim. All three (bracket, dim
  * cutout, glow) are built once in the constructor from static box literals
  * (only alpha animates per frame). Hints with no specific on-screen target
- * (the movement hint, which uses the orbiting hand demo instead) simply
- * carry `highlight: null` and fall back to a plain full-screen dim.
+ * (movement and power-ups, which use small demo animations instead — see
+ * `_renderDemo`) simply carry `highlight: null` and fall back to a plain
+ * full-screen dim.
  */
 import { Config } from '../core/Config.js';
 import { Barrier } from '../entities/Barrier.js';
@@ -45,7 +55,7 @@ import { PlaybackControls } from '../entities/PlaybackControls.js';
 import { PlayerSkill } from '../entities/PlayerSkill.js';
 import { wrapText, computeWordOffsets } from '../core/textLayout.js';
 import { AudioPool } from '../core/AudioPool.js';
-import { cornerBracketPath } from '../core/shapes.js';
+import { cornerBracketPath, crossPath, diamondPath, boltPath, hexPath } from '../core/shapes.js';
 
 /** A filled axis-aligned rectangle path, for the dim overlay's spotlight cutout frame. */
 function rectPath(x0, y0, x1, y1) {
@@ -61,7 +71,6 @@ function rectPath(x0, y0, x1, y1) {
 const { width: V_W, height: V_H } = Config.virtual;
 const { margin: HUD_MARGIN, health: HUD_HEALTH } = Config.hud;
 const BARRIER_PEAK_Y = Config.barrier.baseY - Config.barrier.arcHeight;
-const CODEX_BTN = Config.codex.button;
 const MUTE_BTN = Config.playbackControls.muteButton;
 const PAUSE_BTN = Config.playbackControls.pauseButton;
 
@@ -69,9 +78,16 @@ const PAUSE_BTN = Config.playbackControls.pauseButton;
 // 5-6 digit score/gold value plus the "BEST" line, in the wide Audiowide
 // display font) rather than a flat oversized guess — tight enough to read
 // as "framing this content" instead of "framing this general area", while
-// still leaving a visible few-px pad on every edge.
+// still leaving a visible few-px pad on every edge. SCORE_BOX and GOLD_BOX
+// are deliberately the same width AND height (mirrored left/right off their
+// shared top edge) even though the gold panel's own content is shorter (no
+// "BEST" line) — matching dimensions read as "these two panels are peers"
+// at a glance, rather than the asymmetry of a tight per-content fit.
 const SCORE_BOX = { left: HUD_MARGIN - 6, top: HUD_MARGIN - 6, right: HUD_MARGIN + 110, bottom: HUD_MARGIN + 70 };
-const GOLD_BOX  = { left: V_W - HUD_MARGIN - 110, top: HUD_MARGIN - 6, right: V_W - HUD_MARGIN + 6, bottom: HUD_MARGIN + 54 };
+// Also the Shop's own tap target (HUD.isInsideGoldPanel opens it) — reused
+// verbatim by the SHOP hint below, so the same spotlight covers both
+// "here's where gold shows up" and "here's where you spend it."
+const GOLD_BOX  = { left: V_W - HUD_MARGIN - 110, top: HUD_MARGIN - 6, right: V_W - HUD_MARGIN + 6, bottom: HUD_MARGIN + 70 };
 // Symmetric padding on both sides of the bar's true center (HUD_HEALTH.x).
 // No need to reserve extra room for the low-health "!" icon here — this
 // scene always renders the HUD preview at full health (see render()'s own
@@ -85,15 +101,12 @@ const HEALTH_BOX = {
   bottom: HUD_HEALTH.y + HUD_HEALTH.height + 26,
 };
 const BARRIER_BOX = { left: V_W / 2 - 70, top: BARRIER_PEAK_Y + 16, right: V_W / 2 + 70, bottom: BARRIER_PEAK_Y + 66 };
-// A smaller outer pad than SCORE/GOLD/HEALTH use — the buttons themselves
-// are already large (radius 28vp, see Config.playbackControls' comment), so
-// less extra room is needed for the bracket to read clearly, and it keeps
-// this box from creeping into the SCORE/GOLD panels' own estimated bounds.
-const CODEX_BOX = {
-  left: CODEX_BTN.x - CODEX_BTN.radius - 3, top: CODEX_BTN.y - CODEX_BTN.radius - 3,
-  right: CODEX_BTN.x + CODEX_BTN.radius + 3, bottom: CODEX_BTN.y + CODEX_BTN.radius + 3,
-};
-const PLAYBACK_BOX = {
+// Spans the mute/Codex/pause row in one box (all three sit at the same y,
+// evenly spaced — see Config.playbackControls/Config.codex) rather than a
+// separate box per button — one bracket around one zone of adjacent,
+// related controls reads clearly; the old CODEX_BOX this used to also cover
+// on its own sat entirely inside these same bounds anyway.
+const UTILITY_BOX = {
   left: MUTE_BTN.x - MUTE_BTN.radius - 3, top: MUTE_BTN.y - MUTE_BTN.radius - 3,
   right: PAUSE_BTN.x + PAUSE_BTN.radius + 3, bottom: PAUSE_BTN.y + PAUSE_BTN.radius + 3,
 };
@@ -105,23 +118,26 @@ const SKILL_BOX = {
 
 /**
  * Static hint definitions.
- *   text      — sentence to typewrite word by word
+ *   text      — sentence(s) to typewrite word by word
  *   textCY    — virtual y center of the text block (chosen so text never
  *               sits on top of the UI element being highlighted)
  *   highlight — {left, top, right, bottom} box to frame with a pulsing
- *               corner-bracket highlight; null = no highlight (e.g. the
- *               movement hint, which uses the orbiting hand demo instead)
+ *               corner-bracket highlight; null = no fixed on-screen target
+ *   demo      — 'controls' | 'powerups' | undefined — which small demo
+ *               animation to show in place of a highlight (see _renderDemo);
+ *               undefined for every hint that has a real `highlight` box
  */
 const HINTS = [
   {
-    text: 'Destroy enemies to earn SCORE. It increases with each kill.',
-    textCY: 420,
-    highlight: SCORE_BOX,
+    text: 'Drag anywhere to steer your ship — it follows your finger. Your cannon fires automatically.',
+    textCY: 480,
+    highlight: null,
+    demo: 'controls',
   },
   {
-    text: 'Defeating enemies also drops GOLD coins — fly through them to collect it.',
+    text: 'Destroy enemies to earn SCORE. Chain kills without taking damage for a COMBO multiplier.',
     textCY: 420,
-    highlight: GOLD_BOX,
+    highlight: SCORE_BOX,
   },
   {
     text: 'This is your ship\'s HEALTH. Taking hits drains it — watch for the red pulse and warning beep when it\'s critical.',
@@ -129,37 +145,51 @@ const HINTS = [
     highlight: HEALTH_BOX,
   },
   {
-    text: 'The barrier shields Earth. Protect it — if its HEALTH reaches zero, the game is over.',
+    text: 'This is the barrier\'s SHIELD, protecting Earth. If it falls, your run ends.',
     textCY: 380,
     highlight: BARRIER_BOX,
   },
   {
-    text: 'Drag to steer your ship. It follows your finger anywhere on screen.',
+    text: 'Kills also drop GOLD — fly through it to collect.',
+    textCY: 420,
+    highlight: GOLD_BOX,
+  },
+  {
+    text: 'Tap here to open the SHOP and spend gold upgrading your wings, engine, cannon, magnet, and missiles.',
+    textCY: 420,
+    highlight: GOLD_BOX,
+  },
+  {
+    text: 'Rare pickups fall too — green restores your HEALTH, cyan repairs the barrier\'s SHIELD. Gold and white grant a brief combat boost.',
     textCY: 480,
-    highlight: null, // orbiting hand demo used instead — see _renderControlsDemo
+    highlight: null,
+    demo: 'powerups',
   },
   {
-    text: 'Tap this icon anytime to open the Enemy Codex — a quick reference for every enemy you\'ll face.',
+    text: 'Tap ? anytime for the Enemy Codex — a reference for every enemy you\'ll face. These icons pause the action or mute the sound.',
     textCY: 420,
-    highlight: CODEX_BOX,
+    highlight: UTILITY_BOX,
   },
   {
-    text: 'These icons pause the action or mute the sound — handy whenever you need a breather.',
-    textCY: 420,
-    highlight: PLAYBACK_BOX,
-  },
-  {
-    text: 'Tap this button to unleash your special attack — it instantly destroys nearby enemies and hits bosses with heavy damage. It needs time to recharge after each use.',
+    text: 'This is your special attack — it clears the screen and hits bosses hard. It needs time to recharge after use.',
     textCY: 420,
     highlight: SKILL_BOX,
   },
 ];
 
-// Controls-demo constants — the orbiting hand icon shown on the movement hint (index 4)
+// Controls-demo constants — the orbiting hand icon shown on the movement hint
 const DEMO_CX     = 270;  // virtual x — center of the orbit (screen center)
 const DEMO_CY     = 660;  // virtual y — below the hint text, above the barrier
 const DEMO_RADIUS = 32;   // virtual px orbit radius
 const DEMO_SPEED  = 1.4;  // radians / second
+
+// Power-ups-demo constants — four static icons in a row at the SAME anchor
+// the controls demo uses (DEMO_CX/DEMO_CY) — only one demo is ever visible
+// at a time, so there's no reason to reserve a second region of screen for it.
+const POWERUP_DEMO_OFFSETS = [-75, -25, 25, 75]; // x offsets from DEMO_CX, one per icon below
+const POWERUP_DEMO_BOB_SPEED = 2.2;  // radians/second — gentle vertical bob
+const POWERUP_DEMO_BOB_AMOUNT = 5;   // virtual px
+const POWERUP_DEMO_PHASE = 1.4;      // radians of stagger between each icon, so they don't bob in lockstep
 
 export class TutorialScene {
   /**
@@ -193,8 +223,8 @@ export class TutorialScene {
     this._blipPool = new AudioPool(Config.tutorial.blip.src, 8, Config.tutorial.blip.volume);
     this._blipTimer = 0;
 
-    this._initHints();        // wraps text + pre-allocates highlight bracket geometry
-    this._initControlsDemo(); // pre-allocates hand icon + orbit path for the movement hint
+    this._initHints(); // wraps text + pre-allocates highlight bracket geometry
+    this._initDemos(); // pre-allocates the controls hand-icon + power-ups icon geometry
   }
 
   update(dt) {
@@ -251,24 +281,29 @@ export class TutorialScene {
     this._renderSpotlightGlow();
     this._renderHint();
     this._renderHighlight();
-    this._renderControlsDemo();
+    this._renderDemo();
     this._renderTapPrompt();
   }
 
-  /** First tap/swipe fast-forwards typewriter; second tap/swipe advances. */
+  /**
+   * Tap advances to the next hint, but only once the current one has fully
+   * typed out — see `_advance`. Swipe-up does the same, EXCEPT on the
+   * movement hint (see class doc) — its own copy invites "drag anywhere,"
+   * and an upward drag is exactly what a first-time player is likely to try
+   * first, which must not double as "skip this hint."
+   */
   handleTap(_x, _y) { if (!this._done) this._advance(); }
-  handleSwipeUp()   { if (!this._done) this._advance(); }
+  handleSwipeUp() {
+    if (this._done) return;
+    if (HINTS[this._hintIndex].demo === 'controls') return;
+    this._advance();
+  }
 
   // ---------------------------------------------------------------------------
 
   _advance() {
     if (this._age < Config.tutorial.hintStartDelay) return; // ignore taps during breathing room
-    if (!this._tapReady) {
-      // Fast-forward: reveal all words instantly so the second tap can advance
-      this._revealedWordCount = this._hintTotalWords[this._hintIndex];
-      this._tapReady = true;
-      return;
-    }
+    if (!this._tapReady) return; // ignore taps while the typewriter is still revealing — no skipping unread text
     this._hintIndex++;
     if (this._hintIndex >= HINTS.length) {
       // Set before calling out — if onContinue's chain throws, this scene
@@ -324,7 +359,7 @@ export class TutorialScene {
     const revealed = Math.floor(this._revealedWordCount);
     const fadeIn = Math.min(this._hintAge / 0.3, 1);
 
-    // Progress indicator (e.g. "2 / 7") above the text block
+    // Progress indicator (e.g. "2 / 9") above the text block
     this.renderer.drawText(`${idx + 1} / ${HINTS.length}`, vW / 2, topLineY - 24, {
       font: progressFont, color: progressColor, alpha: fadeIn * 0.45,
     });
@@ -351,7 +386,7 @@ export class TutorialScene {
    * covering everything EXCEPT a padded spotlight window around the
    * highlight box (pre-built in _initHints) — so that element renders at
    * full brightness instead of sitting under the same flat dark overlay as
-   * the rest of the screen. Hints with no highlight (the movement hint)
+   * the rest of the screen. Hints with no highlight (movement, power-ups)
    * fall back to the original full-screen dim.
    */
   _renderDimOverlay(alpha) {
@@ -389,9 +424,9 @@ export class TutorialScene {
 
   /**
    * Pulsing 4-corner bracket frame around the current hint's target UI
-   * element (null for hints with no specific on-screen target, e.g. the
-   * movement hint). The box itself is static — pre-built in _initHints —
-   * only the fade-in and breathing-pulse alpha change per frame.
+   * element (null for hints with no specific on-screen target). The box
+   * itself is static — pre-built in _initHints — only the fade-in and
+   * breathing-pulse alpha change per frame.
    */
   _renderHighlight() {
     const brackets = this._hintHighlights[this._hintIndex];
@@ -493,12 +528,16 @@ export class TutorialScene {
   }
 
   /**
-   * Pre-allocate the hand-icon geometry for the controls hint (index 4).
-   * The finger body is authored at local (0,0) facing upward; strokePaths
-   * rotates it each frame via its `rotation` parameter so no point mutation
-   * is needed — only x/y change. The orbit circle is fully static.
+   * Pre-allocate geometry for both no-highlight demo animations (see
+   * `_renderDemo`). The finger body is authored at local (0,0) facing
+   * upward; strokePaths rotates it each frame via its `rotation` parameter
+   * so no point mutation is needed — only x/y change. The orbit circle is
+   * fully static. The power-up icons reuse the exact same path helpers
+   * (and the same `d` size formula) PowerUps.js itself builds its real
+   * pickups from — see core/shapes.js — so this preview matches real drops
+   * shape-for-shape and color-for-color, not an approximation.
    */
-  _initControlsDemo() {
+  _initDemos() {
     // Capsule-shaped finger, pointing "up" (−y) in local space
     this._fingerPaths = [{
       points: [
@@ -517,12 +556,25 @@ export class TutorialScene {
       ]);
     }
     this._orbitPath = [{ points: orbitPoints, closed: false }];
+
+    // Power-up icons — local-space, origin-centered, repositioned per-icon
+    // at render time via each strokePaths/fillStrokePaths call's own {x, y}.
+    const d = Config.powerUps.radius * 0.45;
+    this._powerUpCrossPathArr   = [crossPath(0, 0, d)];
+    this._powerUpDiamondPathArr = [diamondPath(0, 0, Config.powerUps.radius * 0.5)];
+    this._powerUpBoltPathArr    = [boltPath(0, 0, d)];
+    this._powerUpHexPathArr     = [hexPath(0, 0, d)];
   }
 
-  /** Orbiting hand icon — only drawn on the movement hint (index 4). */
-  _renderControlsDemo() {
-    if (this._hintIndex !== 4) return;
+  /** Dispatches to whichever demo (if any) the current hint calls for — see HINTS' own `demo` field doc. */
+  _renderDemo() {
+    const demo = HINTS[this._hintIndex].demo;
+    if (demo === 'controls') this._renderControlsDemo();
+    else if (demo === 'powerups') this._renderPowerUpsDemo();
+  }
 
+  /** Orbiting hand icon — the movement hint's demo. */
+  _renderControlsDemo() {
     const { highlightColor, highlightGlowBlur } = Config.tutorial;
     const fadeIn = Math.min(this._hintAge / 0.5, 1);
     const angle  = this._hintAge * DEMO_SPEED;
@@ -539,5 +591,43 @@ export class TutorialScene {
       rotation: angle + Math.PI / 2, // tangent to orbit so finger "points" where it's going
       color: highlightColor, lineWidth: 2, glowBlur: highlightGlowBlur, alpha: fadeIn,
     });
+  }
+
+  /**
+   * Four gently-bobbing pickup icons — the power-ups hint's demo. Rendered
+   * with the exact same "colored ring + glyph" layering PowerUps.render
+   * uses for the real pickups (fillEllipse backdrop, strokeCircle ring,
+   * filled icon glyph — invincible's hex stays outline-only, same
+   * convention Config.powerUps.iconFillColor's own comment establishes) and
+   * the same alpha-breathing pulse (Config.powerUps.pulseSpeed/pulseDepth),
+   * so recognizing these transfers directly into recognizing real drops.
+   */
+  _renderPowerUpsDemo() {
+    const { renderer } = this;
+    const { radius, lineWidth, glowBlur, pulseSpeed, pulseDepth, iconFillColor, health, shield, fireBoost, invincible } = Config.powerUps;
+    const fadeIn = Math.min(this._hintAge / 0.5, 1);
+    const pulseAlpha = 1 - pulseDepth * (0.5 + 0.5 * Math.sin(this._hintAge * pulseSpeed));
+    const alpha = fadeIn * pulseAlpha;
+
+    const icons = [
+      { cfg: health,     pathArr: this._powerUpCrossPathArr },
+      { cfg: shield,     pathArr: this._powerUpDiamondPathArr },
+      { cfg: fireBoost,  pathArr: this._powerUpBoltPathArr },
+      { cfg: invincible, pathArr: this._powerUpHexPathArr, outline: true },
+    ];
+
+    for (let i = 0; i < icons.length; i++) {
+      const { cfg, pathArr, outline } = icons[i];
+      const x = DEMO_CX + POWERUP_DEMO_OFFSETS[i];
+      const y = DEMO_CY + Math.sin(this._hintAge * POWERUP_DEMO_BOB_SPEED + i * POWERUP_DEMO_PHASE) * POWERUP_DEMO_BOB_AMOUNT;
+
+      renderer.fillEllipse(0, 0, radius, radius, { x, y, fillColor: cfg.fillColor, alpha });
+      renderer.strokeCircle(x, y, radius, { color: cfg.color, lineWidth, glowBlur, alpha });
+      if (outline) {
+        renderer.strokePaths(pathArr, { x, y, color: cfg.color, lineWidth: lineWidth * 1.4, glowBlur: glowBlur * 0.5, alpha });
+      } else {
+        renderer.fillStrokePaths(pathArr, { x, y, fillColor: iconFillColor, strokeColor: cfg.color, lineWidth, alpha });
+      }
+    }
   }
 }

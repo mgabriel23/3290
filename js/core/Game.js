@@ -132,7 +132,21 @@ export class Game {
   _startPrologue(devSkipToTitle = false) {
     try {
       this.scene = new PrologueScene(this.renderer, {
-        onContinue: (mode) => this._startTutorial(mode),
+        onContinue: (mode) => {
+          // Survival Mode has no level-select step of its own, so the
+          // shared tutorial (if not seen yet, in EITHER mode — see
+          // TutorialProgress.js) plays right here, same as always. Mission
+          // Mode instead goes straight to the mission-select screen — its
+          // shot at the tutorial comes when Level 1 is actually launched
+          // (see `_startMissionLevel`), not before the player has even seen
+          // the level list. Whichever mode the player picks first is the
+          // one that ends up playing it.
+          if (mode === 'survival') {
+            this._startTutorial(() => this._startGameplay({ mode: 'survival' }));
+          } else {
+            this._startMissionSelect();
+          }
+        },
         devSkipToTitle,
         onMainMenuReached: () => this._fadeOutPrologueMusic(),
       });
@@ -184,57 +198,40 @@ export class Game {
   }
 
   /**
-   * Swap the cinematic out for the tutorial once the player taps a mode
-   * button on the title card. The prologue's own music has already been
-   * faded out by this point — it stops as soon as the title card ("the
-   * main menu") is reached, not here (see `_fadeOutPrologueMusic`, passed
-   * to `PrologueScene` as `onMainMenuReached`), so there's nothing left to
-   * silence on this transition.
-   *
-   * The tutorial itself only plays once per mode (see TutorialProgress.js):
-   * Mission Mode's first-ever attempt is always Level 1 (missions unlock
-   * sequentially, so nothing else is reachable yet), and Survival Mode's
-   * first-ever attempt is that mode's own first game — `hasSeenTutorial`
-   * skips straight to `_afterTutorial` on every later play of that same
-   * mode instead of rebuilding a `TutorialScene` that would just replay hints
-   * the player has already sat through.
-   * @param {'mission'|'survival'} mode  which button was tapped — carried
-   *   through (via closure, not stored on `this`) to `_afterTutorial` once
-   *   the tutorial itself finishes (or immediately, if already seen).
+   * Swap whatever's currently showing out for the tutorial — ONE global
+   * flag (see TutorialProgress.js), not per-mode: Mission Mode and Survival
+   * Mode are two on-ramps into the same hint sequence, so `hasSeenTutorial`
+   * skips straight to `onDone` the instant either mode has ever played it,
+   * rather than rebuilding a `TutorialScene` a second time for whichever
+   * mode the player tries second. Two call sites: `_startPrologue`'s
+   * `onContinue` (Survival Mode, right after the title card) and
+   * `_startMissionLevel` (Mission Mode, right as Level 1 is launched from
+   * mission-select — see that method's own doc for why it's gated there and
+   * not earlier). `TutorialScene` itself has no back/skip path — only
+   * `handleTap`/`handleSwipeUp`, both of which just advance — and
+   * `_startGameplay` is only ever reached through `onDone` here or through
+   * this same already-seen check, so once triggered the tutorial can't be
+   * bypassed on its first, one-and-only playthrough.
+   * @param {() => void} onDone  called once the tutorial finishes (or
+   *   immediately, if already seen) — carries on to wherever this mode goes
+   *   next (gameplay, in both current call sites).
    */
-  _startTutorial(mode) {
-    if (hasSeenTutorial(mode)) {
-      this._afterTutorial(mode);
+  _startTutorial(onDone) {
+    if (hasSeenTutorial()) {
+      onDone();
       return;
     }
     try {
       this.scene = new TutorialScene(this.renderer, {
         onContinue: () => {
-          markTutorialSeen(mode);
-          this._afterTutorial(mode);
+          markTutorialSeen();
+          onDone();
         },
       });
     } catch (err) {
       console.error('Failed to start the tutorial:', err);
       this._showFatalError(err);
     }
-  }
-
-  /**
-   * Routes to the right next screen once the tutorial is done with —
-   * either its last hint was just dismissed, or `_startTutorial` skipped it
-   * outright because this mode's tutorial has already been seen before —
-   * based on which mode button was tapped back on the title card. Survival
-   * Mode goes straight into gameplay, same as the single
-   * PLAY button always did. Mission Mode goes to the mission-select screen
-   * first, since (unlike Survival Mode) there's a choice of which level to
-   * play — gameplay itself only starts once a specific mission is picked
-   * there (see `_startMissionSelect`).
-   * @param {'mission'|'survival'} mode
-   */
-  _afterTutorial(mode) {
-    if (mode === 'mission') this._startMissionSelect();
-    else this._startGameplay({ mode: 'survival' });
   }
 
   /**
@@ -248,12 +245,31 @@ export class Game {
   _startMissionSelect() {
     try {
       this.scene = new MissionSelectScene(this.renderer, {
-        onSelectMission: (level) => this._startGameplay({ mode: 'mission', level }),
+        onSelectMission: (level) => this._startMissionLevel(level),
         onBack: () => this._startPrologue(true),
       });
     } catch (err) {
       console.error('Failed to start mission select:', err);
       this._showFatalError(err);
+    }
+  }
+
+  /**
+   * Launches a chosen mission level, playing the shared tutorial first if
+   * it hasn't been seen yet (in EITHER mode — see TutorialProgress.js).
+   * Only Level 1 can ever hit that branch in practice — missions unlock
+   * sequentially, so a first-time player has nothing else to pick on the
+   * select screen — but checking `level === 1` rather than just
+   * `!hasSeenTutorial()` keeps this tied to the actual requirement
+   * (tutorial belongs to Level 1) rather than an incidental consequence of
+   * unlock order.
+   * @param {number} level
+   */
+  _startMissionLevel(level) {
+    if (level === 1) {
+      this._startTutorial(() => this._startGameplay({ mode: 'mission', level }));
+    } else {
+      this._startGameplay({ mode: 'mission', level });
     }
   }
 

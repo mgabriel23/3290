@@ -41,7 +41,7 @@
  * cross and shield's diamond.
  */
 import { Config } from '../core/Config.js';
-import { diamondPath } from '../core/shapes.js';
+import { diamondPath, crossPath, boltPath, hexPath } from '../core/shapes.js';
 
 const MAX = Config.powerUps.poolSize;
 
@@ -61,33 +61,14 @@ export class PowerUps {
     // thin stroked lines) — a bold, solid glyph reads far better at the
     // small size these render at than an outline does, especially against
     // a busy starfield. See Config.powerUps.iconFillColor for why they all
-    // share one fill tone.
+    // share one fill tone. Shapes themselves live in core/shapes.js
+    // (TutorialScene's power-up demo reuses the exact same helpers, so its
+    // preview icons match real drops 1:1).
     const d = Config.powerUps.radius * 0.45;
-    // A filled plus/cross badge — the standard 12-point "medkit" cross outline.
-    const t = d * 0.35; // half-thickness of each arm
-    this._crossPath = {
-      points: [
-        [-t, -d], [t, -d], [t, -t],
-        [d, -t], [d, t], [t, t],
-        [t, d], [-t, d], [-t, t],
-        [-d, t], [-d, -t], [-t, -t],
-      ],
-    };
+    this._crossPath   = crossPath(0, 0, d);
     this._diamondPath = diamondPath(0, 0, Config.powerUps.radius * 0.5);
-    // A filled lightning-bolt badge, top to bottom.
-    this._boltPath = {
-      points: [
-        [d * 0.15, -d], [-d * 0.55, d * 0.05], [-d * 0.05, d * 0.05],
-        [-d * 0.15, d], [d * 0.55, -d * 0.05], [d * 0.05, -d * 0.05],
-      ],
-    };
-    // A small hexagon ring — six points evenly spaced around the origin.
-    const hexPts = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i - Math.PI / 2;
-      hexPts.push([Math.cos(a) * d, Math.sin(a) * d]);
-    }
-    this._hexPath = { points: hexPts, closed: true };
+    this._boltPath    = boltPath(0, 0, d);
+    this._hexPath     = hexPath(0, 0, d);
 
     // Wrapper arrays reused every pickup, every frame by render() instead of
     // allocating a fresh single-element array each call.

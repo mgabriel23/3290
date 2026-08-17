@@ -157,6 +157,7 @@ export class Shop {
     this._levels[i] = nextLevel;
     this._player.applyUpgrade(part.id, nextLevel);
     this._shipPreview.applyUpgrade(part.id, nextLevel);
+    this._hud.refreshUpgradeSummary(); // updates the GOLD panel's "UPGRADES n/50" subtext to match the new level
 
     const cfg = Config.shop;
     const { x: cx, y: cy } = this._cardCenter(i);

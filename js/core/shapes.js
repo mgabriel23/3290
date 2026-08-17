@@ -24,6 +24,48 @@ export function diamondPath(cx, cy, d) {
 }
 
 /**
+ * A filled "+" cross badge centered at (cx, cy), spanning ±d — the
+ * universal health-restore glyph. Used by PowerUps.js's health pickup.
+ */
+export function crossPath(cx, cy, d) {
+  const t = d * 0.35; // half-thickness of each arm
+  return {
+    points: [
+      [cx - t, cy - d], [cx + t, cy - d], [cx + t, cy - t],
+      [cx + d, cy - t], [cx + d, cy + t], [cx + t, cy + t],
+      [cx + t, cy + d], [cx - t, cy + d], [cx - t, cy + t],
+      [cx - d, cy + t], [cx - d, cy - t], [cx - t, cy - t],
+    ],
+  };
+}
+
+/**
+ * A filled lightning-bolt badge centered at (cx, cy), spanning roughly ±d,
+ * top to bottom. Used by PowerUps.js's fireBoost pickup.
+ */
+export function boltPath(cx, cy, d) {
+  return {
+    points: [
+      [cx + d * 0.15, cy - d], [cx - d * 0.55, cy + d * 0.05], [cx - d * 0.05, cy + d * 0.05],
+      [cx - d * 0.15, cy + d], [cx + d * 0.55, cy - d * 0.05], [cx + d * 0.05, cy - d * 0.05],
+    ],
+  };
+}
+
+/**
+ * A small hexagon ring centered at (cx, cy) with radius `d` — six points
+ * evenly spaced around the center. Used by PowerUps.js's invincible pickup.
+ */
+export function hexPath(cx, cy, d) {
+  const points = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i - Math.PI / 2;
+    points.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d]);
+  }
+  return { points, closed: true };
+}
+
+/**
  * A five-pointed star centered at (cx, cy), alternating `outerR`/`innerR`
  * radii per vertex — a stamped-emblem glyph that reads as "valuable" at a
  * glance. Used as the gold coin's engraved face (see GoldPickups.render).

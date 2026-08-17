@@ -8,7 +8,7 @@ A mobile-first 2D space shooter built with vanilla JavaScript (native ES modules
 
 ## Current state
 
-A complete core gameplay loop, past the "foundation" stage this file used to describe. The flow: [Game.js](js/core/Game.js) boots into [PrologueScene.js](js/scenes/PrologueScene.js) (a beat-by-beat opening cinematic ending on a title card + PLAY button) → [TutorialScene.js](js/scenes/TutorialScene.js) (five hints pointing at the real HUD/barrier UI, dismissed by tap/swipe) → [GameplayScene.js](js/scenes/GameplayScene.js), which composes the player ship, a wave/level system, and the barrier the player defends.
+A complete core gameplay loop, past the "foundation" stage this file used to describe. The flow: [Game.js](js/core/Game.js) boots into [PrologueScene.js](js/scenes/PrologueScene.js) (a beat-by-beat opening cinematic ending on a title card + PLAY button) → [TutorialScene.js](js/scenes/TutorialScene.js) (a sequence of hints pointing at the real HUD/barrier/Shop UI, dismissed by tap/swipe) → [GameplayScene.js](js/scenes/GameplayScene.js), which composes the player ship, a wave/level system, and the barrier the player defends.
 
 Combat: the player auto-fires straight up ([Bullets.js](js/entities/Bullets.js)) against a roster of enemy types spawned by [WaveManager.js](js/entities/WaveManager.js) per `Config.waves.levels`:
 - **Scout / Rocketeer** ([Enemy.js](js/entities/Enemy.js)) — enter, park, fire aimed bullets or homing rockets ([Rockets.js](js/entities/Rockets.js)) on a reload cycle.
