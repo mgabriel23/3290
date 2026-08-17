@@ -1334,6 +1334,31 @@ export const Config = Object.freeze({
 		// Plays once, on trigger — see GameplayScene._triggerMissionComplete.
 		audioSrc: "assets/audio/success.mp3",
 		audioVolume: 0.7,
+
+		/**
+		 * Fireworks-style celebration — a handful of the same pooled
+		 * shockwave-ring+spark bursts every enemy death already uses
+		 * (entities/Particles.js), just scattered across the upper screen and
+		 * cycling through a few colors instead of one explosion at one spot,
+		 * so the moment reads as "celebrating" rather than "something died."
+		 * All `burstCount` bursts are scheduled the instant
+		 * `_triggerMissionComplete` fires (same "already mid-burst by the
+		 * first real render" timing DailyRewardPanel's own celebratory burst
+		 * uses), staggered `burstInterval` seconds apart by
+		 * GameplayScene._updateCelebrationBursts — so they're popping over the
+		 * just-cleared, undimmed screen through most of `revealDelay`, then
+		 * finish out right as the title itself fades in.
+		 */
+		celebration: Object.freeze({
+			burstCount: 6,
+			burstInterval: 0.15, // seconds between each burst popping — last one lands at ~0.75s, just ahead of revealDelay (0.6s) + the title's own fade-in starting
+			sparkCount: 18, // per burst — below Config.particles.defaultSparksPerEmit(14)*2, keeps 6 staggered bursts well under the shared spark pool
+			spreadX: 170, // vp either side of center the bursts scatter across
+			minY: 300, maxY: 620, // vp band the bursts scatter within — brackets the title's own vH/2 (480) position without landing on top of the text
+			// Cycles round-robin across bursts (see _updateCelebrationBursts) so
+			// consecutive pops alternate color instead of repeating one hue.
+			colors: ["#4DFF8A", "#4DEFFF", "#FFDE59"], // titleColor's green, Config.player.color's cyan, Config.gold.color's gold
+		}),
 	}),
 
 	/**

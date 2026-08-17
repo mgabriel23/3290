@@ -368,6 +368,13 @@ export class GameplayScene {
     this._playLevelAudio();
     // Mission Mode's victory stinger — see _triggerMissionComplete.
     this._missionCompleteAudio = new AudioPool(Config.missionComplete.audioSrc, 4, Config.missionComplete.audioVolume);
+    // Mission Mode's victory fireworks — one Particles pool per celebration
+    // color, round-robin fired by _updateCelebrationBursts. See
+    // Config.missionComplete.celebration's own doc for the timing.
+    this._celebrationParticles = Config.missionComplete.celebration.colors.map(
+      (color) => new Particles(color, Config.missionComplete.celebration.sparkCount)
+    );
+    this._celebrationBurstsFired = 0;
     this._musicDuck = 1; // 0-1 bg-music volume multiplier — see _updateMusicDuck
 
     /** @type {WaveManager|null} created when a level's active phase begins */
@@ -401,6 +408,8 @@ export class GameplayScene {
     }
     if (this._missionComplete) {
       this._missionCompleteAge += dt;
+      this._updateCelebrationBursts();
+      for (const p of this._celebrationParticles) p.update(dt); // let the fireworks finish animating while everything else is frozen
       return; // frozen for good — only a continue tap moves things forward, see _renderMissionComplete
     }
     if (this._codex.isOpen || this._shop.isOpen || this._playback.isPaused) return; // frozen — nothing gameplay-related advances
@@ -974,8 +983,32 @@ export class GameplayScene {
   _triggerMissionComplete() {
     this._missionComplete    = true;
     this._missionCompleteAge = 0;
+    this._celebrationBurstsFired = 0;
     this._onMusicStop?.();
     this._missionCompleteAudio.play();
+    this._updateCelebrationBursts(); // fire burst #1 immediately — see Config.missionComplete.celebration's doc
+  }
+
+  /**
+   * Fires Config.missionComplete.celebration's fireworks bursts one at a
+   * time as `_missionCompleteAge` crosses each `burstInterval` — called from
+   * both `_triggerMissionComplete` (burst #1, instantly) and every frame
+   * update() spends frozen in the mission-complete state thereafter. Each
+   * due burst lands at a random point in the configured band and cycles
+   * round-robin through `_celebrationParticles`, one Particles pool per
+   * celebration color, so consecutive pops alternate hue.
+   */
+  _updateCelebrationBursts() {
+    const cfg = Config.missionComplete.celebration;
+    const due = Math.min(cfg.burstCount, Math.floor(this._missionCompleteAge / cfg.burstInterval) + 1);
+    const { width: vW } = Config.virtual;
+    while (this._celebrationBurstsFired < due) {
+      const pool = this._celebrationParticles[this._celebrationBurstsFired % this._celebrationParticles.length];
+      const x = vW / 2 + (Math.random() * 2 - 1) * cfg.spreadX;
+      const y = cfg.minY + Math.random() * (cfg.maxY - cfg.minY);
+      pool.emit(x, y);
+      this._celebrationBurstsFired++;
+    }
   }
 
   /** Gold cost of the NEXT revive this run — doubles with each one already used, up to `maxRevives`. See Config.gameOver.continue. */
@@ -1244,6 +1277,14 @@ export class GameplayScene {
   _renderMissionComplete() {
     const { width: vW, height: vH } = Config.virtual;
     const cfg = Config.missionComplete;
+
+    // Fireworks render first, and unconditionally — they start popping the
+    // instant the mission clears (see _triggerMissionComplete), well before
+    // the dim overlay/title below even begin their own revealDelay-gated
+    // fade-in, so the celebration reads against the just-cleared, undimmed
+    // screen rather than waiting on it.
+    for (const p of this._celebrationParticles) p.render(this.renderer);
+
     const revealAge = Math.max(0, this._missionCompleteAge - cfg.revealDelay);
     const alpha = Math.min(revealAge / cfg.fadeInDuration, 1);
     if (alpha <= 0) return; // still inside revealDelay — let the cleared screen read clearly first
