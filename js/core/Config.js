@@ -334,6 +334,9 @@ export const Config = Object.freeze({
 			turnRate: 3.0, // rad/sec homing turn rate
 			proximityRadius: 20, // vp — detonation distance to a live target
 			noTargetAccel: 1400, // vp/sec^2 — applied instead of homing once a missile has no live enemy left to retarget onto (see PlayerMissiles.update), so it visibly rushes off-screen and despawns quietly rather than detonating in place or drifting at cruise speed
+			launchSwingAngleMin: 1.05, // rad (~60°) — minimum magnitude of the random left/right offset applied to a missile's initial launch heading (see PlayerMissiles._fire)
+			launchSwingAngleMax: 1.75, // rad (~100°) — maximum magnitude; deliberately past 90° so a shot at a target dead overhead can visibly launch off to the side and dip below-horizontal before homing corrects it, instead of just leaning off-straight
+			homingDelay: 0.15, // seconds a freshly-launched missile flies dead straight along its swung heading before homing (turnRate) engages — splits the flight into two readable beats, "swing out" then "curve onto the target", rather than one continuous gentle bend that's easy to miss among the player's own bullets
 			maxLife: 5, // seconds before an unfulfilled missile just times out
 			fadeStart: 4, // seconds — begins fading out in its final second of life, same shape as Config.rocket.fadeStart
 			poolSize: 8,

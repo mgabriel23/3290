@@ -32,7 +32,7 @@
  * GameplayScene just calls `update(dt, player, waveManager)` every frame.
  */
 import { Config } from '../core/Config.js';
-import { directionalVelocity } from '../core/vectorMath.js';
+import { directionalVelocity, rotateAround } from '../core/vectorMath.js';
 
 const MAX        = Config.player.missiles.poolSize;
 const TRAIL_HIST = Config.player.missiles.trailHistory; // stored history positions per missile
@@ -74,6 +74,7 @@ export class PlayerMissiles {
     this._vx   = new Float32Array(MAX);
     this._vy   = new Float32Array(MAX);
     this._age  = new Float32Array(MAX);
+    this._homingDelay = new Float32Array(MAX); // seconds remaining before homing engages — see _fire/update
     this._targets = new Array(MAX).fill(null); // direct enemy-object references — see class doc
     this._count = 0;
 
@@ -134,6 +135,7 @@ export class PlayerMissiles {
     for (let i = 0; i < this._count; i++) {
       this._age[i]  += dt;
       this._hTick[i] += dt;
+      this._homingDelay[i] -= dt;
 
       // Retarget every frame the current target is missing/dead — same
       // query the fire-cooldown branch above uses — rather than coasting
@@ -150,22 +152,27 @@ export class PlayerMissiles {
 
       if (target) {
         // ── Homing — same cross-product steering as Rockets.js's own
-        // homing, see that file's doc for the math.
-        const ux = this._vx[i] / speed;
-        const uy = this._vy[i] / speed;
-        const ddx = target.x - this._x[i];
-        const ddy = target.y - this._y[i];
-        const dlen = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
-        const tx = ddx / dlen;
-        const ty = ddy / dlen;
-        const cross = ux * ty - uy * tx;
-        const maxT  = turnRate * dt;
-        const turn  = cross >= 0 ? Math.min(cross, maxT) : Math.max(cross, -maxT);
-        const nux = ux - turn * uy;
-        const nuy = uy + turn * ux;
-        const nlen = Math.sqrt(nux * nux + nuy * nuy) || 1;
-        this._vx[i] = (nux / nlen) * speed;
-        this._vy[i] = (nuy / nlen) * speed;
+        // homing, see that file's doc for the math. Held off for the first
+        // `homingDelay` seconds of flight (see _fire) so the missile
+        // actually flies its swung-off launch heading for a beat instead of
+        // starting to correct the instant it leaves the barrel.
+        if (this._homingDelay[i] <= 0) {
+          const ux = this._vx[i] / speed;
+          const uy = this._vy[i] / speed;
+          const ddx = target.x - this._x[i];
+          const ddy = target.y - this._y[i];
+          const dlen = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+          const tx = ddx / dlen;
+          const ty = ddy / dlen;
+          const cross = ux * ty - uy * tx;
+          const maxT  = turnRate * dt;
+          const turn  = cross >= 0 ? Math.min(cross, maxT) : Math.max(cross, -maxT);
+          const nux = ux - turn * uy;
+          const nuy = uy + turn * ux;
+          const nlen = Math.sqrt(nux * nux + nuy * nuy) || 1;
+          this._vx[i] = (nux / nlen) * speed;
+          this._vy[i] = (nuy / nlen) * speed;
+        }
       } else {
         // ── Nothing left to chase — hold the current heading (no more
         // turning) and accelerate, so it visibly rushes off the screen
@@ -212,6 +219,7 @@ export class PlayerMissiles {
         this._x[w] = this._x[i];   this._y[w] = this._y[i];
         this._vx[w] = this._vx[i]; this._vy[w] = this._vy[i];
         this._age[w] = this._age[i]; this._targets[w] = this._targets[i];
+        this._homingDelay[w] = this._homingDelay[i];
         this._hHead[w] = this._hHead[i];
         this._hTick[w] = this._hTick[i];
         this._hx.copyWithin(w * TRAIL_HIST, i * TRAIL_HIST, (i + 1) * TRAIL_HIST);
@@ -291,8 +299,17 @@ export class PlayerMissiles {
 
   _fire(ox, oy, target) {
     if (this._count >= MAX) return;
-    const { speed } = Config.player.missiles;
-    const [vx, vy] = directionalVelocity(ox, oy, target.x, target.y, speed);
+    const { speed, launchSwingAngleMin, launchSwingAngleMax, homingDelay } = Config.player.missiles;
+    // Launch well off dead-on-target — a wide enough swing that a target
+    // straight overhead can send the missile out sideways and dipping
+    // below-horizontal — then hold homing off for `homingDelay` seconds
+    // (see `update`) so it actually flies that heading for a beat before
+    // curving onto the target, reading as "swing out, then hook in" rather
+    // than one continuous gentle bend.
+    const mag  = launchSwingAngleMin + Math.random() * (launchSwingAngleMax - launchSwingAngleMin);
+    const swing = Math.random() < 0.5 ? -mag : mag;
+    const [aimX, aimY] = rotateAround(ox, oy, target.x, target.y, swing);
+    const [vx, vy] = directionalVelocity(ox, oy, aimX, aimY, speed);
     const i = this._count++;
 
     this._x[i]   = ox;
@@ -300,6 +317,7 @@ export class PlayerMissiles {
     this._vx[i]  = vx;
     this._vy[i]  = vy;
     this._age[i] = 0;
+    this._homingDelay[i] = homingDelay;
     this._targets[i] = target;
     this._hHead[i] = 0;
     this._hTick[i] = 0;
