@@ -5511,7 +5511,7 @@ export const Config = Object.freeze({
 		phoenix: Object.freeze({
 			name: "PHOENIX",
 
-			size: 52, // vp — hull half-reach; wingtips/tail tips extend to ~size, see PHOENIX_HULL_PTS
+			size: 40, // vp — hull half-reach; wingtips/tail tips extend to ~size, see PHOENIX_HULL_PTS (trimmed down from 52 — read as too large at that scale)
 			health: 560,
 			healthPerLevel: 70,
 			color: "#E8382F", // crimson/vermillion — distinct two-tone pairing (see engineCoreColor/flameColor below) from every existing flat-hue boss
@@ -5521,8 +5521,8 @@ export const Config = Object.freeze({
 			hitGlowBlur: 30,
 			engineCoreColor: "#FFD966", // gold ember — chest core, the "gold trim" half of the crimson+gold palette
 			flameColor: "#FFB238", // gold-orange tail plume
-			flameHalfWidth: 10,
-			hitRadius: 42,
+			flameHalfWidth: 8, // scaled down alongside `size`
+			hitRadius: 32, // vp — scaled down alongside `size`
 
 			entrySpeed: 150,
 			// vp — shared rest point (with restX = arena center, set in
@@ -5721,13 +5721,36 @@ export const Config = Object.freeze({
 		 *
 		 *   phase 1 (`phase1Duration` seconds) — "Spark Barrage": tracks the
 		 *   player (`_angle = atan2(-dx, dy)`, same convention Nova/Scout/
-		 *   BossEnemy already use) and fires ONE bolt (`bolt`,
-		 *   ElectronBolts.js) straight at the player's CURRENT position — no
-		 *   lead prediction, same idiom as Nova's seed/Phoenix's fireball —
-		 *   every `bolt.fireInterval` seconds. Unlike Tetra/Spiral/Nova's own
-		 *   "slow bullet, dodge at leisure" bullets, this leans the other
-		 *   way: a moderate cadence but a FAST travel speed, so each
-		 *   individual bolt is the real threat, not sheer stream density.
+		 *   BossEnemy already use) and, every `bolt.fireInterval` seconds,
+		 *   fires from ALL FOUR of the hull's outer spike tips at once — the
+		 *   4-point star actually discharges from every point instead of one
+		 *   bolt popping out of its center, and each tip reads as a distinct
+		 *   attack rather than 4 copies of the same shot (see
+		 *   ElectronBoss.js's `_updateBarragePhase` for the tip-anchor math,
+		 *   same local-vertex-as-attachment-point idiom as Phoenix's own
+		 *   BEAK_LX/LY):
+		 *     - FRONT tip (toward the player) — one round bolt (`bolt`,
+		 *       ElectronBolts.js) straight at the player's CURRENT position,
+		 *       no lead prediction, same idiom as Nova's seed/Phoenix's
+		 *       fireball. Unlike Tetra/Spiral/Nova's own "slow bullet, dodge
+		 *       at leisure" bullets, this leans the other way: a moderate
+		 *       cadence but a FAST travel speed, so each bolt is the real
+		 *       threat, not sheer stream density.
+		 *     - LEFT/RIGHT tips — one seed each (`seed`, ElectronSeeds.js),
+		 *       launched outward along the tip's own side direction (not
+		 *       aimed at the player, same "launched by angle" idiom Tetra's
+		 *       own hull-side seed uses), that detonates into a full ring of
+		 *       `shard.count` shrapnel (`shard`, ElectronShards.js) once
+		 *       alive for `seed.scatterDelay` seconds — same "pool reports
+		 *       WHEN, WaveManager decides WHAT" fan-out split Tetra's own
+		 *       seed→fragment chain already keeps.
+		 *     - BACK tip (away from the player) — one bolt (`arc`,
+		 *       ElectronArcBolt.js) straight at the player's CURRENT
+		 *       position, same no-lead idiom as the front tip, except it
+		 *       reflects off the LEFT/RIGHT screen edges up to
+		 *       `arc.maxBounces` times instead of being culled there — same
+		 *       mechanic ZigzagBullets.js uses, just player-aimed instead of
+		 *       ZigzagBoss's fixed turret angles.
 		 *
 		 *   phase 2 (`chain`) — "Chain Lash": fires `chain.chainCount`
 		 *   twin-sphere bolts (ElectronChains.js — two linked orbs,
@@ -5806,19 +5829,78 @@ export const Config = Object.freeze({
 			phase1Duration: 7,
 			phase3Duration: 9,
 
-			// Phase 1 — dedicated bullet pool (ElectronBolts.js), fired
-			// straight at the player's current position — see class doc for
-			// why a fast travel speed (not sheer stream density) is this
-			// attack's real threat.
+			// Phase 1 — all 4 hull spike tips fire together every
+			// `fireInterval` seconds (see class doc for the tip-by-tip
+			// breakdown): the FRONT tip fires this dedicated bullet pool
+			// (ElectronBolts.js) straight at the player's current position —
+			// see class doc for why a fast travel speed (not sheer stream
+			// density) is this attack's real threat. Round (strokeCircle),
+			// not the straight-line capsule most other boss bullets use —
+			// reads more like a spark than a fired shell, same reasoning as
+			// Phoenix's own round fireball.
 			bolt: Object.freeze({
-				fireInterval: 0.45, // seconds between shots — a real single-target cadence, not a barrage
+				fireInterval: 0.45, // seconds between volleys — a real single-target cadence, not a barrage
 				speed: 260, // vp/sec — noticeably faster than Tetra/Spiral/Nova's own "slow bullet" bosses, the actual threat here
 				color: "#22E8FF",
-				lineWidth: 4,
+				lineWidth: 3,
 				glowBlur: 12,
-				halfLen: 5,
+				radius: 6, // vp — drawn radius
 				poolSize: 40,
 				damage: 6, // matches a regular Scout bullet (Config.enemyBullet.damage)
+			}),
+
+			// Phase 1 — the LEFT/RIGHT tips each fire one of these outward
+			// along their own side direction (not aimed at the player, same
+			// "launched by angle" idiom Tetra's own hull-side seed uses —
+			// see TetraSeedBullets.js) every volley. After `scatterDelay`
+			// seconds alive it detonates into a full ring of `shard.count`
+			// shrapnel pieces (ElectronShards.js) — WaveManager's own
+			// `onDetonate` fans the ring out, same "seed reports WHEN,
+			// WaveManager decides WHAT" split Tetra's seed→fragment chain
+			// already keeps.
+			seed: Object.freeze({
+				speed: 130, // vp/sec — deliberately slow, most of its threat is the ring it becomes
+				scatterDelay: 0.9, // seconds alive before it bursts into shards
+				color: "#22E8FF",
+				lineWidth: 2.5,
+				glowBlur: 8,
+				radius: 5, // vp — base drawn radius
+				growthMult: 1.7, // radius multiplies up to this factor as scatterDelay approaches
+				poolSize: 12, // 2 seeds (left+right) per volley; scatterDelay > fireInterval so at most 2 volleys' worth overlap
+				damage: 6, // player HP lost on a direct hit, before it ever gets to burst
+			}),
+
+			// Phase 1's seed burst — see class doc. Plain evenly-spaced ring
+			// (same technique as Tetra's own fragment ring) so a seed's
+			// detonation always threatens every direction around it, not
+			// just back toward the player.
+			shard: Object.freeze({
+				count: 6, // shrapnel pieces per burst, evenly spaced around a full ring
+				speed: 150, // vp/sec
+				color: "#22E8FF",
+				lineWidth: 2.5,
+				glowBlur: 7,
+				halfLen: 4,
+				poolSize: 60, // sized for both side seeds (2x count) bursting near-simultaneously, plus a few stragglers
+				damage: 5,
+			}),
+
+			// Phase 1 — the BACK tip fires one of these straight at the
+			// player's current position (same no-lead idiom as the front
+			// tip's own bolt) every volley, except it reflects off the
+			// LEFT/RIGHT screen edges instead of being culled there, up to
+			// `maxBounces` times — same mechanic as ZigzagBullets.js, just
+			// launched player-aimed instead of ZigzagBoss's fixed turret
+			// angles.
+			arc: Object.freeze({
+				speed: 240, // vp/sec
+				maxBounces: 2,
+				color: "#22E8FF",
+				lineWidth: 3,
+				glowBlur: 12,
+				halfLen: 6,
+				poolSize: 24, // bounces keep bullets alive longer than a normal bolt, so more can be in flight at once
+				damage: 6,
 			}),
 
 			// Phase 2 — twin-sphere linked-bolt pool (ElectronChains.js). Each
@@ -5828,11 +5910,11 @@ export const Config = Object.freeze({
 			// current position straight at the player — see class doc.
 			chain: Object.freeze({
 				spacing: 70, // vp between the two linked orbs — a long connecting link, reads as a real hazard rather than a hairline
-				sphereRadius: 7, // vp — each orb's rendered radius
+				sphereRadius: 5, // vp — each orb's rendered radius (trimmed down from 7 — read as too big alongside the link)
 				jitterAmount: 7, // vp — max per-frame random offset applied to the connecting link's midpoints, see ElectronChains.render
 				speed: 190, // vp/sec
 				chainCount: 12, // bolts fired per phase-2 visit
-				chainInterval: 0.42, // seconds between bolts (40% slower than the original 0.3) — also re-aims the next one at the player's CURRENT position
+				chainInterval: 0.65, // seconds between bolts (slowed further from 0.42 — gives the player real reaction room between each one) — also re-aims the next one at the player's CURRENT position
 				settleDuration: 1.0, // seconds after the last bolt fires before phase 3 begins — a breathing-room beat
 				halfWidth: 12, // vp — collision half-thickness (added to the player's own hitRadius) tested against the link between the two orbs
 				damage: 14, // player HP lost on contact — a single consuming hit (see ElectronChains.checkHit), not a per-frame tick
@@ -5861,7 +5943,7 @@ export const Config = Object.freeze({
 				telegraphDuration: 0.6, // seconds the growing warning ring is up before the pulse goes live — the fairness/reaction window
 				activeDuration: 0.5, // seconds the AOE actually deals damage
 				recoverDuration: 0.4, // seconds the ring fades out afterward
-				radius: 110, // vp — AOE reach, well past `hitRadius` (see `.contactRadius`)
+				radius: 150, // vp — AOE reach, well past `hitRadius` (see `.contactRadius`) — widened from 110 to actually threaten the roam area around it
 				damage: 18,
 				color: "#22E8FF",
 			}),

@@ -1,30 +1,36 @@
 /**
  * ElectronBolts.js
- * Electron boss's phase-1 attack (see ElectronBoss.js) — a single slow bolt
- * fired straight at the player's position at the instant of firing, no lead
- * prediction, same "aim once, no homing" idiom as NovaSeedBullets'/
- * PhoenixFireballs' own phase-1 shots. Structurally identical to every other
- * boss's straight-line bullet pool (TetraBullets/ZigzagBullets/SpiralBullets/
- * NovaBullets/PhoenixSparks) — the shared spawn/advance/cull/collide/
- * render mechanics live in BossBulletPool.js (see that file's doc) — the
- * only difference is `fire` takes a target POINT instead of a raw angle,
- * converting to one before handing off to the shared pool.
+ * Electron boss's phase-1 FRONT-tip attack (see ElectronBoss.js) — a single
+ * slow-ish bolt fired straight at the player's position at the instant of
+ * firing, no lead prediction, same "aim once, no homing" idiom as
+ * NovaSeedBullets'/PhoenixFireballs' own phase-1 shots. Reuses
+ * BossBulletPool.js's shared spawn/advance/cull/collide mechanics (the only
+ * difference is `fire` takes a target POINT instead of a raw angle,
+ * converting to one before handing off to the shared pool), but renders as a
+ * growing-glow circle (strokeCircle) instead of BossBulletPool's own
+ * straight-line capsule — reads more like a spark than a fired shell, same
+ * reasoning as PhoenixFireballs' own round fireball.
  */
 import { Config } from '../core/Config.js';
-import { initBossBulletPool, fireBossBullet, updateBossBullets, checkBossBulletHit, renderBossBullets } from './BossBulletPool.js';
+import { initBossBulletPool, fireBossBullet, updateBossBullets, checkBossBulletHit } from './BossBulletPool.js';
 
 const MAX = Config.boss.electron.bolt.poolSize;
 
 export class ElectronBolts {
   constructor() {
     const { color, lineWidth, glowBlur } = Config.boss.electron.bolt;
+    // Still uses initBossBulletPool for its typed-array position/velocity
+    // storage and generic advance/cull/collide (fireBossBullet/
+    // updateBossBullets/checkBossBulletHit) — only the capsule-path pool/
+    // style it also allocates goes unused here, since render() below draws
+    // circles directly instead of calling BossBulletPool's renderBossBullets.
     initBossBulletPool(this, MAX, { color, lineWidth, glowBlur, lineCap: 'round', singleStroke: true });
   }
 
   /**
    * Spawn one bolt from `(ox, oy)` straight at `(tx, ty)` — the player's
    * position at fire time, no re-aiming after launch.
-   * @param {number} ox @param {number} oy  origin (boss's own center)
+   * @param {number} ox @param {number} oy  origin (the hull's front spike tip)
    * @param {number} tx @param {number} ty  player position at fire time
    */
   fire(ox, oy, tx, ty) {
@@ -57,6 +63,11 @@ export class ElectronBolts {
 
   /** @param {import('../core/Renderer.js').Renderer} renderer */
   render(renderer) {
-    renderBossBullets(renderer, this, Config.boss.electron.bolt.halfLen);
+    if (this._count === 0) return;
+    const { color, lineWidth, glowBlur, radius } = Config.boss.electron.bolt;
+    const style = { color, lineWidth, glowBlur, glowColor: color };
+    for (let i = 0; i < this._count; i++) {
+      renderer.strokeCircle(this._x[i], this._y[i], radius, style);
+    }
   }
 }

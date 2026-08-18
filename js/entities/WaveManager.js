@@ -117,6 +117,9 @@ import { PhoenixFireballs } from './PhoenixFireballs.js';
 import { PhoenixEmbers } from './PhoenixEmbers.js';
 import { PhoenixSparks } from './PhoenixSparks.js';
 import { ElectronBolts } from './ElectronBolts.js';
+import { ElectronSeeds } from './ElectronSeeds.js';
+import { ElectronShards } from './ElectronShards.js';
+import { ElectronArcBolt } from './ElectronArcBolt.js';
 import { ElectronChains } from './ElectronChains.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
 import { Particles } from './Particles.js';
@@ -403,6 +406,21 @@ export class WaveManager {
       },
     });
     this._electronBolts = new ElectronBolts();
+    // Electron's LEFT/RIGHT-tip seed→shard chain — same leaf-first
+    // construction order and "seed reports WHEN, WaveManager decides WHAT"
+    // fan-out split as Tetra's own seed→fragment chain above.
+    this._electronShards = new ElectronShards();
+    this._electronSeeds = new ElectronSeeds({
+      onDetonate: (x, y) => {
+        const { shard } = Config.boss.electron;
+        const startAngle = Math.random() * Math.PI * 2;
+        const angleStep = (Math.PI * 2) / shard.count;
+        for (let i = 0; i < shard.count; i++) {
+          this._electronShards.fire(x, y, startAngle + i * angleStep);
+        }
+      },
+    });
+    this._electronArcBolts = new ElectronArcBolt();
     this._electronChains = new ElectronChains();
     this._rockets = new Rockets({
       onDetonate: (x, y) => {
@@ -470,6 +488,8 @@ export class WaveManager {
     this._fireZigzagBullet = (ox, oy, angle) => this._zigzagBullets.fire(ox, oy, angle);
     this._firePhoenixFireball = (ox, oy, tx, ty) => this._phoenixFireballs.fire(ox, oy, tx, ty);
     this._fireElectronBolt = (ox, oy, tx, ty) => this._electronBolts.fire(ox, oy, tx, ty);
+    this._fireElectronSeed = (ox, oy, angle) => this._electronSeeds.fireAngle(ox, oy, angle);
+    this._fireElectronArc = (ox, oy, tx, ty) => this._electronArcBolts.fire(ox, oy, tx, ty);
     this._fireElectronChain = (ox, oy, tx, ty) => this._electronChains.fire(ox, oy, tx, ty);
     this._fireDrifterProjectile = (ox, oy, tx, ty, color) => this._drifterProjectiles.fire(ox, oy, tx, ty, color);
     // Passed into Enemy.js's repositioning so it picks a fresh rest point
@@ -499,6 +519,8 @@ export class WaveManager {
       fireZigzagBullet: this._fireZigzagBullet,
       firePhoenixFireball: this._firePhoenixFireball,
       fireElectronBolt: this._fireElectronBolt,
+      fireElectronSeed: this._fireElectronSeed,
+      fireElectronArc: this._fireElectronArc,
       fireElectronChain: this._fireElectronChain,
       fireDrifterProjectile: this._fireDrifterProjectile,
       barrierSurfaceY: this._barrierSurfaceY,
@@ -541,6 +563,9 @@ export class WaveManager {
     this._phoenixEmbers.update(dt);
     this._phoenixSparks.update(dt);
     this._electronBolts.update(dt);
+    this._electronSeeds.update(dt);
+    this._electronShards.update(dt);
+    this._electronArcBolts.update(dt);
     this._electronChains.update(dt);
 
     if (this._waveClear) return;
@@ -668,6 +693,9 @@ export class WaveManager {
     this._phoenixEmbers.render(renderer);
     this._phoenixSparks.render(renderer);
     this._electronBolts.render(renderer);
+    this._electronSeeds.render(renderer);
+    this._electronShards.render(renderer);
+    this._electronArcBolts.render(renderer);
     this._electronChains.render(renderer);
     this._rockets.render(renderer);
     this._drifterProjectiles.render(renderer);
@@ -1127,6 +1155,9 @@ export class WaveManager {
     if (this._phoenixEmbers.checkHit(x, y, hitRadius)) damage += Config.boss.phoenix.ember.damage * mult;
     if (this._phoenixSparks.checkHit(x, y, hitRadius)) damage += Config.boss.phoenix.spark.damage * mult;
     if (this._electronBolts.checkHit(x, y, hitRadius)) damage += Config.boss.electron.bolt.damage * mult;
+    if (this._electronSeeds.checkHit(x, y, hitRadius)) damage += Config.boss.electron.seed.damage * mult;
+    if (this._electronShards.checkHit(x, y, hitRadius)) damage += Config.boss.electron.shard.damage * mult;
+    if (this._electronArcBolts.checkHit(x, y, hitRadius)) damage += Config.boss.electron.arc.damage * mult;
     if (this._electronChains.checkHit(x, y, hitRadius)) damage += Config.boss.electron.chain.damage * mult;
 
     for (let i = 0; i < this._enemies.length; i++) {
@@ -1299,6 +1330,9 @@ export class WaveManager {
     this._phoenixEmbers.clear();
     this._phoenixSparks.clear();
     this._electronBolts.clear();
+    this._electronSeeds.clear();
+    this._electronShards.clear();
+    this._electronArcBolts.clear();
     this._electronChains.clear();
     this._rockets.clear();
     this._drifterProjectiles.clear();
@@ -1406,6 +1440,9 @@ export class WaveManager {
       && !this._phoenixEmbers.active
       && !this._phoenixSparks.active
       && !this._electronBolts.active
+      && !this._electronSeeds.active
+      && !this._electronShards.active
+      && !this._electronArcBolts.active
       && !this._electronChains.active;
   }
 

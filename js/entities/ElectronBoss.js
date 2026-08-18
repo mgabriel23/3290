@@ -17,11 +17,17 @@
  *
  *   phase 1 — "Spark Barrage" (`Config.boss.electron.phase1Duration`
  *   seconds): tracks the player (`_angle = atan2(-dx, dy)`, same convention
- *   Nova/Scout/BossEnemy already use) and fires ONE bolt (ElectronBolts.js)
- *   straight at the player's CURRENT position — no lead prediction — every
- *   `bolt.fireInterval` seconds. A moderate cadence but a FAST travel speed
- *   (unlike Tetra/Spiral/Nova's own "slow bullet" bosses) — each individual
- *   bolt is the real threat here, not stream density.
+ *   Nova/Scout/BossEnemy already use) and, every `bolt.fireInterval`
+ *   seconds, fires from ALL FOUR of the hull's outer spike tips at once
+ *   (`_updateBarragePhase`) — FRONT fires one round bolt (ElectronBolts.js)
+ *   straight at the player's CURRENT position, no lead prediction, a
+ *   moderate cadence but FAST travel speed (unlike Tetra/Spiral/Nova's own
+ *   "slow bullet" bosses); LEFT/RIGHT each fire a seed (ElectronSeeds.js)
+ *   outward along their own side direction that detonates into a ring of
+ *   shrapnel (ElectronShards.js); BACK fires one bolt (ElectronArcBolt.js)
+ *   also straight at the player, but bouncing off the left/right screen
+ *   edges instead of culling there. See `Config.boss.electron`'s own doc
+ *   for the full tip-by-tip breakdown.
  *
  *   phase 2 — "Chain Lash" (`chain`): fires `chain.chainCount` twin-sphere
  *   bolts (ElectronChains.js — two linked orbs, `chain.spacing` apart,
@@ -79,6 +85,15 @@ for (let j = 0; j < 8; j++) {
   const r = (j % 2 === 0) ? ES : INNER;
   ELECTRON_HULL_PTS.push([r * Math.cos(angle), r * Math.sin(angle)]);
 }
+
+// The hull's 4 outer spike-tip anchors (local space) — phase 1 fires a
+// different attack from each one every volley (see class doc/
+// _updateBarragePhase) so the barrage actually reads as coming from all 4
+// points of the star, not one bolt out of its center. Same local-vertex-as-
+// attachment-point idiom as PhoenixBoss's own BEAK_LX/LY/TAIL_LX/LY: FRONT
+// (local +Y) is "toward the player" once `_angle` rotates it, BACK (local
+// -Y) is directly opposite, LEFT/RIGHT (local -X/+X) are perpendicular.
+const FRONT_LY = ES, BACK_LY = -ES, SIDE_LX = ES;
 
 export class ElectronBoss {
   /**
@@ -159,6 +174,8 @@ export class ElectronBoss {
    * @param {number} playerX @param {number} playerY
    * @param {{
    *   fireElectronBolt: (ox:number,oy:number,tx:number,ty:number)=>void,
+   *   fireElectronSeed: (ox:number,oy:number,angle:number)=>void,
+   *   fireElectronArc: (ox:number,oy:number,tx:number,ty:number)=>void,
    *   fireElectronChain: (ox:number,oy:number,tx:number,ty:number)=>void,
    * }} fire
    */
@@ -177,7 +194,7 @@ export class ElectronBoss {
 
     this._phaseAge += dt;
 
-    if      (this._phase === 1) this._updateBarragePhase(dt, playerX, playerY, fire.fireElectronBolt);
+    if      (this._phase === 1) this._updateBarragePhase(dt, playerX, playerY, fire);
     else if (this._phase === 2) this._updateChainPhase(dt, playerX, playerY, fire.fireElectronChain);
     else                        this._updateSurgePhase(dt, playerX, playerY);
   }
@@ -206,15 +223,35 @@ export class ElectronBoss {
 
   _setSurgeState(name) { this._surgeState = name; this._surgeAge = 0; }
 
-  /** Phase 1 — tracks the player, fires bolts on a tight cadence, advances to phase 2 after `phase1Duration`. */
-  _updateBarragePhase(dt, playerX, playerY, fireBolt) {
+  /**
+   * Phase 1 — tracks the player, every `bolt.fireInterval` seconds fires
+   * from all 4 hull spike tips at once (see class doc), advances to phase 2
+   * after `phase1Duration`.
+   */
+  _updateBarragePhase(dt, playerX, playerY, fire) {
     const cfg = this._cfg;
     const dx = playerX - this.x, dy = playerY - this.y;
     this._angle = Math.atan2(-dx, dy);
 
     this._fireTimer -= dt;
     if (this._fireTimer <= 0) {
-      fireBolt(this.x, this.y, playerX, playerY);
+      const cos = Math.cos(this._angle), sin = Math.sin(this._angle);
+      // World position of each local (lx, ly) tip anchor — same rotation
+      // math as EnemyCombat's shared idiom / PhoenixBoss's own beak/tail
+      // anchors: world = (x,y) + rotate(_angle) * (lx, ly).
+      const frontX = this.x - sin * FRONT_LY, frontY = this.y + cos * FRONT_LY;
+      const backX  = this.x - sin * BACK_LY,  backY  = this.y + cos * BACK_LY;
+      const leftX  = this.x - cos * SIDE_LX,  leftY  = this.y - sin * SIDE_LX;
+      const rightX = this.x + cos * SIDE_LX,  rightY = this.y + sin * SIDE_LX;
+
+      fire.fireElectronBolt(frontX, frontY, playerX, playerY);
+      fire.fireElectronArc(backX, backY, playerX, playerY);
+      // Rotated local +X is exactly the world direction (cos(_angle),
+      // sin(_angle)) — see class doc — so the right tip fires straight
+      // along `_angle` itself, and the left tip along its opposite.
+      fire.fireElectronSeed(rightX, rightY, this._angle);
+      fire.fireElectronSeed(leftX, leftY, this._angle + Math.PI);
+
       this._fireTimer += cfg.bolt.fireInterval;
     }
 
