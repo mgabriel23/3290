@@ -5,7 +5,7 @@
  * prediction, same "aim once, no homing" idiom as NovaSeedBullets'/
  * PhoenixFireballs' own phase-1 shots. Structurally identical to every other
  * boss's straight-line bullet pool (TetraBullets/ZigzagBullets/SpiralBullets/
- * NovaBullets/PhoenixFireballs) — the shared spawn/advance/cull/collide/
+ * NovaBullets/PhoenixSparks) — the shared spawn/advance/cull/collide/
  * render mechanics live in BossBulletPool.js (see that file's doc) — the
  * only difference is `fire` takes a target POINT instead of a raw angle,
  * converting to one before handing off to the shared pool.

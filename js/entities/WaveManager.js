@@ -114,6 +114,8 @@ import { NovaBullets } from './NovaBullets.js';
 import { PulsorBullets } from './PulsorBullets.js';
 import { ZigzagBullets } from './ZigzagBullets.js';
 import { PhoenixFireballs } from './PhoenixFireballs.js';
+import { PhoenixEmbers } from './PhoenixEmbers.js';
+import { PhoenixSparks } from './PhoenixSparks.js';
 import { ElectronBolts } from './ElectronBolts.js';
 import { ElectronChains } from './ElectronChains.js';
 import { DrifterProjectiles } from './DrifterProjectiles.js';
@@ -367,7 +369,39 @@ export class WaveManager {
     });
     this._pulsorBullets = new PulsorBullets();
     this._zigzagBullets = new ZigzagBullets();
-    this._phoenixFireballs = new PhoenixFireballs();
+    // Phoenix's fireball cascades through 3 generations — see
+    // PhoenixBoss.js's class doc — built leaf-first (sparks, then embers
+    // referencing sparks, then fireballs referencing embers), same
+    // dependency order as Nova's own fragment-then-seed construction below.
+    // A fireball's `onSpread` fans out into `ember.count` embers across
+    // `ember.spreadAngle`, centered on the fireball's own heading at the
+    // moment it split; an ember's `onScatter` repeats the same trick one
+    // generation further, into `spark.count` sparks across the WIDER
+    // `spark.spreadAngle` — both fan-out formulas live HERE (not in any of
+    // the three pool files), same "pool reports WHEN/WHERE/heading,
+    // WaveManager decides WHAT" split every other boss's own seed→fragment
+    // chain already keeps.
+    this._phoenixSparks = new PhoenixSparks();
+    this._phoenixEmbers = new PhoenixEmbers({
+      onScatter: (x, y, angle) => {
+        const { spark } = Config.boss.phoenix;
+        const start = angle - spark.spreadAngle / 2;
+        const step  = spark.count > 1 ? spark.spreadAngle / (spark.count - 1) : 0;
+        for (let i = 0; i < spark.count; i++) {
+          this._phoenixSparks.fire(x, y, start + i * step);
+        }
+      },
+    });
+    this._phoenixFireballs = new PhoenixFireballs({
+      onSpread: (x, y, angle) => {
+        const { ember } = Config.boss.phoenix;
+        const start = angle - ember.spreadAngle / 2;
+        const step  = ember.count > 1 ? ember.spreadAngle / (ember.count - 1) : 0;
+        for (let i = 0; i < ember.count; i++) {
+          this._phoenixEmbers.fire(x, y, start + i * step);
+        }
+      },
+    });
     this._electronBolts = new ElectronBolts();
     this._electronChains = new ElectronChains();
     this._rockets = new Rockets({
@@ -504,6 +538,8 @@ export class WaveManager {
     this._pulsorBullets.update(dt);
     this._zigzagBullets.update(dt);
     this._phoenixFireballs.update(dt);
+    this._phoenixEmbers.update(dt);
+    this._phoenixSparks.update(dt);
     this._electronBolts.update(dt);
     this._electronChains.update(dt);
 
@@ -629,6 +665,8 @@ export class WaveManager {
     this._pulsorBullets.render(renderer);
     this._zigzagBullets.render(renderer);
     this._phoenixFireballs.render(renderer);
+    this._phoenixEmbers.render(renderer);
+    this._phoenixSparks.render(renderer);
     this._electronBolts.render(renderer);
     this._electronChains.render(renderer);
     this._rockets.render(renderer);
@@ -1086,6 +1124,8 @@ export class WaveManager {
     if (this._pulsorBullets.checkHit(x, y, hitRadius)) damage += Config.boss.pulsor.pulseDamage * mult;
     if (this._zigzagBullets.checkHit(x, y, hitRadius)) damage += Config.boss.zigzag.bullet.damage * mult;
     if (this._phoenixFireballs.checkHit(x, y, hitRadius)) damage += Config.boss.phoenix.fireball.damage * mult;
+    if (this._phoenixEmbers.checkHit(x, y, hitRadius)) damage += Config.boss.phoenix.ember.damage * mult;
+    if (this._phoenixSparks.checkHit(x, y, hitRadius)) damage += Config.boss.phoenix.spark.damage * mult;
     if (this._electronBolts.checkHit(x, y, hitRadius)) damage += Config.boss.electron.bolt.damage * mult;
     if (this._electronChains.checkHit(x, y, hitRadius)) damage += Config.boss.electron.chain.damage * mult;
 
@@ -1256,6 +1296,8 @@ export class WaveManager {
     this._pulsorBullets.clear();
     this._zigzagBullets.clear();
     this._phoenixFireballs.clear(); // was missing entirely — a pre-existing gap in this list, fixed alongside adding Electron's own pools below
+    this._phoenixEmbers.clear();
+    this._phoenixSparks.clear();
     this._electronBolts.clear();
     this._electronChains.clear();
     this._rockets.clear();
@@ -1361,6 +1403,8 @@ export class WaveManager {
       && !this._pulsorBullets.active
       && !this._zigzagBullets.active
       && !this._phoenixFireballs.active
+      && !this._phoenixEmbers.active
+      && !this._phoenixSparks.active
       && !this._electronBolts.active
       && !this._electronChains.active;
   }

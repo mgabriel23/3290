@@ -5422,19 +5422,21 @@ export const Config = Object.freeze({
 		}),
 
 		/**
-		 * Boss #9 — "Phoenix". An original angular bird silhouette (see
-		 * PhoenixBoss.js's PHOENIX_HULL_PTS — a swept-wing, forked-tail bird
-		 * shape, not a reskin, same "original hull" lineage as Spiral/Tetra/
-		 * Nova/Pulsor/Zigzag), the first boss whose hull isn't a regular
-		 * polygon. Reuses the ship-family's nose/tail anchor convention
-		 * (Enemy.js's `atan2(-dx, dy)` — local -Y away from the player, local
-		 * +Y toward it) in a way that doubles as the phoenix's own anatomy:
-		 * the tail-spike anchor (local -Y) gets `renderEngineFlame`'s exhaust
-		 * plume as a trailing fire plume, and the beak anchor (local +Y) is
-		 * where phase 1's fireballs launch from — same `renderFlame`/
-		 * `renderCore` pairing BossEnemy.js uses, not the coreGlow-ring-only
-		 * treatment Tetra/Nova/Pulsor/Zigzag use, because — like BossEnemy —
-		 * this hull has a real facing direction, not just a spinning turret.
+		 * Boss #9 — "Phoenix". An original swept-wing bird silhouette (see
+		 * PhoenixBoss.js's PHOENIX_HULL_PTS — angular head/beak, jagged
+		 * double-tipped wings swept back like primary feathers, and a clean
+		 * swallow-style forked tail with a single notch, not a reskin, same
+		 * "original hull" lineage as Spiral/Tetra/Nova/Pulsor/Zigzag), the
+		 * first boss whose hull isn't a regular polygon. Reuses the ship-
+		 * family's nose/tail anchor convention (Enemy.js's `atan2(-dx, dy)` —
+		 * local -Y away from the player, local +Y toward it) in a way that
+		 * doubles as the phoenix's own anatomy: the tail anchor (local -Y,
+		 * between the two fork tips) gets `renderEngineFlame`'s exhaust plume
+		 * as a trailing fire plume, and the beak anchor (local +Y) is where
+		 * phase 1's fireballs launch from — same `renderFlame`/`renderCore`
+		 * pairing BossEnemy.js uses, not the coreGlow-ring-only treatment
+		 * Tetra/Nova/Pulsor/Zigzag use, because — like BossEnemy — this hull
+		 * has a real facing direction, not just a spinning turret.
 		 *
 		 * A repeating TIMED loop between THREE phases (`_phase`/`_phaseAge`),
 		 * one more than every other boss's 2-phase loop, all sharing ONE
@@ -5444,23 +5446,37 @@ export const Config = Object.freeze({
 		 * seam reasoning:
 		 *
 		 *   phase 1 (`phase1Duration` seconds) — circles the rest point on a
-		 *   closed loop (`orbitRadiusX/Y`, `orbitSpeed`) that starts and ends
+		 *   closed loop (`orbitRadiusX/Y`, `orbitCycles`) that starts and ends
 		 *   exactly AT the rest point (same zero-jump trick BossEnemy's own
-		 *   figure-8 orbit uses), beak tracking the player throughout, firing
-		 *   one aimed fireball (PhoenixFireballs.js) straight at the player's
-		 *   CURRENT position — no lead prediction, same idiom as Nova's seed —
-		 *   every `fireball.fireInterval` seconds.
+		 *   figure-8 orbit uses — PhoenixBoss's constructor derives the
+		 *   actual orbitSpeed from `orbitCycles` so this is guaranteed, not
+		 *   just approximate), beak tracking the player throughout, firing
+		 *   one round, aimed fireball (PhoenixFireballs.js) straight at the
+		 *   player's CURRENT position — no lead prediction, same idiom as
+		 *   Nova's seed — every `fireball.fireInterval` seconds. Deliberately
+		 *   slow (`fireball.speed`) because it's the first stage of a 3-stage
+		 *   cascade: once alive for `fireball.spreadDelay` seconds it spreads
+		 *   into a fan of PhoenixEmbers.js, each of which later scatters into
+		 *   a wider burst of PhoenixSparks.js (`ember.scatterDelay`) — see
+		 *   PhoenixEmbers.js's own doc for why the fan-out math lives in
+		 *   WaveManager, not either bullet-pool file. Every stage grows
+		 *   visibly just before it splits (`growthMult`), the same "about to
+		 *   burst" telegraph Nova's own seed uses.
 		 *
 		 *   phase 2 (`charge`) — a single telegraphed dash, three beats:
 		 *   'telegraph' locks the player's position at that instant (NOT
-		 *   re-aimed as they move) and shows a directional indicator line +
-		 *   target reticle for `charge.telegraphDuration` seconds; 'charging'
-		 *   then accelerates the boss from `chargeStartSpeed` toward
-		 *   `chargeMaxSpeed` (`chargeAcceleration` vp/sec²) along that FIXED
-		 *   locked direction — a real dodge-or-get-hit commitment, not a
-		 *   homing missile — dealing `charge.contactDamage` to the player on
-		 *   touch (opts into WaveManager.checkPlayerHit's generic
-		 *   `.contactDamage` hook only while actually mid-dash, see
+		 *   re-aimed as they move), shows a directional indicator line +
+		 *   target reticle, AND visibly winds up — eases `charge.windUpDistance`
+		 *   vp backward along the locked charge direction (a coiled
+		 *   anticipation beat, not just a static line) — over
+		 *   `charge.telegraphDuration` seconds; 'charging' then accelerates
+		 *   the boss from `chargeStartSpeed` toward `chargeMaxSpeed`
+		 *   (`chargeAcceleration` vp/sec²) along that SAME locked direction,
+		 *   starting from the pulled-back point so the whole dash reads as
+		 *   one continuous coil-and-release — a real dodge-or-get-hit
+		 *   commitment, not a homing missile — dealing `charge.contactDamage`
+		 *   to the player on touch (opts into WaveManager.checkPlayerHit's
+		 *   generic `.contactDamage` hook only while actually mid-dash, see
 		 *   PhoenixBoss.contactDamage's getter) until it either travels for
 		 *   `chargeDuration` seconds or crosses the `boundMarginX`/`boundYMin`/
 		 *   `boundYMax` clamp (kept comfortably above the barrier — this is a
@@ -5468,23 +5484,34 @@ export const Config = Object.freeze({
 		 *   eases it back to the shared rest point over `recoverDuration`
 		 *   seconds (smoothstep, not linear) before phase 3 begins.
 		 *
-		 *   phase 3 (`sway`) — sways side-to-side around the rest point
-		 *   (`swayAmplitude`, `swaySpeed`) while holding one continuous
-		 *   straight-line beam of fire anchored to its own X position,
-		 *   sweeping with the sway — same live point-test idiom TetraBoss's
-		 *   phase-2 lasers use (`checkLaserHit`, read by WaveManager
-		 *   generically), just a fixed vertical beam instead of a rotating
-		 *   one, so no segment-angle math is needed. Telegraphs harmlessly
-		 *   for `warmupDuration` seconds on every entry, same fairness beat
-		 *   Tetra's laser uses. Runs for an EXACT `swayCycles` full sway
-		 *   periods (not a raw seconds duration) — see PhoenixBoss.js's class
-		 *   doc — so it always finishes a cycle at its center point, which is
-		 *   also exactly phase 1's own start point, before looping back.
+		 *   phase 3 (`sway`) — holds still at the rest point while a single
+		 *   beam of fire goes through the SAME two-substate 'charging' →
+		 *   'lasering' shape TetraBoss's own phase-2 laser uses, deliberately
+		 *   matched 1:1 so both beam bosses read the same way to the player
+		 *   (see PhoenixBoss.js's class doc for the full substate-by-substate
+		 *   breakdown): 'charging' locks a base direction ONCE, at the exact
+		 *   instant phase 3 begins, at wherever the player is standing right
+		 *   then (`_baseAngle` — a live, zero-latency, every-frame re-aim was
+		 *   tried first and is provably undodgeable, since the swing returns
+		 *   to 0 offset twice per period BY DEFINITION, which would make a
+		 *   live re-aim guarantee-hit at every crossing no matter how the
+		 *   player moves), then shows only a harmless dashed preview line to
+		 *   the screen edge for `chargeDuration` seconds — frozen, no sway
+		 *   yet. 'lasering' then resolves that preview into the live,
+		 *   damaging beam (`checkLaserHit`, `core/vectorMath.js`'s
+		 *   `distanceToSegment`, same generic hook TetraBoss's phase-2 lasers
+		 *   use, over a segment `sway.length` vp long) which NOW sways
+		 *   `swayAmplitude` radians each way around that same locked
+		 *   direction, `swaySpeed` deliberately slow — same "readable drift,
+		 *   not a fast wag" reasoning TetraBoss's own phase-2 laser sway
+		 *   uses — for `liveDuration` seconds before looping back to phase 1.
+		 *   The hull itself rotates to visually aim along the beam
+		 *   throughout both substates.
 		 */
 		phoenix: Object.freeze({
 			name: "PHOENIX",
 
-			size: 52, // vp — hull half-reach; wingtips/tail spike extend to ~size, see PHOENIX_HULL_PTS
+			size: 52, // vp — hull half-reach; wingtips/tail tips extend to ~size, see PHOENIX_HULL_PTS
 			health: 560,
 			healthPerLevel: 70,
 			color: "#E8382F", // crimson/vermillion — distinct two-tone pairing (see engineCoreColor/flameColor below) from every existing flat-hue boss
@@ -5500,31 +5527,107 @@ export const Config = Object.freeze({
 			entrySpeed: 150,
 			// vp — shared rest point (with restX = arena center, set in
 			// PhoenixBoss's constructor) that phase 1's orbit, phase 2's
-			// recover beat, and phase 3's sway ALL treat as their common
-			// anchor — see class doc for why that's load-bearing, not
+			// recover beat, and phase 3's hold-and-swing ALL treat as their
+			// common anchor — see class doc for why that's load-bearing, not
 			// cosmetic. Kept clear of the boss health bar (bottom edge ~162)
 			// with the same margin reasoning as every other boss's restY.
 			restY: 280,
 
-			// Phase 1 — circular orbit + aimed fireballs, see class doc.
+			// Phase 1 — circular orbit + a 3-stage cascading fireball, see
+			// class doc. Each stage's own pool file (PhoenixFireballs.js/
+			// PhoenixEmbers.js/PhoenixSparks.js) owns its own spawn/advance/
+			// cull/collide loop; the fan-out formula between stages lives in
+			// WaveManager (`onSpread`/`onScatter`), same "pool reports
+			// WHEN/WHERE, WaveManager decides WHAT" split every other boss's
+			// seed→fragment chain already keeps.
 			phase1Duration: 8,
 			orbitRadiusX: 95, // vp — horizontal reach
 			orbitRadiusY: 65, // vp — vertical reach — close enough to orbitRadiusX to read as "circled", per the class doc, rather than Boss #1's deliberately flat figure-8
-			orbitSpeed: 1.1, // rad/sec
+			// Integer number of full laps phase 1's orbit completes in
+			// `phase1Duration` — PhoenixBoss's constructor DERIVES the actual
+			// orbitSpeed from this (`orbitCycles * 2π / phase1Duration`)
+			// rather than an authored orbitSpeed, so `phase1Duration` is
+			// GUARANTEED to land the orbit back exactly on the rest point
+			// (orbitPhase = orbitCycles * 2π) every time, matching the class
+			// doc's "zero positional pop" promise. A previous hand-picked
+			// orbitSpeed (1.1) didn't divide phase1Duration evenly, so phase
+			// 1 actually ended ~118vp off the rest point — which, combined
+			// with phase 2's wind-up pulling further away from the player,
+			// could push the charge's starting Y past `charge.boundYMin`
+			// before 'charging' even began, instantly hitting the bound
+			// clamp and collapsing the whole dash to near-zero duration
+			// (reported as "phase 2 stops before finishing, laser fires out
+			// of the blue").
+			orbitCycles: 1,
+
+			// Stage 1 — the fireball itself. Round (strokeCircle), not the
+			// straight-line capsule every OTHER boss bullet uses — reads more
+			// like an ember than a fired shell, and grows as `spreadDelay`
+			// approaches (PhoenixFireballs.render) to telegraph the split.
 			fireball: Object.freeze({
-				fireInterval: 0.9,
-				speed: 230,
+				fireInterval: 1.1, // seconds between shots — longer than the old 0.9 since each shot now cascades into up to (ember.count * spark.count) + ember.count descendants
+				speed: 150, // vp/sec — deliberately slower than a typical boss bullet (was 230) so the cascade has room to unfold on screen before it would otherwise reach the player
+				spreadDelay: 0.6, // seconds alive before it spreads into embers
 				color: "#FF6A3D",
-				lineWidth: 4,
+				lineWidth: 3,
 				glowBlur: 10,
-				halfLen: 8,
-				poolSize: 40,
-				damage: 12,
+				radius: 9, // vp — base drawn radius
+				growthMult: 1.7, // radius multiplies up to this factor as spreadDelay approaches
+				poolSize: 16, // fireInterval > spreadDelay, so at most ~1 is ever in flight pre-spread; sized with headroom
+				damage: 10, // player HP lost on a direct hit, before it ever gets to spread
 			}),
 
-			// Phase 2 — telegraphed charge, see class doc.
+			// Stage 2 — the fan of embers a fireball spreads into (WaveManager's
+			// `onSpread`), fanned `spreadAngle` total around the fireball's own
+			// heading at the moment it split. Each ember later scatters into
+			// sparks the same way, `scatterDelay` seconds after ITS OWN birth.
+			ember: Object.freeze({
+				count: 3, // embers per fireball spread
+				spreadAngle: 0.9, // rad (~52°) total fan width around the fireball's heading
+				speed: 170, // vp/sec — a little faster than the fireball, sells "spreading outward with force"
+				scatterDelay: 0.5, // seconds alive before it scatters into sparks
+				color: "#FF8F4D",
+				lineWidth: 2.5,
+				glowBlur: 8,
+				radius: 6,
+				growthMult: 1.6,
+				// One fireball spread alone makes 3; consecutive fireballs are
+				// spaced far enough apart (fireInterval 1.1s > spreadDelay +
+				// scatterDelay ~1.1s) that batches mostly don't overlap, but
+				// sized with headroom for stragglers/near-overlap anyway.
+				poolSize: 24,
+				damage: 8,
+			}),
+
+			// Stage 3 — the final, wider burst of sparks an ember scatters
+			// into (WaveManager's `onScatter`) — a plain straight-line bullet
+			// from here on, never splits again. `spreadAngle` is wider than
+			// the ember stage's own (a "burst"/"scatter" vs. the fireball's
+			// narrower forward "spread"), but deliberately NOT so wide that
+			// individual sparks deviate past ~half a right angle off the
+			// ember's own heading — a wider fan than that reads as random
+			// sideways/backward pops rather than a burst continuing outward,
+			// which is what made this stage hard to notice/read as a real
+			// second split. 3 sparks (not 2) so the burst reads as a cluster
+			// rather than two easily-missed dots.
+			spark: Object.freeze({
+				count: 3, // sparks per ember scatter
+				spreadAngle: 1.9, // rad (~109°) total fan width around the ember's heading — each spark at most ~54° off the ember's own travel direction
+				speed: 130, // vp/sec
+				color: "#FFC24D",
+				lineWidth: 2.5,
+				glowBlur: 8,
+				radius: 5,
+				// 3 embers × 3 sparks = 9 per full cascade, with headroom for
+				// two cascades briefly overlapping plus stragglers.
+				poolSize: 48,
+				damage: 6,
+			}),
+
+			// Phase 2 — telegraphed wind-up + charge, see class doc.
 			charge: Object.freeze({
-				telegraphDuration: 0.85, // seconds the directional indicator is up before the dash — the fairness/reaction window
+				telegraphDuration: 1.0, // seconds the wind-up (pull-back) + directional indicator are up before the dash — the fairness/reaction window; longer than the old 0.85 so the backward coil actually reads before the release
+				windUpDistance: 55, // vp — how far the boss visibly eases backward (opposite the locked charge direction) during the telegraph, selling "coiling up" before the release rather than dashing cold from a standstill
 				chargeStartSpeed: 120, // vp/sec
 				chargeAcceleration: 900, // vp/sec² — reaches chargeMaxSpeed in ~0.73s
 				chargeMaxSpeed: 780, // vp/sec
@@ -5549,15 +5652,37 @@ export const Config = Object.freeze({
 				targetDotGlowBlur: 8,
 			}),
 
-			// Phase 3 — sweeping beam + sway, see class doc.
+			// Phase 3 — 'charging' (frozen dashed preview) -> 'lasering' (live,
+			// swaying beam), the same two-substate shape as TetraBoss's own
+			// phase-2 laser (`laser` in Config.boss.tetra) — field names below
+			// deliberately mirror TetraBoss's own `laser` block. See class doc.
 			sway: Object.freeze({
-				swaySpeed: 1.5, // rad/sec
-				// EXACT full sway periods, not a raw seconds duration — see
-				// class doc for why this must divide evenly (PhoenixBoss.js
-				// derives phase3's actual duration as swayCycles * 2π/swaySpeed).
-				swayCycles: 2,
-				swayAmplitude: 130,
-				warmupDuration: 0.5, // seconds the beam is visible but harmless on every phase-3 entry
+				// 'charging' — frozen at the locked direction, no sway yet.
+				chargeDuration: 1.1, // seconds the dashed preview is up before the beam goes live — the fairness/reaction window
+				warningLineWidth: 3,
+				warningLineDash: Object.freeze([10, 8]), // vp on/off pattern for the dashed preview line
+				warningMarkerRadius: 10, // vp — pulsing ring drawn exactly where the beam will cross the screen edge (rayRectExit's result)
+				warningMarkerLineWidth: 3,
+				warningMarkerGlowBlur: 12,
+				chargePulseSpeed: 6, // rad/sec — how fast the preview line/edge marker pulse during 'charging'
+
+				// 'lasering' — the live, damaging beam, already fully bright
+				// the instant it appears (no further fade-in — 'charging'
+				// already told the player everything they need to know).
+				liveDuration: 6, // seconds the beam is live/damaging and swaying before looping back to phase 1
+				swaySpeed: 0.65, // rad/sec — deliberately slow, same "readable drift, not a fast wag" reasoning as TetraBoss's own phase-2 laser sway
+				// rad (~18°) — how far the beam swings off its locked center
+				// direction, each way. Deliberately narrower than the 0.5 rad
+				// (~29°) first tried: at typical boss-to-player distance
+				// (boss sits near restY 280, player usually 550-650vp below),
+				// even 0.5 rad sweeps lateral distance ≈ dist·sin(0.5), which
+				// can exceed the ENTIRE virtual width (540vp) — leaving no
+				// safe zone anywhere on screen for the player to commit to
+				// after the initial lock. This value keeps a real margin at
+				// both screen edges untouched by the sweep at any point in
+				// its cycle.
+				swayAmplitude: 0.32,
+				length: 1300, // vp — comfortably longer than the virtual canvas's own diagonal (~1101vp), so the beam always reaches past every edge regardless of its current angle
 				halfWidth: 14,
 				damage: 14,
 				color: "#E8382F",
