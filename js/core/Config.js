@@ -5177,8 +5177,8 @@ export const Config = Object.freeze({
 			size: 46, // vp — hull circle radius
 			health: 520,
 			healthPerLevel: 68,
-			color: "#FF4D6D", // coral-red — distinct from every other boss (red/violet/amber/green/blue/gold) and reads as pulsing energy
-			fillColor: "#2a0812",
+			color: "#C6FF3D", // acid chartreuse — the one hue gap (yellow-green) left in the boss roster (red/crimson/orange/amber/gold/green/blue/cyan/violet all taken), and reads as sickly/toxic rather than a warm "energy" color
+			fillColor: "#141f08",
 			lineWidth: 3,
 			glowBlur: 18,
 			hitGlowBlur: 30,
@@ -5188,40 +5188,36 @@ export const Config = Object.freeze({
 			restY: 250, // vp — where the entry glide ends and patrolling begins
 
 			// Continuous bouncing patrol, same DVD-logo bounce technique as
-			// Tetra/Nova's own `_updatePatrol`.
-			moveSpeed: 80, // vp/sec
+			// Tetra/Nova's own `_updatePatrol`. Bumped from 80 — this creature
+			// should never look like it's merely drifting.
+			moveSpeed: 130, // vp/sec
 			boundMarginX: 90, // vp from each side edge
 			boundYMin: 180, // vp — kept clear of the boss health bar above it
 			boundYMax: 420,
 
-			// Rim marker — see class doc.
-			markerRadius: 5, // vp
-			markerLineWidth: 2,
-			markerGlowBlur: 8,
-
-			// How long each phase lasts before looping to the other — see
-			// class doc.
-			phase1Duration: 9, // seconds of the C-shaped wave attack
-			phase2Duration: 7, // seconds of the rotating full-ring pulses
+			// How long each phase lasts before looping to the other — trimmed
+			// from 9/7 for a tighter, more relentless loop — see class doc.
+			phase1Duration: 8, // seconds of the C-shaped wave attack
+			phase2Duration: 6, // seconds of the rotating full-ring pulses
 
 			// Phase 1 — see class doc.
 			wave: Object.freeze({
-				interval: 1.4, // seconds between waves — trimmed from 1.6 for a slightly more aggressive cadence
+				interval: 1.0, // seconds between waves — trimmed from 1.4 for a noticeably more aggressive cadence
 				count: 16, // pulses around the solid arc
 				gapAngle: 1.0, // radians (~57°) left open, centered away from the player
-				speed: 155, // vp/sec — bumped from 140 alongside the faster cadence
-				poolSize: 140, // generous — several waves' worth can be in flight at once given interval (1.4s) vs how long a pulse lingers before leaving the screen
+				speed: 190, // vp/sec — bumped from 155 alongside the faster cadence
+				poolSize: 140, // generous — several waves' worth can be in flight at once given interval (1.0s) vs how long a pulse lingers before leaving the screen
 			}),
 
 			// Phase 2 — see class doc.
 			ring: Object.freeze({
-				windUp: 0.5, // seconds of visible spin-up before the first ring of a phase-2 visit — the telegraph
-				interval: 1.15, // seconds between ring pulses — trimmed from 1.3 for a slightly more aggressive cadence
+				windUp: 0.4, // seconds of visible spin-up before the first ring of a phase-2 visit — the telegraph, trimmed from 0.5
+				interval: 0.85, // seconds between ring pulses — trimmed from 1.15 for a noticeably more aggressive cadence
 				count: 30, // bullet slots evenly spaced around the full circle, before gaps are carved out
 				gapCount: 3, // evenly-spaced safe lanes per ring
 				gapWidth: 0.65, // radians per gap (~37°)
-				rotationSpeed: 1.1, // rad/sec while in phase 2 — what makes each ring's gaps land somewhere new
-				speed: 175, // vp/sec — bumped from 160 alongside the faster cadence, still a touch faster than the phase-1 wave
+				rotationSpeed: 1.7, // rad/sec while in phase 2 — bumped from 1.1, what makes each ring's gaps land somewhere new
+				speed: 205, // vp/sec — bumped from 175 alongside the faster cadence, still a touch faster than the phase-1 wave
 				poolSize: 220, // generous — see wave.poolSize's own reasoning, scaled up for the larger per-ring bullet count
 			}),
 
@@ -5232,19 +5228,49 @@ export const Config = Object.freeze({
 			// these don't collide with the hull's OWN `color`/`lineWidth`/
 			// `glowBlur` fields above.
 			bullet: Object.freeze({
-				color: "#FF4D6D",
+				color: "#C6FF3D",
 				lineWidth: 9,
 				halfLen: 2,
 				glowBlur: 10,
 			}),
 			pulseDamage: 9, // shared by both phases' pulses — see class doc
 
-			// Pulsing core-ring glow at the center — stands in for an engine
-			// flame, same reasoning as Spiral/Tetra/Nova's own `coreGlow*` fields.
-			coreRadius: 14, // vp
-			coreGlowLineWidth: 3,
-			coreGlowBlur: 12,
-			coreGlowPulseSpeed: 3, // rad/sec — breathing pulse
+			// Subtle hull "breathing" — a living organism, not a rigid metal
+			// ball. Small amplitude so it never meaningfully fights `hitRadius`.
+			pulse: Object.freeze({
+				amp: 0.035, // fraction of `size`
+				speed: 1.8, // rad/sec
+			}),
+
+			// Cannon barrels ringing the hull — replaces the old writhing
+			// tendrils. Rendered at the EXACT angles `_fireWave`/`_fireRing`
+			// will actually launch pulses from (see PulsorBoss.js's shared
+			// `_forEachWaveAngle`/`_forEachRingAngle`), so every pulse visibly
+			// leaves from a barrel's muzzle instead of appearing out of open
+			// rim — a live preview of the pattern about to fire, not decoration.
+			cannon: Object.freeze({
+				len: 12, // vp beyond the hull rim
+				baseHalfWidth: 2.5, // vp — half-width where the barrel meets the hull
+				tipHalfWidth: 4.5,  // vp — half-width at the muzzle (slightly flared)
+				lineWidth: 2,
+				glowBlur: 8,
+			}),
+
+			// An unblinking eye at the core, replacing the old plain pulsing
+			// ring — always tracks the player (pupil offsets within the
+			// sclera toward them) and dilates as the next attack approaches
+			// (`_threatLevel`), a readable tell for when a wave/ring is about
+			// to fire. See PulsorBoss.js's `_renderEye`.
+			eye: Object.freeze({
+				scleraRadius: 15, // vp
+				scleraColor: "#0d1505",
+				irisColor: "#C6FF3D",
+				pupilColor: "#050a02",
+				pupilMinRadius: 3, // at rest
+				pupilMaxRadius: 7.5, // fully dilated, right before firing
+				lookOffset: 6, // vp — how far the pupil shifts within the sclera toward the player
+				glowBlur: 14,
+			}),
 
 			sparksPerEmit: 44,
 			points: 3100,

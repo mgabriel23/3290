@@ -8,12 +8,31 @@
  * `fillEllipse`/`strokeCircle` primitives, not a polygon, so unlike every
  * other boss/enemy it can't reuse EnemyCombat.js's `renderHull`), patrolling
  * a slow bouncing path around the upper arena — same DVD-logo bounce
- * technique as NovaBoss's own `_updatePatrol`. A small bright
- * marker dot orbits the rim at radius `size` along `_angle` — during phase 1
- * it points at the player (an aim indicator, same idea as Nova's hull
- * vertex), during phase 2 it's the visible tell for the boss's own
- * continuous spin, since a plain circle's rotation would otherwise be
- * invisible.
+ * technique as NovaBoss's own `_updatePatrol`.
+ *
+ * Ringed with cannon barrels rather than a plain smooth rim: `_renderCannons`
+ * draws one stubby barrel at every angle `_fireWave`/`_fireRing` will
+ * actually launch a pulse from THIS FRAME, via the shared
+ * `_forEachWaveAngle`/`_forEachRingAngle` helpers both the firing code and
+ * the rendering code call — so the barrel ring is a live preview of the
+ * pattern about to fire, not independent decoration, and every pulse
+ * visibly leaves from a muzzle instead of appearing out of open rim. Phase 1
+ * shows the C-shaped arc (with its gap), phase 2 shows the full ring (with
+ * its rotating gaps) — both re-derived every frame since `this._angle` keeps
+ * moving.
+ *
+ * An unblinking eye sits at the core (`_renderEye`, `this._eyeAngle` kept
+ * current every frame regardless of phase/state — the one part of this
+ * thing that never stops watching): the pupil offsets within the sclera
+ * toward the player and dilates as the next attack approaches
+ * (`_threatLevel`), a readable tell for when a wave/ring is about to fire.
+ * `_breathScale` gives the whole hull a subtle "breathing" pulse (Config's
+ * `pulse.amp/speed`) instead of a rigid fixed radius. Hull/bullet color is
+ * acid chartreuse (`Config.boss.pulsor.color`) — a sickly, toxic hue, and
+ * the one hue gap left in the boss roster (see that field's own comment).
+ * The cannons and hull flash white on a hit; the eye is skipped entirely
+ * while flashing (see `render`) so the hit reads as a clean white flash
+ * rather than clashing with its own color.
  *
  * Fires "pulses," not ordinary bullets — both phases share one pooled-bullet
  * class (PulsorBullets.js) tuned as short, thick, heavily-glowing orbs
@@ -54,6 +73,12 @@ import { applyHit, tickDeathState, stepEntryGlide } from './EnemyCombat.js';
 
 const NS = Config.boss.pulsor.size;
 
+// Cannon-path pool sized to the busier of the two phases' pulse counts —
+// phase 1 draws `wave.count` barrels, phase 2 up to `ring.count` (minus
+// whatever falls in a gap) — pre-allocated once and reused every frame
+// (`_placeCannon` mutates in place), never reallocated. See `_renderCannons`.
+const CANNON_POOL_SIZE = Math.max(Config.boss.pulsor.wave.count, Config.boss.pulsor.ring.count);
+
 export class PulsorBoss {
   /**
    * @param {number} [healthBonus]  added to Config.boss.pulsor.health —
@@ -77,7 +102,8 @@ export class PulsorBoss {
     this._hitFlash  = 0;
     this._dying     = false;
 
-    this._angle = 0;
+    this._angle    = 0;
+    this._eyeAngle = 0; // always points at the player — see class doc
     this._state    = 'entering'; // 'entering' -> 'combat'
     this._stateAge = 0;
 
@@ -91,6 +117,13 @@ export class PulsorBoss {
     // finishes (see update()'s 'entering' branch).
     this._vx = 0;
     this._vy = 0;
+
+    // Pre-allocated, mutated in place each frame — never reallocated (same
+    // pattern as DrifterEnemy's `_tentaclePaths`). Each entry is a 4-point
+    // barrel quad — see `_placeCannon`.
+    this._cannonPaths = Array.from({ length: CANNON_POOL_SIZE }, () => ({
+      points: [[0, 0], [0, 0], [0, 0], [0, 0]], closed: true,
+    }));
   }
 
   get type()       { return this._type; }
@@ -112,9 +145,15 @@ export class PulsorBoss {
     this._stateAge += dt;
     if (tickDeathState(this, dt)) return;
 
+    // The eye always tracks the player, independent of phase/state — the
+    // one part of this creature that never stops watching, even while the
+    // hull itself is spinning through phase 2's ring attack (which
+    // repurposes `_angle` as the spin angle instead of "toward player").
+    this._eyeAngle = Math.atan2(playerY - this.y, playerX - this.x);
+
     if (this._state === 'entering') {
-      // Marker points at the player during entry too — looks natural flying in.
-      this._angle = Math.atan2(playerY - this.y, playerX - this.x);
+      // Cannon ring points at the player during entry too — looks natural flying in.
+      this._angle = this._eyeAngle;
       stepEntryGlide(this, cfg, dt, 'combat');
       if (this._state === 'combat') {
         this._waveTimer = 0; // fire soon after arrival
@@ -132,7 +171,7 @@ export class PulsorBoss {
     else                   this._updateRingPhase(dt, fire);
   }
 
-  /** Phase 1 — marker tracks the player, fires a C-wave on a cooldown, loops into phase 2 after `phase1Duration`. */
+  /** Phase 1 — cannon ring tracks the player, fires a C-wave on a cooldown, loops into phase 2 after `phase1Duration`. */
   _updateWavePhase(dt, playerX, playerY, fire) {
     const cfg = this._cfg;
     this._angle = Math.atan2(playerY - this.y, playerX - this.x);
@@ -169,32 +208,35 @@ export class PulsorBoss {
   }
 
   /**
-   * Fires `wave.count` pulses at once, evenly spaced around every angle
-   * EXCEPT a `wave.gapAngle`-wide slice centered on the direction away from
-   * the player (`this._angle` already points AT the player, kept current by
+   * Invokes `cb(angle)` once for each phase-1 wave pulse's launch angle —
+   * `wave.count` angles evenly spaced around every angle EXCEPT a
+   * `wave.gapAngle`-wide slice centered on the direction away from the
+   * player (`this._angle` already points AT the player, kept current by
    * `_updateWavePhase` — see class doc for why the gap sits opposite it).
+   * Shared by `_fireWave` (actually firing) and `_renderCannons` (drawing
+   * the barrel that will fire it), so the visual pattern can never drift
+   * from the real one.
    */
-  _fireWave(fire) {
+  _forEachWaveAngle(cb) {
     const w = this._cfg.wave;
     const gapCenter = this._angle + Math.PI; // opposite the player
     const arcSpan  = Math.PI * 2 - w.gapAngle;
     const arcStart = gapCenter + w.gapAngle / 2; // one edge of the solid arc
     for (let k = 0; k < w.count; k++) {
-      const a  = arcStart + (arcSpan * k) / (w.count - 1); // evenly spaced, both edges included
-      const ox = this.x + Math.cos(a) * NS;
-      const oy = this.y + Math.sin(a) * NS;
-      fire.firePulsorBullet(ox, oy, a, w.speed);
+      cb(arcStart + (arcSpan * k) / (w.count - 1)); // evenly spaced, both edges included
     }
   }
 
   /**
-   * Fires up to `ring.count` pulses evenly spaced around the FULL circle,
-   * skipping any slot that falls inside one of `ring.gapCount` evenly-spaced
+   * Invokes `cb(angle)` once for each phase-2 ring pulse's launch angle:
+   * up to `ring.count` angles evenly spaced around the FULL circle, skipping
+   * any slot that falls inside one of `ring.gapCount` evenly-spaced
    * `ring.gapWidth`-wide windows. Slot angles are offset by `this._angle`
    * (continuously advancing in phase 2), so the gaps themselves rotate to a
-   * new position every time this fires — see class doc.
+   * new position every time this fires — see class doc. Shared by
+   * `_fireRing` and `_renderCannons`, same reasoning as `_forEachWaveAngle`.
    */
-  _fireRing(fire) {
+  _forEachRingAngle(cb) {
     const r = this._cfg.ring;
     const gapSpacing = (Math.PI * 2) / r.gapCount;
     for (let slot = 0; slot < r.count; slot++) {
@@ -210,11 +252,28 @@ export class PulsorBoss {
       }
       if (inGap) continue;
 
-      const worldAngle = this._angle + localAngle;
-      const ox = this.x + Math.cos(worldAngle) * NS;
-      const oy = this.y + Math.sin(worldAngle) * NS;
-      fire.firePulsorBullet(ox, oy, worldAngle, r.speed);
+      cb(this._angle + localAngle);
     }
+  }
+
+  /** Fires one pulse from each angle `_forEachWaveAngle` yields — see that method's doc. */
+  _fireWave(fire) {
+    const speed = this._cfg.wave.speed;
+    this._forEachWaveAngle((a) => {
+      const ox = this.x + Math.cos(a) * NS;
+      const oy = this.y + Math.sin(a) * NS;
+      fire.firePulsorBullet(ox, oy, a, speed);
+    });
+  }
+
+  /** Fires one pulse from each angle `_forEachRingAngle` yields — see that method's doc. */
+  _fireRing(fire) {
+    const speed = this._cfg.ring.speed;
+    this._forEachRingAngle((a) => {
+      const ox = this.x + Math.cos(a) * NS;
+      const oy = this.y + Math.sin(a) * NS;
+      fire.firePulsorBullet(ox, oy, a, speed);
+    });
   }
 
   /** Slow constant-velocity patrol, bouncing off the arena bounds like a DVD-logo — never stops, through both phases. */
@@ -234,6 +293,26 @@ export class PulsorBoss {
   }
 
   /**
+   * 0-1 — rises toward 1 as the next wave/ring fire grows imminent, resets
+   * to 0 right after firing. Purely cosmetic (drives the eye's pupil
+   * dilation, `_renderEye`) — not a gameplay hook.
+   */
+  _threatLevel() {
+    if (this._state !== 'combat') return 0;
+    const cfg = this._cfg;
+    const frac = this._phase === 1
+      ? this._waveTimer / cfg.wave.interval
+      : this._ringTimer / cfg.ring.interval;
+    return 1 - Math.max(0, Math.min(1, frac));
+  }
+
+  /** Subtle hull "breathing" scale factor — see Config's `pulse.amp/speed`. */
+  _breathScale() {
+    const p = this._cfg.pulse;
+    return 1 + Math.sin(this._stateAge * p.speed) * p.amp;
+  }
+
+  /**
    * Register one bullet hit. Returns true if the hit was fatal.
    * @param {number} [damage]  health points removed — scales with player level
    * @returns {boolean}
@@ -242,11 +321,18 @@ export class PulsorBoss {
     return applyHit(this, damage);
   }
 
-  /** Hull, then the rim marker, then the pulsing core. WaveManager calls this directly (see `_renderIndividualEnemies`) since only one boss is ever on screen at once. */
+  /**
+   * Cannon barrels behind the hull (so their bases tuck under it, same
+   * "draw the trailing bits first" trick DrifterEnemy uses for its
+   * tentacles), then the hull itself, then the tracking eye on top.
+   * WaveManager calls this directly (see `_renderIndividualEnemies`) since
+   * only one boss is ever on screen at once.
+   */
   render(renderer) {
-    this._renderHull(renderer);
-    this._renderMarker(renderer);
-    this._renderCore(renderer);
+    const flash = this._hitFlash > 0;
+    this._renderCannons(renderer, flash);
+    this._renderHull(renderer, flash);
+    if (!flash) this._renderEye(renderer);
   }
 
   /**
@@ -255,13 +341,13 @@ export class PulsorBoss {
    * this replicates that same fill-then-glowing-stroke-with-white-hit-flash
    * shape by hand with Renderer's `fillEllipse`/`strokeCircle` primitives.
    */
-  _renderHull(renderer) {
-    const cfg   = this._cfg;
-    const flash = this._hitFlash > 0;
-    renderer.fillEllipse(0, 0, cfg.size, cfg.size, {
+  _renderHull(renderer, flash) {
+    const cfg = this._cfg;
+    const r   = cfg.size * this._breathScale();
+    renderer.fillEllipse(0, 0, r, r, {
       x: this.x, y: this.y, fillColor: flash ? '#ffffff' : cfg.fillColor,
     });
-    renderer.strokeCircle(this.x, this.y, cfg.size, {
+    renderer.strokeCircle(this.x, this.y, r, {
       color: flash ? '#ffffff' : cfg.color,
       lineWidth: cfg.lineWidth,
       glowBlur: flash ? cfg.hitGlowBlur : cfg.glowBlur,
@@ -269,22 +355,71 @@ export class PulsorBoss {
     });
   }
 
-  /** Small bright dot orbiting the rim along `_angle` — see class doc. */
-  _renderMarker(renderer) {
+  /**
+   * Cannon barrels at the EXACT angles this frame's phase will actually fire
+   * from — see class doc and `_forEachWaveAngle`/`_forEachRingAngle`. A live
+   * preview of the pattern, not decoration: whichever barrels are visible
+   * right before a fire tick are exactly where the pulses appear.
+   */
+  _renderCannons(renderer, flash) {
     const cfg = this._cfg;
-    const mx = this.x + Math.cos(this._angle) * cfg.size;
-    const my = this.y + Math.sin(this._angle) * cfg.size;
-    renderer.strokeCircle(mx, my, cfg.markerRadius, {
-      color: cfg.color, lineWidth: cfg.markerLineWidth, glowBlur: cfg.markerGlowBlur, glowColor: cfg.color,
-    });
+    const r   = cfg.size * this._breathScale();
+    let n = 0;
+    const place = (angle) => { n = this._placeCannon(angle, r, n); };
+
+    if (this._phase === 1) this._forEachWaveAngle(place);
+    else                   this._forEachRingAngle(place);
+
+    renderer.fillStrokePaths(this._cannonPaths, {
+      fillColor:   flash ? '#ffffff' : cfg.fillColor,
+      strokeColor: flash ? '#ffffff' : cfg.color,
+      lineWidth:   cfg.cannon.lineWidth,
+      glowBlur:    flash ? cfg.hitGlowBlur : cfg.cannon.glowBlur,
+      glowColor:   flash ? '#ffffff' : cfg.color,
+      singleStroke: true,
+    }, n);
   }
 
-  /** Pulsing core-ring glow at the center — stands in for an engine flame, same reasoning as Spiral/Tetra/Nova's own core glow. */
-  _renderCore(renderer) {
-    const cfg   = this._cfg;
-    const pulse = 0.6 + 0.4 * Math.abs(Math.sin(this._stateAge * cfg.coreGlowPulseSpeed));
-    renderer.strokeCircle(this.x, this.y, cfg.coreRadius, {
-      color: cfg.color, lineWidth: cfg.coreGlowLineWidth, glowBlur: cfg.coreGlowBlur, glowColor: cfg.color, alpha: pulse,
+  /**
+   * Writes one barrel quad (tapering slightly wider at the muzzle) into
+   * `this._cannonPaths[idx]`, from the hull rim (`baseR`) outward along
+   * `angle`. Returns `idx + 1` so callers can chain/count in one pass.
+   */
+  _placeCannon(angle, baseR, idx) {
+    const c = this._cfg.cannon;
+    const dirX = Math.cos(angle), dirY = Math.sin(angle);
+    const perpX = -dirY, perpY = dirX;
+
+    const innerX = this.x + dirX * baseR, innerY = this.y + dirY * baseR;
+    const outerX = this.x + dirX * (baseR + c.len), outerY = this.y + dirY * (baseR + c.len);
+
+    const pts = this._cannonPaths[idx].points;
+    pts[0][0] = innerX - perpX * c.baseHalfWidth; pts[0][1] = innerY - perpY * c.baseHalfWidth;
+    pts[1][0] = innerX + perpX * c.baseHalfWidth; pts[1][1] = innerY + perpY * c.baseHalfWidth;
+    pts[2][0] = outerX + perpX * c.tipHalfWidth;  pts[2][1] = outerY + perpY * c.tipHalfWidth;
+    pts[3][0] = outerX - perpX * c.tipHalfWidth;  pts[3][1] = outerY - perpY * c.tipHalfWidth;
+    return idx + 1;
+  }
+
+  /**
+   * An unblinking eye at the core: the pupil offsets within the sclera
+   * toward the player (`this._eyeAngle`, always current — see `update`) and
+   * dilates as the next attack approaches (`_threatLevel`) — a readable
+   * tell for when a wave/ring is about to fire. Skipped while hit-flashing,
+   * see `render`.
+   */
+  _renderEye(renderer) {
+    const cfg    = this._cfg;
+    const e      = cfg.eye;
+    const threat = this._threatLevel();
+    const pupilR = e.pupilMinRadius + (e.pupilMaxRadius - e.pupilMinRadius) * threat;
+    const lookX  = this.x + Math.cos(this._eyeAngle) * e.lookOffset;
+    const lookY  = this.y + Math.sin(this._eyeAngle) * e.lookOffset;
+
+    renderer.fillEllipse(0, 0, e.scleraRadius, e.scleraRadius, { x: this.x, y: this.y, fillColor: e.scleraColor });
+    renderer.strokeCircle(this.x, this.y, e.scleraRadius, {
+      color: e.irisColor, lineWidth: 2, glowBlur: e.glowBlur, glowColor: e.irisColor, alpha: 0.6 + 0.4 * threat,
     });
+    renderer.fillEllipse(0, 0, pupilR, pupilR, { x: lookX, y: lookY, fillColor: e.pupilColor });
   }
 }
