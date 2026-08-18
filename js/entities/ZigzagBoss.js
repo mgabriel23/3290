@@ -2,11 +2,11 @@
  * ZigzagBoss.js
  * Boss #8 — "Zigzag". The first TRIANGULAR hull (see ZIGZAG_HULL_PTS below —
  * a plain equilateral triangle, not a reskin of any existing enemy, same
- * "original hull" lineage as Spiral/Tetra/Nova/Pulsor), parked at a single
- * FIXED spot dead center just under both health bars (`restY`) for the
- * entire fight — it never patrols or otherwise leaves that spot.
+ * "original hull" lineage as Spiral/Tetra/Nova/Pulsor), holding its firing
+ * spot near the top of the arena (`restY`) but no longer camped there for
+ * the entire fight — see 'repositioning' below.
  *
- * A simple 2-state loop (`_mode`), driven by a shot COUNT rather than a
+ * A simple 3-mode loop (`_mode`), driven by a shot COUNT rather than a
  * shared elapsed-time clock the way Tetra/Nova/Pulsor's phase1/phase2 loops
  * are:
  *
@@ -18,14 +18,31 @@
  *   'cooldown'.
  *
  *   'cooldown' — stops firing (still spinning) for `cooldownDuration`
- *   seconds — a breathing-room beat — then goes back to 'firing' with a
- *   clean bullet count, looping for the rest of the fight.
+ *   seconds — a breathing-room beat — then either relocates
+ *   ('repositioning', a `repositionChance` roll) or goes straight back to
+ *   'firing' with a clean bullet count.
+ *
+ *   'repositioning' — glides to a fresh point within
+ *   `repositionMarginX`/`repositionYMin`/`repositionYMax`, eased with
+ *   core/animation.js's easeOutCubic — the same technique SpiralBoss's own
+ *   phase-1 repositioning uses — still spinning throughout, then resumes
+ *   'firing' from the new spot. This is what keeps the fight from being a
+ *   single fixed turret for its whole duration.
+ *
+ * Ringed with 3 cannon barrels (`_renderCannons`/`_placeCannon`) rather than
+ * a plain smooth edge — same "make it read as the actual muzzle" idiom
+ * PulsorBoss's own `_renderCannons` uses. Rendered behind the hull, one per
+ * fire direction, rotating with it. Bullets spawn from the barrel's outer
+ * TIP (`MUZZLE + cfg.cannon.len`, see `_updateFiring`), not the bare hull
+ * edge, so every shot visibly leaves a muzzle instead of appearing to spawn
+ * out of the hull's surface.
  *
  * Hit/death-flash/entry-glide rendering reuse the same shared
  * EnemyCombat.js functions every other boss/enemy class uses — see that
  * file's header for why those are plain functions rather than a base class.
  */
 import { Config } from '../core/Config.js';
+import { easeOutCubic } from '../core/animation.js';
 import { applyHit, tickDeathState, stepEntryGlide, renderHull } from './EnemyCombat.js';
 
 const S = Config.boss.zigzag.size; // circumradius — center-to-vertex distance
@@ -72,11 +89,24 @@ export class ZigzagBoss {
     this._stateAge = 0;
 
     // Combat sub-state loop — see class doc.
-    this._mode    = 'firing'; // 'firing' -> 'cooldown' -> 'firing' ...
+    this._mode    = 'firing'; // 'firing' -> 'cooldown' -> ('repositioning' ->) 'firing' ...
     this._modeAge = 0;
 
     this._bulletsFired = 0;
     this._fireTimer    = 0;
+
+    // Repositioning glide origin/target — real values assigned by
+    // _beginReposition once a cooldown beat rolls to relocate.
+    this._moveFromX = this.x; this._moveFromY = this._restY;
+    this._moveToX   = this.x; this._moveToY   = this._restY;
+
+    // Pre-allocated, mutated in place every frame by _placeCannon — never
+    // reallocated, same convention PulsorBoss's own `_cannonPaths` uses.
+    // Always exactly 3 (one per fire direction), unlike Pulsor's variable
+    // count, so no separate pool-size constant is needed.
+    this._cannonPaths = Array.from({ length: 3 }, () => ({
+      points: [[0, 0], [0, 0], [0, 0], [0, 0]], closed: true,
+    }));
   }
 
   get type()       { return this._type; }
@@ -107,8 +137,9 @@ export class ZigzagBoss {
 
     this._modeAge += dt;
 
-    if (this._mode === 'firing') this._updateFiring(dt, ctx);
-    else                          this._updateCooldown(dt);
+    if      (this._mode === 'firing')   this._updateFiring(dt, ctx);
+    else if (this._mode === 'cooldown') this._updateCooldown(dt);
+    else                                 this._updateReposition(dt);
   }
 
   /** Spins continuously, fires one bullet from EACH of the 3 hull sides every `bullet.fireInterval` seconds, until `bulletLimit` shots have gone out. */
@@ -118,10 +149,13 @@ export class ZigzagBoss {
 
     this._fireTimer -= dt;
     if (this._fireTimer <= 0) {
+      // Spawn from the cannon barrel's outer TIP, not the bare hull edge —
+      // see class doc — so shots visibly leave a muzzle.
+      const muzzleR = MUZZLE + cfg.cannon.len;
       for (let k = 0; k < 3; k++) {
         const a  = this._fireDirection(k);
-        const ox = this.x + Math.cos(a) * MUZZLE;
-        const oy = this.y + Math.sin(a) * MUZZLE;
+        const ox = this.x + Math.cos(a) * muzzleR;
+        const oy = this.y + Math.sin(a) * muzzleR;
         ctx.fireZigzagBullet(ox, oy, a);
       }
       this._bulletsFired += 3;
@@ -139,17 +173,52 @@ export class ZigzagBoss {
     return this._angle + k * (Math.PI * 2 / 3);
   }
 
-  /** Still spinning, not firing — a breathing-room beat before the next 'firing' burst. */
+  /** Still spinning, not firing — a breathing-room beat before either relocating or the next 'firing' burst. */
   _updateCooldown(dt) {
     const cfg = this._cfg;
     this._angle += dt * cfg.rotationSpeed;
 
     if (this._modeAge >= cfg.cooldownDuration) {
-      this._mode = 'firing';
-      this._modeAge = 0;
-      this._bulletsFired = 0;
-      this._fireTimer = 0;
+      if (Math.random() < cfg.repositionChance) this._beginReposition();
+      else this._resumeFiring();
     }
+  }
+
+  /** Pick a new random spot within the arena bounds and start gliding there — see class doc. */
+  _beginReposition() {
+    const { width: vW } = Config.virtual;
+    const cfg = this._cfg;
+    this._moveFromX = this.x;
+    this._moveFromY = this.y;
+    this._moveToX = cfg.repositionMarginX + Math.random() * (vW - cfg.repositionMarginX * 2);
+    this._moveToY = cfg.repositionYMin + Math.random() * (cfg.repositionYMax - cfg.repositionYMin);
+    this._mode = 'repositioning';
+    this._modeAge = 0;
+  }
+
+  /** Still spinning, gliding from `_moveFromX/Y` to `_moveToX/Y`, eased with easeOutCubic — resumes firing from the new spot on arrival. */
+  _updateReposition(dt) {
+    const cfg = this._cfg;
+    this._angle += dt * cfg.rotationSpeed;
+
+    const t = Math.min(this._modeAge / cfg.repositionDuration, 1);
+    const eased = easeOutCubic(t);
+    this.x = this._moveFromX + (this._moveToX - this._moveFromX) * eased;
+    this.y = this._moveFromY + (this._moveToY - this._moveFromY) * eased;
+
+    if (t >= 1) {
+      this._restX = this.x;
+      this._restY = this.y;
+      this._resumeFiring();
+    }
+  }
+
+  /** Reset the shot counter and drop back into 'firing' — shared by both the "didn't reposition" and "just arrived" paths out of cooldown. */
+  _resumeFiring() {
+    this._mode = 'firing';
+    this._modeAge = 0;
+    this._bulletsFired = 0;
+    this._fireTimer = 0;
   }
 
   /**
@@ -161,10 +230,51 @@ export class ZigzagBoss {
     return applyHit(this, damage);
   }
 
-  /** Hull, then the pulsing core. WaveManager calls this directly (see `_renderIndividualEnemies`) since only one boss is ever on screen at once. */
+  /** Cannon barrels (behind, so their bases tuck under the hull), then the hull, then the pulsing core. WaveManager calls this directly (see `_renderIndividualEnemies`) since only one boss is ever on screen at once. */
   render(renderer) {
+    this._renderCannons(renderer);
     renderHull(renderer, this, ZIGZAG_HULL_PTS);
     this._renderCore(renderer);
+  }
+
+  /**
+   * Cannon barrels at the 3 fire directions — a live preview of exactly
+   * where the next volley will leave from, same "draw the trailing bits
+   * first" trick DrifterEnemy uses for its tentacles / PulsorBoss uses for
+   * its own `_renderCannons`.
+   */
+  _renderCannons(renderer) {
+    const cfg   = this._cfg;
+    const flash = this._hitFlash > 0;
+    for (let k = 0; k < 3; k++) this._placeCannon(this._fireDirection(k), k);
+    renderer.fillStrokePaths(this._cannonPaths, {
+      fillColor:   flash ? '#ffffff' : cfg.fillColor,
+      strokeColor: flash ? '#ffffff' : cfg.color,
+      lineWidth:   cfg.cannon.lineWidth,
+      glowBlur:    flash ? cfg.hitGlowBlur : cfg.cannon.glowBlur,
+      glowColor:   flash ? '#ffffff' : cfg.color,
+      singleStroke: true,
+    });
+  }
+
+  /**
+   * Writes one barrel quad (tapering slightly wider at the muzzle) into
+   * `this._cannonPaths[idx]`, from the hull rim (`MUZZLE`) outward along
+   * `angle` — same shape PulsorBoss._placeCannon builds.
+   */
+  _placeCannon(angle, idx) {
+    const c = this._cfg.cannon;
+    const dirX = Math.cos(angle), dirY = Math.sin(angle);
+    const perpX = -dirY, perpY = dirX;
+
+    const innerX = this.x + dirX * MUZZLE, innerY = this.y + dirY * MUZZLE;
+    const outerX = this.x + dirX * (MUZZLE + c.len), outerY = this.y + dirY * (MUZZLE + c.len);
+
+    const pts = this._cannonPaths[idx].points;
+    pts[0][0] = innerX - perpX * c.baseHalfWidth; pts[0][1] = innerY - perpY * c.baseHalfWidth;
+    pts[1][0] = innerX + perpX * c.baseHalfWidth; pts[1][1] = innerY + perpY * c.baseHalfWidth;
+    pts[2][0] = outerX + perpX * c.tipHalfWidth;  pts[2][1] = outerY + perpY * c.tipHalfWidth;
+    pts[3][0] = outerX - perpX * c.tipHalfWidth;  pts[3][1] = outerY - perpY * c.tipHalfWidth;
   }
 
   /** Pulsing core-ring glow at the center — stands in for an engine flame, same reasoning as every other original-hull boss (this hull has no thruster). */

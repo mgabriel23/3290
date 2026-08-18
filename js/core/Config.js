@@ -5285,32 +5285,51 @@ export const Config = Object.freeze({
 		/**
 		 * Boss #8 — "Zigzag". The first TRIANGULAR hull (see ZigzagBoss.js's
 		 * ZIGZAG_HULL_PTS — a plain equilateral triangle, not a reskin, same
-		 * "original hull" lineage as Spiral/Tetra/Nova/Pulsor), parked at a
-		 * single FIXED spot — the middle of the arena just under both health
-		 * bars (`restY`) — for the entire fight; it never patrols or
-		 * otherwise leaves that spot.
+		 * "original hull" lineage as Spiral/Tetra/Nova/Pulsor). Holds its
+		 * firing spot near the top of the arena (`restY`) but no longer
+		 * parks there for the whole fight — see `repositionChance` below.
 		 *
-		 * A simple 2-state loop, driven by a shot COUNT rather than a shared
-		 * elapsed-time clock the way Tetra/Nova/Pulsor's own phase1/phase2
-		 * loops are:
+		 * A simple 3-mode loop (`_mode` in ZigzagBoss.js), driven by a shot
+		 * COUNT rather than a shared elapsed-time clock the way Tetra/Nova/
+		 * Pulsor's own phase1/phase2 loops are:
 		 *
 		 *   'firing' — hull spins continuously (`rotationSpeed`) and fires one
 		 *   bullet (ZigzagBullets.js) from EACH of its 3 sides simultaneously
 		 *   every `bullet.fireInterval` seconds (the same "N shots evenly
 		 *   spaced around rotation" fire-from-facing idiom Tetra's 4 sides/
 		 *   Nova's 5 sides use, just 3 here, matching the triangular hull) —
-		 *   until it has fired `bulletLimit` (60 — 20 ticks × 3 sides) shots
+		 *   until it has fired `bulletLimit` (120 — 40 ticks × 3 sides) shots
 		 *   total, then moves to 'cooldown'.
 		 *
 		 *   'cooldown' — stops firing (still spinning) for `cooldownDuration`
-		 *   seconds — a breathing-room beat — then goes back to 'firing' with
-		 *   a clean bullet count, looping for the rest of the fight.
+		 *   seconds — a breathing-room beat — then, MOST of the time
+		 *   (`repositionChance` roll — see 'repositioning' below), relocates;
+		 *   otherwise it goes straight back to 'firing' with a clean bullet
+		 *   count, looping for the rest of the fight.
+		 *
+		 *   'repositioning' — same eased glide-to-a-fresh-point technique
+		 *   SpiralBoss's own phase-1 repositioning uses (`repositionDuration`,
+		 *   `easeOutCubic`), landing somewhere within `repositionMarginX`/
+		 *   `repositionYMin`/`repositionYMax` of the arena — still spinning
+		 *   throughout — before resuming 'firing' from the new spot. This is
+		 *   what keeps the boss from sitting dead center for the entire fight.
+		 *
+		 * Ringed with cannon barrels rather than a plain smooth edge — same
+		 * "make it read as the actual muzzle" idiom PulsorBoss's own
+		 * `_renderCannons` uses: ZigzagBoss draws one stubby barrel (`cannon`
+		 * below) at each of the 3 fire directions, rotating with the hull, and
+		 * bullets spawn from the barrel's outer TIP (`cannon.len` past the hull
+		 * rim) rather than the bare hull edge — so every shot visibly leaves a
+		 * muzzle instead of appearing to spawn out of the hull's surface.
 		 *
 		 * Zigzag's bullets have their OWN twist on top of ZigzagBullets.js's
 		 * shared TetraBullets-shaped pool: each one reflects off the
 		 * LEFT/RIGHT screen edges (not top/bottom) up to `bullet.maxBounces`
 		 * (2) times before it's allowed to fly off-screen and cull normally
-		 * — see ZigzagBullets.js's own doc.
+		 * — see ZigzagBullets.js's own doc. They're rendered short and thick
+		 * (`bullet.halfLen` near 0, `bullet.lineWidth` large) so they read as
+		 * round energy blobs rather than elongated streaks — same "round
+		 * pulse" capsule trick Config.boss.pulsor.bullet already uses.
 		 */
 		zigzag: Object.freeze({
 			name: "ZIGZAG",
@@ -5320,8 +5339,8 @@ export const Config = Object.freeze({
 			size: 60,
 			health: 540,
 			healthPerLevel: 70,
-			color: "#FF8A00", // hazard orange — distinct from every other boss color used so far (red/violet/amber/green/blue/gold/coral)
-			fillColor: "#2a1500",
+			color: "#FF2E9C", // electric magenta — the one hue gap (pink) left in the boss roster (red/crimson/orange/amber/gold/chartreuse/green/blue/cyan/violet all taken); redesigned off the old hazard-orange to read as a fresh, more aggressive threat
+			fillColor: "#2a0018",
 			lineWidth: 3,
 			glowBlur: 18,
 			hitGlowBlur: 30,
@@ -5333,29 +5352,55 @@ export const Config = Object.freeze({
 			hitRadius: 50,
 
 			entrySpeed: 150,
-			// Fixed rest position — this boss never patrols; it parks dead
-			// center, just below both the boss health bar (Config.boss.
-			// healthBar, bottom edge ~162) and the player's own HUD health
-			// bar above that, and stays there for the whole fight.
+			// Starting/default firing spot — just below both the boss health
+			// bar (Config.boss.healthBar, bottom edge ~162) and the player's
+			// own HUD health bar above that. No longer permanent — see
+			// repositionChance/reposition* below, which occasionally glide
+			// the boss to a fresh spot instead of holding this one forever.
 			restY: 210,
 
-			rotationSpeed: 0.9, // rad/sec — continuous turret spin through 'firing'/'cooldown'
+			rotationSpeed: 0.9, // rad/sec — continuous turret spin through 'firing'/'cooldown'/'repositioning'
+
+			// Odds, rolled once each time a 'cooldown' beat ends, that the
+			// boss relocates ('repositioning') instead of resuming 'firing'
+			// on the spot — see class doc and ZigzagBoss._updateCooldown.
+			// High (most cooldowns end in a relocation) so it visibly keeps
+			// moving through the fight rather than camping one spot.
+			repositionChance: 0.85,
+			repositionDuration: 0.9, // seconds to glide from the old spot to the new one, eased with core/animation.js's easeOutCubic
+			// vp — bounds the 'repositioning' glide targets, same
+			// margin-from-edges convention Config.boss.spiral.repositionMarginX/
+			// repositionYMin/repositionYMax use.
+			repositionMarginX: 90,
+			repositionYMin: 160,
+			repositionYMax: 320,
+
+			// Cannon barrels rendered at each of the 3 fire directions — see
+			// class doc and ZigzagBoss._placeCannon/_renderCannons. Same
+			// tapered-quad shape/fields Config.boss.pulsor.cannon uses.
+			cannon: Object.freeze({
+				len: 14, // vp beyond the hull rim (apothem) — also where bullets actually spawn from, see ZigzagBoss._updateFiring
+				baseHalfWidth: 3, // vp — half-width where the barrel meets the hull
+				tipHalfWidth: 5,  // vp — half-width at the muzzle (slightly flared)
+				lineWidth: 2,
+				glowBlur: 8,
+			}),
 
 			// 3 bullets per tick, one from each hull side (see class doc).
 			// Also drives ZigzagBullets.js's pool sizing/styling.
 			bullet: Object.freeze({
-				fireInterval: 0.3, // seconds between ticks — "mid" pace: faster than Tetra's 0.5, well below Spiral's near-continuous 0.12
-				speed: 130, // vp/sec
-				color: "#FF8A00",
-				lineWidth: 4,
-				glowBlur: 8,
-				halfLen: 7,
-				poolSize: 300, // generous — up to bulletLimit (60) can be alive from one visit (3 per tick), plus stragglers still bouncing from a prior visit
+				fireInterval: 0.18, // seconds between ticks — bumped from 0.3 for a much more aggressive volley, now above Nova's 0.22, approaching Spiral's near-continuous 0.12
+				speed: 205, // vp/sec — bumped again from 165, reads as a genuinely fast, aggressive shot
+				color: "#FF2E9C",
+				lineWidth: 9, // vp — thick, paired with a near-zero halfLen below so the capsule reads as a round blob, not a streak
+				glowBlur: 10,
+				halfLen: 2, // vp — short and thick rather than an elongated streak — "round pulse" capsule trick, see class doc
+				poolSize: 500, // generous — up to bulletLimit (120) can be alive from one visit (3 per tick), plus stragglers still bouncing from a prior visit
 				damage: 10,
 				maxBounces: 2, // times a bullet reflects off the LEFT/RIGHT screen edges before it's allowed to exit and cull — see ZigzagBullets.js
 			}),
 
-			bulletLimit: 60, // total shots fired per 'firing' visit before switching to 'cooldown' — 20 ticks × 3 sides, see class doc
+			bulletLimit: 120, // total shots fired per 'firing' visit before switching to 'cooldown' — 40 ticks × 3 sides, bumped from 81 to pack noticeably more live bullets on screen at once, see class doc
 			cooldownDuration: 1.5, // seconds spent in 'cooldown' (still spinning, not firing) before the next 'firing' burst
 
 			// Pulsing core-ring glow at the center — stands in for an engine
