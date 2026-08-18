@@ -70,7 +70,7 @@ export class Enemy {
    * @param {number} spawnX  entry column (x at top of screen)
    * @param {number} restX   x of the resting position
    * @param {number} restY   y of the resting position
-   * @param {string} [type]  key into Config.enemy — 'scout' | 'rocketeer'
+   * @param {string} [type]  key into Config.enemy — 'scout' | 'rocketeer' | 'spitter'
    * @param {number} [healthBonus]  added to `Config.enemy[type].health` — used by WaveManager to scale health by level
    */
   constructor(spawnX, restX, restY, type = 'scout', healthBonus = 0) {

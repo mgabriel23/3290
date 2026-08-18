@@ -55,7 +55,7 @@ function save(stats) {
  */
 function familyFor(type) {
   switch (type) {
-    case 'scout': case 'rocketeer': return 'scoutFamily';
+    case 'scout': case 'rocketeer': case 'spitter': return 'scoutFamily';
     case 'sniper': return 'sniper';
     case 'drifter': return 'drifterFamily';
     case 'bouncer': return 'bouncerFamily';

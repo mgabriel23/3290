@@ -481,9 +481,11 @@ export const Config = Object.freeze({
 	 * density), not raw stat inflation, is the difficulty lever — HP still
 	 * climbs on its own via each type's `healthPerLevel` (Config.enemy /
 	 * Config.boss) exactly like Survival Mode. New enemy types debut in a
-	 * gentle, legible order: Scout (1) → Rocketeer (2) → Diver (3) →
+	 * gentle, legible order: Scout (1) → Rocketeer/Spitter (2, paired — see
+	 * Config.enemy.spitter's own doc for why it's calibrated equal to
+	 * Rocketeer rather than getting a dedicated debut level) → Diver (3) →
 	 * Sniper (4) → Drifter (6) → Sweeper (7) → Weaver (8) → Bouncer (11) →
-	 * Splitter (16) → Shielded (18) — the full 10-type roster is complete
+	 * Splitter (16) → Shielded (18) — the full 11-type roster is complete
 	 * by level 18, leaving the back half of the campaign to ramp overlap
 	 * and density with everything already introduced, the same philosophy
 	 * Survival Mode's own doc comment describes. Levels 1-3 are
@@ -511,23 +513,34 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 2.4 }),
 				Object.freeze({ type: "scout", count: 2, spawnInterval: 2.2 }),
 			]) }),
-			// Level 2 — {Scout, Rocketeer}. Still gentle — Rocketeer's homing
-			// arrives lightly, overlapping just a little with Scout.
+			// Level 2 — {Scout, Rocketeer, Spitter}. Still gentle — Rocketeer's
+			// homing and Spitter's delayed scatter both arrive lightly,
+			// overlapping just a little with Scout. Spitter debuts paired with
+			// Rocketeer (not a dedicated level of its own) and from here on
+			// rides along with every Rocketeer group at the same count/
+			// spawnInterval throughout the rest of this campaign — see
+			// Config.enemy.spitter's own doc for why it's calibrated equal to
+			// Rocketeer (same hitsToKill, same stationary mobility, same
+			// mandatory-kill status).
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 2.4 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.7 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.7 }),
 				Object.freeze({ type: "scout", count: 2, spawnInterval: 2.2 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.4 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.4 }),
 			]) }),
 			// Level 3 — {Scout, Rocketeer, Diver}. Last of the "easy" on-ramp
 			// — two lone Diver ambushes while Scout/Rocketeer stay light.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 2.3 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.5 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.5 }),
 				Object.freeze({ type: "diver", count: 1, spawnInterval: 3.6 }),
 				Object.freeze({ type: "scout", count: 2, spawnInterval: 2.1 }),
 				Object.freeze({ type: "diver", count: 1, spawnInterval: 3.4 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.3 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.3 }),
 			]) }),
 			// Level 4 — {+Sniper}. The real difficulty step-up: reading a
 			// Sniper telegraph while Scout/Rocketeer/Diver keep pressuring.
@@ -535,6 +548,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 2.2 }),
 				Object.freeze({ type: "sniper", count: 1, spawnInterval: 3.6 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.4 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.4 }),
 				Object.freeze({ type: "diver", count: 1, spawnInterval: 3.3 }),
 				Object.freeze({ type: "sniper", count: 1, spawnInterval: 3.3 }),
 				Object.freeze({ type: "scout", count: 2, spawnInterval: 2.0 }),
@@ -546,6 +560,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 2.1 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 3.3 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 2.3 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 2.3 }),
 				Object.freeze({ type: "diver", count: 2, spawnInterval: 3.2 }),
 				Object.freeze({ type: "scout", count: 2, spawnInterval: 2.0 }),
 			]) }),
@@ -557,6 +572,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 5.0 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 2.1 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.4 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.4 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 3.2 }),
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 4.8 }),
 				Object.freeze({ type: "diver", count: 1, spawnInterval: 3.2 }),
@@ -566,6 +582,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sweeper", count: 1, spawnInterval: 5.0 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 2.0 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.3 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.3 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 3.1 }),
 				Object.freeze({ type: "sweeper", count: 1, spawnInterval: 4.8 }),
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 4.6 }),
@@ -579,6 +596,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.9 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 3.0 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.3 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.3 }),
 				Object.freeze({ type: "weaver", count: 1, spawnInterval: 4.4 }),
 			]) }),
 			// Level 9 — Alien ramp — all four Drifter-family variants at once
@@ -591,6 +609,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.9 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.9 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 2.2 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 2.2 }),
 			]) }),
 			// Level 10 — BOSS: Spiral. Dead entry (see Level 5's comment).
 			Object.freeze({ enemies: Object.freeze([
@@ -601,6 +620,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.8 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.8 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 2.1 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 2.1 }),
 			]) }),
 
 			// ---- Chapter 3 — Kinetic Threat (boss: Bouncer Primal, L15) ----
@@ -609,6 +629,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 2, spawnInterval: 3.4 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.9 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 2.2 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 2.2 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 3.0 }),
 				Object.freeze({ type: "bouncer", count: 2, spawnInterval: 3.2 }),
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 4.2 }),
@@ -629,6 +650,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 4.0 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.8 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 2.1 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 2.1 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.8 }),
 				Object.freeze({ type: "weaver", count: 1, spawnInterval: 3.8 }),
 				Object.freeze({ type: "bouncer", count: 2, spawnInterval: 2.9 }),
@@ -641,6 +663,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 2.7 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.7 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 2.0 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 2.0 }),
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 3.8 }),
 			]) }),
 			// Level 15 — BOSS: Bouncer Primal. Dead entry (see Level 5).
@@ -651,6 +674,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 2.6 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.7 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.9 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.9 }),
 			]) }),
 
 			// ---- Chapter 4 — Fractures (boss: Snake, L20) ----
@@ -662,6 +686,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.6 }),
 				Object.freeze({ type: "splitter", count: 1, spawnInterval: 4.2 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.9 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.9 }),
 			]) }),
 			// Level 17 — Splitter + Bouncer mix.
 			Object.freeze({ enemies: Object.freeze([
@@ -672,8 +697,9 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.5 }),
 				Object.freeze({ type: "splitter", count: 1, spawnInterval: 3.8 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 1.9 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 1.9 }),
 			]) }),
-			// Level 18 — {+Shielded}. Full 10-type roster is now unlocked.
+			// Level 18 — {+Shielded}. Full 11-type roster is now unlocked.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "shielded", count: 1, spawnInterval: 4.4 }),
 				Object.freeze({ type: "splitter", count: 1, spawnInterval: 3.8 }),
@@ -683,12 +709,14 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.5 }),
 				Object.freeze({ type: "shielded", count: 1, spawnInterval: 4.2 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.8 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.8 }),
 			]) }),
 			// Level 19 — Full-roster gauntlet — everything introduced so far,
 			// all at once.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.6 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 1.8 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 1.8 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.4 }),
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 3.5 }),
 				Object.freeze({ type: "sweeper", count: 1, spawnInterval: 3.5 }),
@@ -702,6 +730,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.5 }),
 				Object.freeze({ type: "rocketeer", count: 2, spawnInterval: 1.7 }),
+				Object.freeze({ type: "spitter", count: 2, spawnInterval: 1.7 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.3 }),
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 3.4 }),
 				Object.freeze({ type: "sweeper", count: 1, spawnInterval: 3.4 }),
@@ -721,6 +750,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 3.3 }),
 				Object.freeze({ type: "splitter", count: 1, spawnInterval: 3.3 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.7 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.7 }),
 				Object.freeze({ type: "weaver", count: 1, spawnInterval: 3.2 }),
 			]) }),
 			// Level 22 — alien-heavy.
@@ -740,12 +770,14 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "shielded", count: 1, spawnInterval: 3.5 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.4 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.6 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.6 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.1 }),
 			]) }),
 			// Level 24 — full roster, tight overlap.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.4 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.6 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.6 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 2.1 }),
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 3.1 }),
 				Object.freeze({ type: "sweeper", count: 1, spawnInterval: 3.1 }),
@@ -759,6 +791,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.4 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.5 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.5 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 2.0 }),
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 2.0 }),
 				Object.freeze({ type: "splitter", count: 1, spawnInterval: 3.0 }),
@@ -771,6 +804,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.4 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.5 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.5 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 2.0 }),
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 2.0 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 3.0 }),
@@ -793,12 +827,14 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "shielded", count: 2, spawnInterval: 3.2 }),
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.5 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.5 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.9 }),
 			]) }),
 			// Level 29 — full-roster max density before the chapter's boss.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.5 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.5 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.9 }),
 				Object.freeze({ type: "drifter", count: 2, spawnInterval: 2.7 }),
 				Object.freeze({ type: "sweeper", count: 2, spawnInterval: 2.7 }),
@@ -812,6 +848,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.4 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.4 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.8 }),
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.9 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.7 }),
@@ -824,6 +861,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.4 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.4 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.8 }),
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.8 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.6 }),
@@ -846,12 +884,14 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.9 }),
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.4 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.4 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.7 }),
 			]) }),
 			// Level 34.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.7 }),
 				Object.freeze({ type: "drifter", count: 2, spawnInterval: 2.5 }),
 				Object.freeze({ type: "sweeper", count: 2, spawnInterval: 2.5 }),
@@ -865,6 +905,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.7 }),
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.7 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.5 }),
@@ -877,6 +918,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.7 }),
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.7 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.4 }),
@@ -899,12 +941,14 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.7 }),
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.2 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.6 }),
 			]) }),
 			// Level 39.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.2 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.6 }),
 				Object.freeze({ type: "drifter", count: 2, spawnInterval: 2.3 }),
 				Object.freeze({ type: "sweeper", count: 2, spawnInterval: 2.3 }),
@@ -918,6 +962,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.2 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.3 }),
@@ -930,6 +975,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.2 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.2 }),
@@ -952,12 +998,14 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "shielded", count: 3, spawnInterval: 2.5 }),
 				Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 			]) }),
 			// Level 44.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "drifter", count: 2, spawnInterval: 2.1 }),
 				Object.freeze({ type: "sweeper", count: 2, spawnInterval: 2.1 }),
@@ -971,6 +1019,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.1 }),
@@ -983,6 +1032,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.1 }),
@@ -1005,13 +1055,15 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "shielded", count: 3, spawnInterval: 2.4 }),
 				Object.freeze({ type: "scout", count: 6, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 			]) }),
 			// Level 49 — the campaign's final non-boss gauntlet: the entire
-			// 10-type roster, at its highest density, one step before Electron.
+			// 11-type roster, at its highest density, one step before Electron.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 6, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 5, spawnInterval: 1.5 }),
 				Object.freeze({ type: "drifter", count: 2, spawnInterval: 2.0 }),
 				Object.freeze({ type: "sweeper", count: 2, spawnInterval: 2.0 }),
@@ -1027,6 +1079,7 @@ export const Config = Object.freeze({
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 6, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 5, spawnInterval: 1.5 }),
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.1 }),
@@ -2243,6 +2296,98 @@ export const Config = Object.freeze({
 		}),
 
 		/**
+		 * Spitter — same hull silhouette and movement as Scout (enters, parks,
+		 * tracks, lead-predicted aim, reposition cycle — all driven generically
+		 * off this Config block by Enemy.js, no code changes needed there), but
+		 * toxic green and fires a single round, unguided glob per reload cycle
+		 * instead of Scout's 3-round burst. The glob grows as it flies (same
+		 * telegraph technique as PhoenixFireballs/NovaSeedBullets — see
+		 * `bullet` below) and, `bullet.spreadDelay` seconds after launch,
+		 * bursts into a fan of `fragment.count` faster shrapnel bullets spread
+		 * across `fragment.spreadAngle`, centered on the glob's own heading at
+		 * the instant it bursts (SpitterSeedBullets.js/SpitterBullets.js) — one
+		 * dodgeable shot turns into a spread the player has to actually move
+		 * out of, rather than a second flat damage source.
+		 */
+		spitter: Object.freeze({
+			size: 22,
+			health: 3,
+			healthPerLevel: 1.65, // matches Scout/Rocketeer — 1 × SHOP_HEALTH_FACTOR, see the methodology comment above
+			color: "#39FF6A", // toxic green — distinct from Scout's magenta and Rocketeer's amber
+			fillColor: "#082010",
+			lineWidth: 1.5,
+			glowBlur: 12,
+			hitGlowBlur: 22,
+			engineCoreColor: "#00CC44",
+			flameColor: "#39FF6A",
+			flameHalfWidth: 3,
+			entrySpeed: 300,
+			restXMargin: 80,
+			restYMin: 0.08,
+			restYMax: 0.35,
+			aimPause: 0.6,
+			reloadTime: 3.0, // single glob per cycle, no burst — the delayed scatter IS the payoff
+			hitRadius: 16,
+			minSeparation: 60,
+			repositionChance: 0.5, // odds a finished firing cycle sends it to a fresh rest point instead of aiming again in place
+			repositionDuration: 0.9, // seconds to ease to the new rest point (core/animation.js's easeOutCubic)
+			leadTime: 0.3, // seconds — same reasoning as Scout: the glob is unguided after launch, so leading it matters
+			// Equal to Scout/Rocketeer by design — same health, same stationary
+			// mobility, same mandatory-kill status (see the EffortScore
+			// methodology comment above `hitFlashDuration`). The scatter payoff
+			// is a player-danger trait, already covered separately by
+			// damageGrowthPerLevel, not folded into this score.
+			points: 100,
+			gold: 5,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.45,
+				poolSize: 4,
+			}),
+
+			/**
+			 * The round glob itself (SpitterSeedBullets.js) — fired once per
+			 * reload cycle, straight at the player's lead-predicted position at
+			 * launch, no homing after that (same convention as EnemyBullet).
+			 * Rendered as a growing glowing circle, not the straight-line
+			 * capsule every ship-family bullet uses — reads as an unstable glob
+			 * about to burst rather than a fired shell, same visual language as
+			 * PhoenixFireballs/NovaSeedBullets.
+			 */
+			bullet: Object.freeze({
+				speed: 250,
+				color: "#39FF6A",
+				lineWidth: 3,
+				glowBlur: 8,
+				radius: 5,
+				growthMult: 1.8, // radius multiplies up to this factor as spreadDelay approaches — telegraphs the burst
+				spreadDelay: 0.85, // seconds alive before it bursts into fragments
+				poolSize: 8,
+				damage: 6, // player HP lost on a direct hit, before it ever gets to burst — matches enemyBullet.damage
+				maxLife: 3, // seconds before self-destruct (safety net — see enemyBullet.maxLife's own doc)
+			}),
+
+			/**
+			 * The fan of shrapnel (SpitterBullets.js) a glob bursts into
+			 * (WaveManager's onScatter), spread `spreadAngle` total around the
+			 * glob's own heading at the moment it burst. Straight-line capsule
+			 * bullets, structurally identical to every other boss-bullet pool
+			 * (BossBulletPool.js) despite Spitter not being a boss.
+			 */
+			fragment: Object.freeze({
+				count: 3, // shrapnel pieces per burst — mirrors Scout's own 3-round burst count
+				spreadAngle: 0.9, // rad (~52°) total fan width around the glob's heading — same width as Phoenix's fireball->ember stage
+				speed: 320,
+				color: "#39FF6A",
+				lineWidth: 3,
+				glowBlur: 8,
+				halfLen: 5,
+				poolSize: 24,
+				damage: 5,
+			}),
+		}),
+
+		/**
 		 * Drifter — an alien "tentacle" creature, spawned in formations that
 		 * share a single diagonal-entry → loop-the-loop → diagonal-exit path
 		 * (see DrifterEnemy.createPath/samplePath). Each clone in a formation
@@ -2996,10 +3141,13 @@ export const Config = Object.freeze({
 		// its turn. That layering — not raw type-count — is what actually
 		// reads as "interaction." Each level still introduces exactly one new
 		// type in order (so the escalation stays legible — you always know
-		// what's new), but composition is NOT capped: level 7 ("Alien
-		// Invasion") deliberately stacks all four Drifter-family variants
-		// together for the only time in the game, and level 10 throws the
-		// entire 10-type roster into one finale. Formation sizes and spawn
+		// what's new) — the one exception is Spitter, paired into level 2
+		// alongside Rocketeer rather than getting a dedicated debut level of
+		// its own (see Config.enemy.spitter's own doc for why it's
+		// calibrated equal to Rocketeer) — but composition is NOT capped:
+		// level 7 ("Alien Invasion") deliberately stacks all four
+		// Drifter-family variants together for the only time in the game,
+		// and level 10 throws the entire 11-type roster into one finale. Formation sizes and spawn
 		// density both climb harder in the back half (levels 6/7/10 land
 		// 50+ individual enemies) for real spectacle, not just a longer list.
 		// Health/damage still scale with `level` on their own (see
@@ -3031,9 +3179,14 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 2 — {Scout, Rocketeer}. Overlapping from the start — the
-			// rocket group's timer starts while Scouts may still be on screen,
-			// so the two threats genuinely cross paths instead of alternating politely.
+			// Level 2 — {Scout, Rocketeer, Spitter}. Overlapping from the start
+			// — the rocket group's timer starts while Scouts may still be on
+			// screen, so the two threats genuinely cross paths instead of
+			// alternating politely. Spitter debuts paired with Rocketeer here
+			// (not a dedicated level of its own) and from here on rides along
+			// with every Rocketeer group at the same count/spawnInterval
+			// throughout the rest of this campaign — see Config.enemy.
+			// spitter's own doc for why it's calibrated equal to Rocketeer.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3047,12 +3200,22 @@ export const Config = Object.freeze({
 						spawnInterval: 2.6,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
 						type: "scout",
 						count: 3,
 						spawnInterval: 2.0,
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 3,
+						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 3,
 						spawnInterval: 2.3,
 					}),
@@ -3073,6 +3236,11 @@ export const Config = Object.freeze({
 						spawnInterval: 2.6,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
 						type: "diver",
 						count: 1,
 						spawnInterval: 3.5,
@@ -3089,6 +3257,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 2,
 						spawnInterval: 2.3,
 					}),
@@ -3111,6 +3284,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 2,
 						spawnInterval: 2.6,
 					}),
@@ -3157,6 +3335,11 @@ export const Config = Object.freeze({
 						spawnInterval: 2.6,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+					Object.freeze({
 						type: "drifter",
 						count: 1,
 						spawnInterval: 5,
@@ -3185,6 +3368,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 3,
+						spawnInterval: 2.5,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 3,
 						spawnInterval: 2.5,
 					}),
@@ -3236,6 +3424,11 @@ export const Config = Object.freeze({
 						spawnInterval: 2.4,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 3,
+						spawnInterval: 2.4,
+					}),
+					Object.freeze({
 						type: "diver",
 						count: 1,
 						spawnInterval: 3.5,
@@ -3269,6 +3462,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 3,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 3,
 						spawnInterval: 2.2,
 					}),
@@ -3322,6 +3520,11 @@ export const Config = Object.freeze({
 						spawnInterval: 2.2,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
 						type: "splitter",
 						count: 1,
 						spawnInterval: 3.5,
@@ -3333,7 +3536,7 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 10 — "Last Stand" — every single one of the 10 placeable
+			// Level 10 — "Last Stand" — every single one of the 11 placeable
 			// types, all overlapping. The campaign continues past this one now
 			// (see levels 11-30 below) — it was the endless-mode repeat cap
 			// before the campaign was extended, and reads as a real mid-campaign
@@ -3367,6 +3570,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2.2,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 2,
 						spawnInterval: 2.2,
 					}),
@@ -3447,6 +3655,11 @@ export const Config = Object.freeze({
 						count: 2,
 						spawnInterval: 2.2,
 					}),
+					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 2.2,
+					}),
 				]),
 			}),
 			// Level 12 — "Splitter Squad" — three Splitters (and the fragment
@@ -3465,6 +3678,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2.1,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 2,
 						spawnInterval: 2.1,
 					}),
@@ -3504,6 +3722,11 @@ export const Config = Object.freeze({
 						count: 2,
 						spawnInterval: 2,
 					}),
+					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 2,
+					}),
 				]),
 			}),
 			// Level 14 — {Scout, Sniper, Rocketeer, Bouncer}. A boss level (see
@@ -3524,6 +3747,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 2,
+						spawnInterval: 2,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 2,
 						spawnInterval: 2,
 					}),
@@ -3585,6 +3813,11 @@ export const Config = Object.freeze({
 						spawnInterval: 2,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 2,
+					}),
+					Object.freeze({
 						type: "diver",
 						count: 1,
 						spawnInterval: 2.6,
@@ -3602,6 +3835,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.9,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 3,
 						spawnInterval: 1.9,
 					}),
@@ -3641,6 +3879,11 @@ export const Config = Object.freeze({
 						count: 2,
 						spawnInterval: 1.9,
 					}),
+					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 1.9,
+					}),
 				]),
 			}),
 			// Level 19 — "Full Roster Redux" — every type from level 10's "Last
@@ -3675,6 +3918,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.9,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 3,
 						spawnInterval: 1.9,
 					}),
@@ -3751,6 +3999,11 @@ export const Config = Object.freeze({
 						spawnInterval: 1.9,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 2,
+						spawnInterval: 1.9,
+					}),
+					Object.freeze({
 						type: "splitter",
 						count: 1,
 						spawnInterval: 3.1,
@@ -3768,6 +4021,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 4,
 						spawnInterval: 1.8,
 					}),
@@ -3839,6 +4097,11 @@ export const Config = Object.freeze({
 						spawnInterval: 1.8,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 3,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
 						type: "scout",
 						count: 3,
 						spawnInterval: 1.5,
@@ -3862,6 +4125,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 3,
 						spawnInterval: 1.8,
 					}),
@@ -3937,6 +4205,11 @@ export const Config = Object.freeze({
 						spawnInterval: 1.8,
 					}),
 					Object.freeze({
+						type: "spitter",
+						count: 4,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
 						type: "scout",
 						count: 4,
 						spawnInterval: 1.4,
@@ -3954,6 +4227,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.7,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 4,
 						spawnInterval: 1.7,
 					}),
@@ -3995,6 +4273,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 3,
+						spawnInterval: 1.8,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 3,
 						spawnInterval: 1.8,
 					}),
@@ -4041,6 +4324,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.7,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 4,
 						spawnInterval: 1.7,
 					}),
@@ -4094,6 +4382,11 @@ export const Config = Object.freeze({
 					}),
 					Object.freeze({
 						type: "rocketeer",
+						count: 4,
+						spawnInterval: 1.6,
+					}),
+					Object.freeze({
+						type: "spitter",
 						count: 4,
 						spawnInterval: 1.6,
 					}),

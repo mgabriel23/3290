@@ -3,14 +3,18 @@
  * Orchestrates spawning, separation, and owns all active entities for
  * one level's wave (enemies of any type, their projectiles, explosions).
  *
- * Hull rendering is batched by (type × flash) into at most 4 fillStrokePaths
- * calls per frame — 4 GPU shadow passes regardless of enemy count:
- *   scout-normal | rocketeer-normal | sniper-normal | flash (white, shared)
+ * Hull rendering is batched by (type × flash) into at most 5 fillStrokePaths
+ * calls per frame — 5 GPU shadow passes regardless of enemy count:
+ *   scout-normal | rocketeer-normal | sniper-normal | spitter-normal | flash (white, shared)
  *
  * Each enemy type routes its onFire callback differently:
  *   scout     → EnemyBullets (straight aimed capsule)
  *   rocketeer → Rockets (homing, detonates on proximity or timer)
  *   sniper    → SniperBullets (straight shot, slow-start/fast-finish speed curve)
+ *   spitter   → SpitterSeedBullets (round glob, aimed once at launch, no
+ *               homing) — bursts into SpitterBullets shrapnel after a delay,
+ *               same "pool reports WHEN, WaveManager decides WHAT" fan-out
+ *               split every boss's own seed→fragment chain already keeps
  *
  * `checkPlayerHit` is the reverse of `handleBulletHit` — every enemy-attack
  * source (enemy bullets, sniper bullets, rocket proximity, drifter orb
@@ -104,6 +108,8 @@ import { ZigzagBoss } from './ZigzagBoss.js';
 import { PhoenixBoss } from './PhoenixBoss.js';
 import { ElectronBoss } from './ElectronBoss.js';
 import { EnemyBullets } from './EnemyBullet.js';
+import { SpitterSeedBullets } from './SpitterSeedBullets.js';
+import { SpitterBullets } from './SpitterBullets.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
 import { SpiralBullets } from './SpiralBullets.js';
@@ -146,6 +152,7 @@ const _mkPool   = () => Array.from({ length: MAX_BATCH }, () =>
 const _scoutNormalHulls     = _mkPool();
 const _rocketeerNormalHulls = _mkPool();
 const _sniperNormalHulls    = _mkPool();
+const _spitterNormalHulls   = _mkPool();
 const _flashHulls           = _mkPool();
 
 // Pre-allocated boss-health-bar rectangles (track + fill), mutated in place
@@ -335,6 +342,23 @@ export class WaveManager {
   _buildProjectilePools() {
     this._enemyBullets  = new EnemyBullets();
     this._sniperBullets = new SniperBullets();
+    // Spitter's glob→shrapnel chain — built leaf-first (fragment pool, then
+    // the seed pool that fans out into it), same dependency order as every
+    // other multi-stage cascade below (Tetra/Nova/Phoenix/Electron). The
+    // fan-out formula lives HERE, not in SpitterSeedBullets/SpitterBullets —
+    // same "pool reports WHEN/WHERE/heading, WaveManager decides WHAT" split
+    // those chains already keep.
+    this._spitterBullets = new SpitterBullets();
+    this._spitterSeedBullets = new SpitterSeedBullets({
+      onScatter: (x, y, angle) => {
+        const { fragment } = Config.enemy.spitter;
+        const start = angle - fragment.spreadAngle / 2;
+        const step  = fragment.count > 1 ? fragment.spreadAngle / (fragment.count - 1) : 0;
+        for (let i = 0; i < fragment.count; i++) {
+          this._spitterBullets.fire(x, y, start + i * step);
+        }
+      },
+    });
     this._spiralBullets = new SpiralBullets();
     this._tetraBullets  = new TetraBullets();
     // A Tetra seed's `onDetonate` fans out into `fragment.count` shrapnel
@@ -446,6 +470,7 @@ export class WaveManager {
     this._particles          = new Particles(Config.enemy.scout.color);
     this._rocketeerParticles = new Particles(Config.enemy.rocketeer.color);
     this._sniperParticles    = new Particles(Config.enemy.sniper.color);
+    this._spitterParticles   = new Particles(Config.enemy.spitter.color);
     this._drifterParticles   = new Particles(Config.enemy.drifter.color);
     this._sweeperParticles   = new Particles(Config.enemy.drifter.sweeper.color, Config.enemy.drifter.sweeper.sparksPerEmit);
     this._diverParticles     = new Particles(Config.enemy.drifter.diver.color, Config.enemy.drifter.diver.sparksPerEmit);
@@ -475,6 +500,7 @@ export class WaveManager {
     // SniperEnemy's onFire call omits it, so `SniperBullets.fire`'s own
     // default (1) applies and its shot is unaffected.
     this._fireSniperBullet = (ox, oy, tx, ty, speedMult) => this._sniperBullets.fire(ox, oy, tx, ty, speedMult);
+    this._fireSpitterSeed = (ox, oy, tx, ty) => this._spitterSeedBullets.fire(ox, oy, tx, ty);
     this._fireSpiralBullet = (ox, oy, angle) => this._spiralBullets.fire(ox, oy, angle);
     this._fireTetraSeed = (ox, oy, angle) => this._tetraSeedBullets.fireAngle(ox, oy, angle);
     this._fireNovaSeed = (ox, oy, tx, ty) => this._novaSeedBullets.fire(ox, oy, tx, ty);
@@ -540,6 +566,7 @@ export class WaveManager {
     this._particles.update(dt);
     this._rocketeerParticles.update(dt);
     this._sniperParticles.update(dt);
+    this._spitterParticles.update(dt);
     this._drifterParticles.update(dt);
     this._sweeperParticles.update(dt);
     this._diverParticles.update(dt);
@@ -552,6 +579,8 @@ export class WaveManager {
     this._drifterProjectiles.update(dt, playerX, playerY);
     this._enemyBullets.update(dt);
     this._sniperBullets.update(dt);
+    this._spitterSeedBullets.update(dt);
+    this._spitterBullets.update(dt);
     this._spiralBullets.update(dt);
     this._tetraSeedBullets.update(dt);
     this._tetraBullets.update(dt);
@@ -618,6 +647,7 @@ export class WaveManager {
       let cb;
       if      (e.type === 'rocketeer') cb = this._fireRocket;
       else if (e.type === 'sniper')    cb = this._fireSniperBullet;
+      else if (e.type === 'spitter')   cb = this._fireSpitterSeed;
       else                             cb = this._fireBullet;
       // Sniper's update() signature simply doesn't read this 5th arg — only
       // Enemy.js (Scout/Rocketeer) uses it, for repositioning.
@@ -682,6 +712,8 @@ export class WaveManager {
   _renderProjectiles(renderer) {
     this._enemyBullets.render(renderer);
     this._sniperBullets.render(renderer);
+    this._spitterSeedBullets.render(renderer);
+    this._spitterBullets.render(renderer);
     this._spiralBullets.render(renderer);
     this._tetraSeedBullets.render(renderer);
     this._tetraBullets.render(renderer);
@@ -727,7 +759,7 @@ export class WaveManager {
 
   /** Walks live enemies, world-transforms each batchable one's hull into its (type × flash) pool, and returns how many landed in each pool. */
   _assignHullBatches() {
-    let scoutNormalCount = 0, rocketeerNormalCount = 0, sniperNormalCount = 0, flashCount = 0;
+    let scoutNormalCount = 0, rocketeerNormalCount = 0, sniperNormalCount = 0, spitterNormalCount = 0, flashCount = 0;
     let drifterNormalCount = 0, drifterFlashCount = 0, sweeperNormalCount = 0, sweeperFlashCount = 0,
         diverNormalCount = 0, diverFlashCount = 0, weaverNormalCount = 0, weaverFlashCount = 0;
 
@@ -770,6 +802,8 @@ export class WaveManager {
         pool = _rocketeerNormalHulls; idx = rocketeerNormalCount++;
       } else if (e.type === 'sniper') {
         pool = _sniperNormalHulls;    idx = sniperNormalCount++;
+      } else if (e.type === 'spitter') {
+        pool = _spitterNormalHulls;   idx = spitterNormalCount++;
       } else {
         pool = _scoutNormalHulls;     idx = scoutNormalCount++;
       }
@@ -785,7 +819,7 @@ export class WaveManager {
     }
 
     return {
-      scoutNormalCount, rocketeerNormalCount, sniperNormalCount, flashCount,
+      scoutNormalCount, rocketeerNormalCount, sniperNormalCount, spitterNormalCount, flashCount,
       drifterNormalCount, drifterFlashCount, sweeperNormalCount, sweeperFlashCount,
       diverNormalCount, diverFlashCount, weaverNormalCount, weaverFlashCount,
     };
@@ -794,13 +828,14 @@ export class WaveManager {
   /** Issues one fillStrokePaths call per non-empty pool `_assignHullBatches` just filled. */
   _drawHullBatches(renderer, counts) {
     const {
-      scoutNormalCount, rocketeerNormalCount, sniperNormalCount, flashCount,
+      scoutNormalCount, rocketeerNormalCount, sniperNormalCount, spitterNormalCount, flashCount,
       drifterNormalCount, drifterFlashCount, sweeperNormalCount, sweeperFlashCount,
       diverNormalCount, diverFlashCount, weaverNormalCount, weaverFlashCount,
     } = counts;
     const sCfg  = Config.enemy.scout;
     const rCfg  = Config.enemy.rocketeer;
     const snCfg = Config.enemy.sniper;
+    const spCfg = Config.enemy.spitter;
 
     if (scoutNormalCount > 0) renderer.fillStrokePaths(_scoutNormalHulls, {
       fillColor: sCfg.fillColor,  strokeColor: sCfg.color,
@@ -817,6 +852,11 @@ export class WaveManager {
       lineWidth:  snCfg.lineWidth, glowBlur:    snCfg.glowBlur,
       glowColor:  snCfg.color,     singleStroke: true,
     }, sniperNormalCount);
+    if (spitterNormalCount > 0) renderer.fillStrokePaths(_spitterNormalHulls, {
+      fillColor: spCfg.fillColor,  strokeColor: spCfg.color,
+      lineWidth:  spCfg.lineWidth, glowBlur:    spCfg.glowBlur,
+      glowColor:  spCfg.color,     singleStroke: true,
+    }, spitterNormalCount);
     if (flashCount > 0) renderer.fillStrokePaths(_flashHulls, {
       fillColor: '#ffffff', strokeColor: '#ffffff',
       lineWidth:  sCfg.lineWidth, glowBlur:   sCfg.hitGlowBlur,
@@ -884,6 +924,7 @@ export class WaveManager {
     this._particles.render(renderer);
     this._rocketeerParticles.render(renderer);
     this._sniperParticles.render(renderer);
+    this._spitterParticles.render(renderer);
     this._drifterParticles.render(renderer);
     this._sweeperParticles.render(renderer);
     this._diverParticles.render(renderer);
@@ -991,6 +1032,9 @@ export class WaveManager {
       } else if (enemy.type === 'sniper') {
         this._sniperParticles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.sniper.audio.volume);
+      } else if (enemy.type === 'spitter') {
+        this._spitterParticles.emit(enemy.x, enemy.y);
+        this._playExplosionSfx(Config.enemy.spitter.audio.volume);
       } else if (enemy.type === 'drifter') {
         const { particles, audio } = this._drifterVarietyAssets(enemy._variant);
         particles.emit(enemy.x, enemy.y);
@@ -1104,7 +1148,7 @@ export class WaveManager {
       if (enemy._variant === 'fragment') return { points: cfg.splitter.fragmentPoints, gold: cfg.splitter.fragmentGold };
       return { points: cfg.points, gold: cfg.gold };
     }
-    const cfg = Config.enemy[enemy.type]; // scout, rocketeer, sniper
+    const cfg = Config.enemy[enemy.type]; // scout, rocketeer, sniper, spitter
     return { points: cfg.points, gold: cfg.gold };
   }
 
@@ -1144,6 +1188,8 @@ export class WaveManager {
 
     if (this._enemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemyBullet.damage * mult;
     if (this._sniperBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.sniper.bullet.damage * mult;
+    if (this._spitterSeedBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.spitter.bullet.damage * mult;
+    if (this._spitterBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.spitter.fragment.damage * mult;
     if (this._spiralBullets.checkHit(x, y, hitRadius)) damage += Config.boss.spiral.bullet.damage * mult;
     if (this._tetraSeedBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.seed.damage * mult;
     if (this._tetraBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.fragment.damage * mult;
@@ -1417,6 +1463,7 @@ export class WaveManager {
       && !this._particles.active
       && !this._rocketeerParticles.active
       && !this._sniperParticles.active
+      && !this._spitterParticles.active
       && !this._drifterParticles.active
       && !this._sweeperParticles.active
       && !this._diverParticles.active
@@ -1429,6 +1476,8 @@ export class WaveManager {
       && !this._drifterProjectiles.active
       && !this._enemyBullets.active
       && !this._sniperBullets.active
+      && !this._spitterSeedBullets.active
+      && !this._spitterBullets.active
       && !this._spiralBullets.active
       && !this._tetraSeedBullets.active
       && !this._tetraBullets.active

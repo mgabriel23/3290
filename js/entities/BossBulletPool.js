@@ -2,7 +2,9 @@
  * BossBulletPool.js
  * Shared fixed-velocity, bounds-culled, swap-remove-on-hit bullet-pool
  * mechanics reused by every boss's own straight-line projectile pool
- * (NovaBullets, PulsorBullets, SpiralBullets, TetraBullets, ZigzagBullets).
+ * (NovaBullets, PulsorBullets, SpiralBullets, TetraBullets, ZigzagBullets),
+ * plus SpitterBullets.js — a regular (non-boss) enemy's shrapnel fan whose
+ * mechanics are identical, despite the "boss" in this file's name.
  * Each boss fires a visually distinct capsule (its own Config-driven
  * color/lineWidth/glowBlur/halfLen and pool size, sometimes a per-shot speed
  * instead of one shared constant), but the underlying spawn/advance/cull/

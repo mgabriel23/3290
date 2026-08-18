@@ -31,7 +31,7 @@ export const TRACKS = [
   {
     id: 'scoutFamily',
     title: 'INTERCEPTOR',
-    description: 'Destroy Scouts and Rocketeers.',
+    description: 'Destroy Scouts, Rocketeers, and Spitters.',
     color: Config.enemy.scout.color,
     thresholds: [50, 500, 5000],
     getValue: (s) => s.killsByFamily.scoutFamily,
