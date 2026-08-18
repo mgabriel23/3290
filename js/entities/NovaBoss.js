@@ -8,10 +8,11 @@
  * patrolling a slow bouncing path CONFINED TO THE TOP HALF of the arena
  * (`Config.boss.nova.boundYMin`/`boundYMax`, both well above the virtual
  * canvas's true half-height of 480 — same DVD-logo bounce technique as
- * TetraBoss._updatePatrol, just a tighter, higher band).
+ * SpiralBoss's own phase-2 patrol (`_updatePatrol`), just a tighter, higher
+ * band).
  *
  * A repeating TIMED loop between two phases (`_phase`/`_phaseAge`), same
- * shape as TetraBoss's own phase1/phase2 loop:
+ * overall shape as SpiralBoss's own phase1/phase2 loop:
  *
  *   phase 1 (`phase1Duration` seconds) — a delayed spiral burst, not a
  *   direct spray: every `fireInterval` seconds it launches ONE slow bullet
@@ -33,7 +34,7 @@
  *   continuously instead (`phase2.rotationSpeed`), firing a SEED from each
  *   of its 5 sides simultaneously (`_fireVolley` — `fire.fireNovaSeedAngle`,
  *   NovaSeedBullets' angle-launch mode — the exact same "N shots evenly
- *   spaced around the current rotation" mechanic Tetra/Spiral already use)
+ *   spaced around the current rotation" mechanic Spiral already uses)
  *   `phase2.volleyCount` times, `phase2.volleyInterval` seconds apart, after
  *   an initial `phase2.windUp` seconds of visible spin-up (the telegraph).
  *   Every one of those seeds independently swells and detonates into its
@@ -41,7 +42,9 @@
  *   seeds × `fragment.count` fragments each is what actually earns the
  *   "bullet hell" name, not a new attack shape.
  *
- * Patrol movement never pauses for either phase, same as Tetra.
+ * Patrol movement never pauses for either phase — unlike Tetra, this hull
+ * has no hold-still-to-fire beat, it just keeps sweeping regardless of
+ * which volley is currently firing.
  *
  * Hit/death-flash/entry-glide rendering reuse the same shared
  * EnemyCombat.js functions every other boss/enemy class uses — see that

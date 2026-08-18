@@ -8,7 +8,7 @@
  * `fillEllipse`/`strokeCircle` primitives, not a polygon, so unlike every
  * other boss/enemy it can't reuse EnemyCombat.js's `renderHull`), patrolling
  * a slow bouncing path around the upper arena — same DVD-logo bounce
- * technique as TetraBoss/NovaBoss's own `_updatePatrol`. A small bright
+ * technique as NovaBoss's own `_updatePatrol`. A small bright
  * marker dot orbits the rim at radius `size` along `_angle` — during phase 1
  * it points at the player (an aim indicator, same idea as Nova's hull
  * vertex), during phase 2 it's the visible tell for the boss's own
@@ -20,7 +20,7 @@
  * rather than streaks.
  *
  * A repeating TIMED loop between two phases (`_phase`/`_phaseAge`), same
- * shape as TetraBoss's/NovaBoss's own phase1/phase2 loops:
+ * overall shape as NovaBoss's own phase1/phase2 loops:
  *
  *   phase 1 (`phase1Duration` seconds) — an expanding "C-shaped" wave: every
  *   `wave.interval` seconds, `wave.count` pulses fire simultaneously, evenly
@@ -41,8 +41,8 @@
  *   `_fireRing`). Each gap's angular position is `this._angle + <fixed
  *   offset>`, so because the hull keeps spinning between pulses, every new
  *   ring's safe lanes land somewhere different from the last one's — the
- *   same "rotate so the safe gaps keep sweeping past" language Tetra's laser
- *   already uses. A short `ring.windUp` delay before the first ring of each
+ *   same "rotate so the safe gaps keep sweeping past" language Spiral's own
+ *   phase-2 laser sweep already uses. A short `ring.windUp` delay before the first ring of each
  *   phase-2 visit lets the spin-up itself read as a telegraph.
  *
  * Hit/death-flash/entry-glide rendering reuse the shared EnemyCombat.js

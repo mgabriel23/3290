@@ -68,11 +68,12 @@
  * construction. Every boss class shares one `update(dt, playerX, playerY,
  * ctx)` shape, where `ctx` is a bag of every callback ANY boss might need —
  * fire callbacks for the ship-family bosses (`fireBullet`/`fireRocket`/
- * `fireSniperBullet`/`fireSpiralBullet`/`fireTetraBullet`/`fireNovaSeed`/
+ * `fireSniperBullet`/`fireSpiralBullet`/`fireTetraSeed`/`fireNovaSeed`/
  * `fireNovaSeedAngle`/`firePulsorBullet`/`fireZigzagBullet`/
  * `firePhoenixFireball`/`fireElectronBolt`/`fireElectronChain`),
- * `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal,
- * and `fireDrifterProjectile` for Snake's head (`_bossContext`, built once
+ * `barrierSurfaceY`/`onBarrierHit` for a bouncing boss like Bouncer Primal or
+ * Tetra's own phase-1 bounce (see TetraBoss.js), and `fireDrifterProjectile`
+ * for Snake's head (`_bossContext`, built once
  * in the constructor) — each class reads only the ones it actually uses
  * (see BossEnemy.js/SpiralBoss.js/BouncerPrimalBoss.js/SnakeBoss.js/
  * TetraBoss.js/NovaBoss.js/PulsorBoss.js/ZigzagBoss.js/PhoenixBoss.js/
@@ -106,6 +107,7 @@ import { EnemyBullets } from './EnemyBullet.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
 import { SpiralBullets } from './SpiralBullets.js';
+import { TetraSeedBullets } from './TetraSeedBullets.js';
 import { TetraBullets } from './TetraBullets.js';
 import { NovaSeedBullets } from './NovaSeedBullets.js';
 import { NovaBullets } from './NovaBullets.js';
@@ -330,6 +332,21 @@ export class WaveManager {
     this._sniperBullets = new SniperBullets();
     this._spiralBullets = new SpiralBullets();
     this._tetraBullets  = new TetraBullets();
+    // A Tetra seed's `onDetonate` fans out into `fragment.count` shrapnel
+    // pieces evenly spaced around a full ring — the fan-out formula lives
+    // HERE (not in TetraSeedBullets/TetraBoss), same "pool reports WHEN,
+    // WaveManager decides WHAT" split Nova's own onDetonate below already
+    // keeps, just an even ring instead of Nova's golden-angle spiral.
+    this._tetraSeedBullets = new TetraSeedBullets({
+      onDetonate: (x, y) => {
+        const { fragment } = Config.boss.tetra;
+        const startAngle = Math.random() * Math.PI * 2;
+        const angleStep = (Math.PI * 2) / fragment.count;
+        for (let i = 0; i < fragment.count; i++) {
+          this._tetraBullets.fire(x, y, startAngle + i * angleStep);
+        }
+      },
+    });
     this._novaBullets   = new NovaBullets();
     // A Nova seed's `onDetonate` fans out into `fragment.count` spiral
     // fragments — see NovaBoss.js's class doc for the golden-angle/
@@ -407,7 +424,7 @@ export class WaveManager {
     // default (1) applies and its shot is unaffected.
     this._fireSniperBullet = (ox, oy, tx, ty, speedMult) => this._sniperBullets.fire(ox, oy, tx, ty, speedMult);
     this._fireSpiralBullet = (ox, oy, angle) => this._spiralBullets.fire(ox, oy, angle);
-    this._fireTetraBullet = (ox, oy, angle) => this._tetraBullets.fire(ox, oy, angle);
+    this._fireTetraSeed = (ox, oy, angle) => this._tetraSeedBullets.fireAngle(ox, oy, angle);
     this._fireNovaSeed = (ox, oy, tx, ty) => this._novaSeedBullets.fire(ox, oy, tx, ty);
     // Nova's phase-2 bullet-hell volleys fire the SAME seed pool, just in a
     // fixed direction instead of aimed at the player (NovaSeedBullets'
@@ -441,7 +458,7 @@ export class WaveManager {
       fireRocket: this._fireRocket,
       fireSniperBullet: this._fireSniperBullet,
       fireSpiralBullet: this._fireSpiralBullet,
-      fireTetraBullet: this._fireTetraBullet,
+      fireTetraSeed: this._fireTetraSeed,
       fireNovaSeed: this._fireNovaSeed,
       fireNovaSeedAngle: this._fireNovaSeedAngle,
       firePulsorBullet: this._firePulsorBullet,
@@ -480,6 +497,7 @@ export class WaveManager {
     this._enemyBullets.update(dt);
     this._sniperBullets.update(dt);
     this._spiralBullets.update(dt);
+    this._tetraSeedBullets.update(dt);
     this._tetraBullets.update(dt);
     this._novaBullets.update(dt);
     this._novaSeedBullets.update(dt);
@@ -604,6 +622,7 @@ export class WaveManager {
     this._enemyBullets.render(renderer);
     this._sniperBullets.render(renderer);
     this._spiralBullets.render(renderer);
+    this._tetraSeedBullets.render(renderer);
     this._tetraBullets.render(renderer);
     this._novaBullets.render(renderer);
     this._novaSeedBullets.render(renderer);
@@ -1060,7 +1079,8 @@ export class WaveManager {
     if (this._enemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemyBullet.damage * mult;
     if (this._sniperBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.sniper.bullet.damage * mult;
     if (this._spiralBullets.checkHit(x, y, hitRadius)) damage += Config.boss.spiral.bullet.damage * mult;
-    if (this._tetraBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.bullet.damage * mult;
+    if (this._tetraSeedBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.seed.damage * mult;
+    if (this._tetraBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.fragment.damage * mult;
     if (this._novaBullets.checkHit(x, y, hitRadius)) damage += Config.boss.nova.fragment.damage * mult;
     if (this._novaSeedBullets.checkHit(x, y, hitRadius)) damage += Config.boss.nova.seed.damage * mult;
     if (this._pulsorBullets.checkHit(x, y, hitRadius)) damage += Config.boss.pulsor.pulseDamage * mult;
@@ -1072,9 +1092,10 @@ export class WaveManager {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
       // A regular Bouncer always deals contact damage; a boss opts in by
-      // exposing its own `.contactDamage` (currently Bouncer Primal/Phoenix's
-      // charge/Electron's surge — see each class's doc) rather than every
-      // other boss needing a no-op getter just to be excluded here. The
+      // exposing its own `.contactDamage` (currently Bouncer Primal/Tetra's
+      // own bounce phase/Phoenix's charge/Electron's surge — see each
+      // class's doc) rather than every other boss needing a no-op getter
+      // just to be excluded here. The
       // circle radius defaults to the enemy's own `hitRadius` (the hull
       // player bullets also test against) but a boss can override it via an
       // optional `.contactRadius` (currently only Electron's surge, whose
@@ -1228,6 +1249,7 @@ export class WaveManager {
     this._enemyBullets.clear();
     this._sniperBullets.clear();
     this._spiralBullets.clear();
+    this._tetraSeedBullets.clear();
     this._tetraBullets.clear();
     this._novaBullets.clear();
     this._novaSeedBullets.clear();
@@ -1332,6 +1354,7 @@ export class WaveManager {
       && !this._enemyBullets.active
       && !this._sniperBullets.active
       && !this._spiralBullets.active
+      && !this._tetraSeedBullets.active
       && !this._tetraBullets.active
       && !this._novaBullets.active
       && !this._novaSeedBullets.active

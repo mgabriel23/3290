@@ -4789,111 +4789,157 @@ export const Config = Object.freeze({
 		 * Boss #5 — "Tetra". An original rotating-square silhouette (see
 		 * TetraBoss.js's TETRA_HULL_PTS — a plain 4-sided polygon, not a
 		 * reskin of any existing enemy, same "original hull" lineage as
-		 * Spiral) that continuously spins while patrolling a slow bouncing
-		 * path around the upper arena (`moveSpeed`/`boundMarginX`/
-		 * `boundYMin`/`boundYMax` — reflects off each bound like a DVD-logo
-		 * bounce, see TetraBoss._updatePatrol) — unlike Spiral, which holds
-		 * still to fire and only relocates BETWEEN firing spells, Tetra never
-		 * stops moving.
+		 * Spiral), sized down from this boss's original cut so it reads as
+		 * agile rather than lumbering.
 		 *
-		 * A repeating TIMED loop between its two phases — bullets, then
-		 * lasers, then back to bullets, for the entire fight, never settling
-		 * permanently into either one (closer to Boss #1's own
-		 * scout/rocketeer/sniper cycle than a one-way health-gated
-		 * escalation):
+		 * Falls in from the top exactly like a Bouncer/Bouncer Primal do —
+		 * spawns above the screen already in 'bouncing' state, no separate
+		 * entry-glide state — see TetraBoss.js's constructor.
 		 *
-		 *   phase 1 (`phase1Duration` seconds) — fires a slow bullet from
-		 *   each of the hull's 4 sides every `bullet.fireInterval` seconds
-		 *   (same "N shots evenly spaced around the current rotation"
-		 *   mechanic as Spiral's fireDirections, just at this boss's own
-		 *   cadence/speed), spinning at `phase1RotationSpeed`.
+		 * A repeating loop between two very different phases, never settling
+		 * permanently into either one (see TetraBoss.js's own class doc for
+		 * the full state machine):
 		 *
-		 *   phase 2 (`phase2Duration` seconds) — stops firing bullets and
-		 *   instead grows 4 continuous laser beams (`laser`), one from each
-		 *   hull side straight outward past the screen edge, rigidly
-		 *   attached to the rotating hull (see TetraBoss._laserPaths) —
-		 *   spinning faster now (`phase2RotationSpeed`) so the safe gaps
-		 *   between beams keep sweeping past the player, same "dodge through
-		 *   the rotating gap" read as a bullet-hell rotating-laser pattern.
-		 *   Every time phase 2 begins it telegraphs for `laser.warmupDuration`
-		 *   seconds first (the beams are visibly growing but deal no damage
-		 *   yet) before going live — the same fairness window every other
-		 *   telegraphed attack in this game gives the player (Sniper's
-		 *   charge, Boss #1's sniper phase, Drifter's lash), replayed fresh
-		 *   on every lap of the loop, not just the first.
+		 *   phase 1 ('bouncing', `phase1Duration` seconds) — a genuine
+		 *   Bouncer: gravity + wall/top/barrier bounces via BouncerEnemy.js's
+		 *   `stepBouncePhysics` at this boss's own `bounce.*` numbers, plus
+		 *   barrier chip damage (`bounce.barrierDamage`) and player contact
+		 *   damage (`contactDamage`). ALSO fires a slow "seed" bullet from
+		 *   each of the hull's 4 sides every `seed.fireInterval` seconds (the
+		 *   same "N shots evenly spaced around the current rotation" idiom
+		 *   Spiral's own fireDirections uses), which after `seed.
+		 *   scatterDelay` seconds bursts into `fragment.count` faster
+		 *   shrapnel bullets flying outward in an even ring — the same
+		 *   TIME-based detonation Nova's own seed/fragment pair uses (see
+		 *   NovaSeedBullets.js's doc), just a plain ring here instead of
+		 *   Nova's golden-angle spiral, so the two bosses read as different
+		 *   attacks.
+		 *
+		 *   phase 2 ('settling' → 'charging' → 'lasering') — the bounce
+		 *   halts, the hull eases back to `restY` (`settleDuration`), then
+		 *   the center hole telegraphs (`chargeOrb` + `laser`'s dashed
+		 *   preview fan, `laser.chargeDuration`) exactly where 3 beams
+		 *   (`laser.spreadAngle` apart) are about to fire, aimed once at the
+		 *   player's position at that instant. The beams then go live
+		 *   (`laser.liveDuration`) and sway together left-right, SLOWLY
+		 *   (`laser.swaySpeed`/`swayAmplitude`) around that locked direction,
+		 *   so standing still isn't safe — the player has to keep drifting
+		 *   into whichever gap the sway currently opens.
 		 */
 		tetra: Object.freeze({
 			name: "TETRA",
-			size: 50, // vp — half-extent of the square hull (see TETRA_HULL_PTS)
+			size: 34, // vp — half-extent of the square hull (see TETRA_HULL_PTS) — shrunk from this boss's original 50
 			health: 480,
 			healthPerLevel: 62,
 			color: "#3DA5FF", // electric blue — distinct from every other boss (red/violet/amber/green) and from the player's own cyan
 			fillColor: "#081428",
 			lineWidth: 3,
-			glowBlur: 18,
-			hitGlowBlur: 30,
-			hitRadius: 50, // vp — matches `size`, same convention as Spiral's hitRadius
+			glowBlur: 14,
+			hitGlowBlur: 22,
+			hitRadius: 34, // vp — matches `size`, same convention as Spiral's hitRadius; also the bounce-physics collision radius and the fall-in spawn's own radius offset
 
-			entrySpeed: 150,
-			restY: 260, // vp — where the entry glide ends and patrolling begins
+			restY: 260, // vp — where 'settling' eases back to before every charge/laser telegraph
 
-			phase1RotationSpeed: 0.6, // rad/sec
-			phase2RotationSpeed: 1.3, // rad/sec — faster once enraged, so the safe gaps between beams sweep past more urgently
+			// Phase 1 — real Bouncer physics (see BouncerEnemy.js's exported
+			// `stepBouncePhysics`), same technique Bouncer Primal's own giant
+			// reskin uses, including the fall-in spawn (no entry glide, see
+			// TetraBoss.js's constructor). Numbers sit between a regular
+			// Bouncer's (small, snappy) and Bouncer Primal's (huge,
+			// ponderous) since this hull is in between the two in size.
+			bounce: Object.freeze({
+				gravity: 300, // vp/sec^2
+				spinFactor: 0.03, // rad/sec of hull spin per vp/sec of horizontal speed — also drives the hull's cosmetic rotation, see TetraBoss's class doc
+				speedMin: 90, // vp/sec — horizontal launch speed range, rerolled every time phase 1 resumes
+				speedMax: 170,
+				barrierDamage: 12, // Barrier.health lost per bounce off the barrier
+			}),
+			contactDamage: 16, // player HP lost per contact tick if the player touches the hull — throttled by Config.player.invulnDuration, same as any other contact damage; active in every state via the `.contactDamage` getter
 
-			// Continuous bouncing patrol — reflects off each bound like a
-			// DVD-logo bounce (see TetraBoss._updatePatrol). Never stops,
-			// through both phases and regardless of firing state.
-			moveSpeed: 85, // vp/sec
-			boundMarginX: 90, // vp from each side edge
-			boundYMin: 200, // vp — kept clear of the boss health bar above it
-			boundYMax: 430,
+			phase1Duration: 8, // seconds of bouncing before the next charge/laser telegraph
+			settleDuration: 0.6, // seconds to ease from wherever the bounce ended back to (restX, restY) — see TetraBoss._beginSettle
 
-			// How long each phase lasts before looping to the other — see
-			// class doc. Phase 2's duration comfortably exceeds
-			// `laser.warmupDuration` so the beams spend real time fully live
-			// (dealing damage), not just telegraphing, before looping back.
-			phase1Duration: 8, // seconds of bullets
-			phase2Duration: 6, // seconds of lasers (including the warmup telegraph)
-
-			// Phase 1 — dedicated slow-bullet pool (TetraBullets.js), fired
-			// from each of the 4 hull sides on every tick, same shape as
-			// Spiral's own `bullet`/`fireDirections` pattern just at this
-			// boss's own slower pace/speed.
-			bullet: Object.freeze({
-				fireInterval: 0.5, // seconds between ticks — more aggressive mid-fast rate, still well below Spiral's near-continuous 0.12s tick
-				speed: 110, // vp/sec — deliberately slow
+			// Phase 1's ranged attack — see class doc. The seed bullet grows
+			// visibly as it nears its scatter burst (TetraSeedBullets.render),
+			// the same fairness telegraph every other delayed/charged attack
+			// in this game gives the player (Sniper's charge orb, Nova's own
+			// seed).
+			seed: Object.freeze({
+				fireInterval: 1.4, // seconds between 4-bullet volleys while bouncing
+				speed: 70, // vp/sec — deliberately slow, the same "slowly" the player actually sees, not just a label
+				scatterDelay: 1.3, // seconds alive before it bursts into shrapnel
 				color: "#3DA5FF",
-				lineWidth: 4,
+				lineWidth: 2.5,
 				glowBlur: 8,
-				halfLen: 6,
-				poolSize: 80,
-				damage: 10,
+				radius: 5, // vp — base drawn radius
+				growthMult: 1.7, // radius multiplies up to this factor as scatterDelay approaches
+				poolSize: 16,
+				damage: 8, // player HP lost on a direct hit, before it ever gets to burst
 			}),
 
-			// Phase 2 — 4 continuous rotating laser beams, rigidly attached to
-			// the hull sides. Collision is a live point-to-segment test
+			// Phase 1's scatter burst — see class doc. Plain evenly-spaced
+			// ring (unlike Nova's golden-angle/speed-step spiral fragments)
+			// so the two seed/fragment attacks read as visually distinct.
+			fragment: Object.freeze({
+				count: 5, // shrapnel pieces per burst, evenly spaced around a full ring
+				speed: 120, // vp/sec
+				color: "#3DA5FF",
+				lineWidth: 3,
+				glowBlur: 7,
+				halfLen: 5,
+				poolSize: 48, // sized for up to 4 seeds (one full volley) bursting near-simultaneously, plus a few stragglers
+				damage: 8,
+			}),
+
+			// Phase 2 — 3 continuous beams firing from the hull's dead
+			// center, fanned `spreadAngle` apart, swaying together once live.
+			// Collision is a live point-to-segment test
 			// (vectorMath.distanceToSegment) against the player each frame,
 			// not a pooled projectile — see TetraBoss.checkLaserHit, read
 			// generically by WaveManager.checkPlayerHit the same optional-hook
 			// way a regular Bouncer's `contactDamage` already is.
 			laser: Object.freeze({
-				warmupDuration: 1.0, // seconds the beams are visible but harmless right after phase 2 begins
-				length: 1300, // vp — comfortably longer than the virtual canvas's own diagonal (~1101vp) from anywhere within the patrol bounds, so a beam always reaches past every edge regardless of the boss's current position
+				chargeDuration: 1.3, // seconds the dashed preview fan + growing chargeOrb are visible but harmless before the beams go live
+				liveDuration: 4.5, // seconds the beams are live/damaging and swaying before looping back to phase 1
+				spreadAngle: 0.24, // rad (~14°) between each beam and the center one — the 3-beam fan's half-gap
+				swaySpeed: 0.6, // rad/sec — MUCH slower than this attack's first cut (was 1.6) — a slow, readable drift rather than a fast wag, closer to half a full swing over `liveDuration`
+				swayAmplitude: 0.5, // rad (~29°) — how far the fan swings from its locked center direction, each way
+				length: 1300, // vp — comfortably longer than the virtual canvas's own diagonal (~1101vp) from anywhere within the arena, so a beam always reaches past every edge regardless of the boss's current position
 				halfWidth: 6, // vp — collision half-thickness (added to the player's own hitRadius)
-				damage: 14, // player HP lost per overlapping frame — throttled by Config.player.invulnDuration same as any other contact damage
+				damage: 16, // player HP lost per overlapping frame
 				color: "#3DA5FF",
 				coreColor: "#ffffff", // bright white inner line, laid over the colored outer glow for a "hot" beam core
 				lineWidth: 10, // outer glow stroke width
 				coreLineWidth: 3,
 				glowBlur: 16,
+
+				// 'charging' dashed preview fan — same two-piece language
+				// (dashed line + pulsing edge marker) as Spiral's own charge warning.
+				warningLineWidth: 3,
+				warningLineDash: Object.freeze([10, 8]),
+				warningMarkerRadius: 9,
+				warningMarkerLineWidth: 3,
+				warningMarkerGlowBlur: 12,
+				chargePulseSpeed: 6, // rad/sec — faster than coreGlowPulseSpeed, reads as more urgent/alarmed
 			}),
 
-			// Pulsing core-ring glow at the center — stands in for an engine
-			// flame, same reasoning as Spiral's own `coreGlow*` fields (a
-			// rotating turret has no thruster).
-			coreRadius: 16, // vp
+			// 'charging' growing ring at the center hole itself — "something
+			// is about to fire from HERE" — same grow-from-nothing idiom as
+			// Sniper's own nose charge orb (chargeOrbStartRadius/Growth).
+			chargeOrb: Object.freeze({
+				startRadius: 4, // vp — radius at t=0 while charging
+				growth: 14, // added radius by full charge
+				lineWidth: 2,
+				glowBlur: 10,
+				alphaMin: 0.25, // alpha at t=0 while charging (ramps to 1)
+			}),
+
+			// Idle pulsing core-ring glow at the center — stands in for an
+			// engine flame, same reasoning as Spiral's own `coreGlow*` fields
+			// (a rotating turret has no thruster). Replaced by `chargeOrb`
+			// during 'charging' — see TetraBoss._renderCore.
+			coreRadius: 11, // vp
 			coreGlowLineWidth: 3,
-			coreGlowBlur: 12,
+			coreGlowBlur: 9,
 			coreGlowPulseSpeed: 3, // rad/sec — breathing pulse
 
 			sparksPerEmit: 42,
