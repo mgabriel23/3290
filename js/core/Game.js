@@ -22,6 +22,7 @@ import { GameplayScene } from '../scenes/GameplayScene.js';
 import { completeMission } from './MissionProgress.js';
 import { hasSeenPrologue } from './PrologueProgress.js';
 import { hasSeenTutorial, markTutorialSeen } from './TutorialProgress.js';
+import { trackEvent } from './Analytics.js';
 
 export class Game {
   /**
@@ -141,6 +142,12 @@ export class Game {
     try {
       this.scene = new PrologueScene(this.renderer, {
         onContinue: (mode) => {
+          // Fires exactly once per title-screen mode-button tap (never on a
+          // post-death restart, since those re-call `_startGameplay`
+          // directly) — the cleanest single point for "how many players
+          // pick Mission vs Survival" analytics.
+          trackEvent(mode === 'mission' ? 'mode-mission' : 'mode-survival',
+            mode === 'mission' ? 'Mission Mode selected' : 'Survival Mode selected');
           // Survival Mode has no level-select step of its own, so the
           // shared tutorial (if not seen yet, in EITHER mode — see
           // TutorialProgress.js) plays right here, same as always. Mission
