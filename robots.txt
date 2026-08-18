@@ -1,2 +1,5 @@
 User-agent: *
 Allow: /
+# Standalone design sandbox for sketching enemy/boss hulls — not part of the
+# game, not linked from index.html, no reason for it to be indexed.
+Disallow: /preview.html

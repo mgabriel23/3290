@@ -30,7 +30,18 @@
 import { Config } from './Config.js';
 import { loadNumber, saveNumber, loadBool, saveBool } from './Storage.js';
 
-let sensitivity = loadNumber('settings.sensitivity', 0); // 0 = today's exact instant snap
+// The OS/browser-level "reduce motion" preference — checked once at load
+// (it can't meaningfully change mid-session on the platforms that expose
+// it) rather than on every read. Unlike haptics/colorblind above, this has
+// no in-game toggle of its own: it's a system-wide accessibility signal the
+// game should just respect automatically. See prefersReducedMotion()'s own
+// doc for how consumers (ScreenShake, GameplayScene's damage flash) use it.
+const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+
+// Clamped the same way their own setters clamp on write — a value edited
+// directly in localStorage wouldn't otherwise be caught until the player
+// next opens Settings and moves the slider.
+let sensitivity = Math.max(0, Math.min(1, loadNumber('settings.sensitivity', 0))); // 0 = today's exact instant snap
 let haptics = loadBool('settings.haptics', true);
 let colorblind = loadBool('settings.colorblind', false);
 let textSize = loadNumber('settings.textSize', 1); // 0=small, 1=normal, 2=large
@@ -88,6 +99,17 @@ export function textSizeScale() {
  */
 export function dangerColor(defaultColor) {
   return colorblind ? Config.colors.dangerColorblind : defaultColor;
+}
+
+/**
+ * @returns {boolean} true if the player's OS/browser is set to reduce
+ *   motion. Scales down (not off) screen-shake and the full-screen damage
+ *   flash rather than removing them outright — some motion is still the
+ *   primary feedback for taking a hit, this just cuts the vestibular/
+ *   photosensitive-trigger intensity of it.
+ */
+export function prefersReducedMotion() {
+  return reducedMotion;
 }
 
 /**

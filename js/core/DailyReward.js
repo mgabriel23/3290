@@ -38,6 +38,11 @@ function localDayNumber() {
   return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86400000);
 }
 
+/** Clamps a `streakDay` read back from storage into the CALENDAR's real 1-7 range — a value written by this file's own write path is always already in range, but a value edited directly in localStorage isn't, and every read site indexes `CALENDAR[streakDay - 1]` with no bounds check of its own, so an out-of-range value would resolve to `undefined` and throw on `entry.type`/`entry.name` a moment later. */
+function clampStreakDay(n) {
+  return Math.min(CALENDAR.length, Math.max(1, Math.round(n)));
+}
+
 /** Merges a calendar slot's own overrides (day 7's jackpot name/color/description) over its type's default display config (Config.dailyReward[type]). */
 function resolveDisplay(entry) {
   const base = Config.dailyReward[entry.type];
@@ -51,15 +56,25 @@ function resolveDisplay(entry) {
 /**
  * Ensures today's slot has been rolled — advancing or resetting the streak
  * exactly once per newly-observed day — then persists it. Safe to call
- * repeatedly; only the first call each day actually rolls anything (guarded
- * by `dailyReward.rolledDay`).
+ * repeatedly; only the first call for a given day actually rolls anything,
+ * gated on `dailyReward.highestDayObserved` rather than a plain "is today
+ * different from last time" check — a monotonic high-water mark, not just
+ * the last value, so a system clock rolled BACKWARD past a day already
+ * resolved can't re-enter this branch and re-arm `claimed = false`. Without
+ * that, oscillating the clock back and forth would let a player re-claim
+ * the daily reward indefinitely instead of waiting a real 24h — a static
+ * site has no server truth to check the clock against, so this can't stop
+ * clock manipulation outright, but it does stop the specific "rewind to
+ * farm" exploit from working.
  */
 function ensureRolled() {
   const today = localDayNumber();
-  if (loadNumber('dailyReward.rolledDay', -1) === today) return;
+  const highestSeen = loadNumber('dailyReward.highestDayObserved', -1);
+  if (today <= highestSeen) return; // already resolved today (or we're behind it) — nothing new to roll
+  saveNumber('dailyReward.highestDayObserved', today);
 
   const lastClaim = loadNumber('dailyReward.lastClaimDay', -1);
-  const prevStreak = loadNumber('dailyReward.streakDay', 0);
+  const prevStreak = clampStreakDay(loadNumber('dailyReward.streakDay', 1));
   const streakDay = lastClaim === today - 1
     ? (prevStreak >= 7 ? 1 : prevStreak + 1) // claimed yesterday — streak continues (or loops past day 7)
     : 1; // missed a day, or this is the very first roll ever — start the cycle over
@@ -70,7 +85,6 @@ function ensureRolled() {
     amount = Math.round((entry.amountMin + Math.random() * (entry.amountMax - entry.amountMin)) / 5) * 5;
   }
 
-  saveNumber('dailyReward.rolledDay', today);
   saveNumber('dailyReward.streakDay', streakDay);
   saveNumber('dailyReward.amount', amount);
   saveBool('dailyReward.claimed', false);
@@ -89,7 +103,7 @@ export function hasPendingReward() {
  */
 export function getPendingReward() {
   ensureRolled();
-  const streakDay = loadNumber('dailyReward.streakDay', 1);
+  const streakDay = clampStreakDay(loadNumber('dailyReward.streakDay', 1));
   const entry = CALENDAR[streakDay - 1];
   const display = resolveDisplay(entry);
   return {
@@ -153,7 +167,7 @@ export function consumeShieldStart() {
  */
 export function previewNextReward() {
   ensureRolled();
-  const streakDay = loadNumber('dailyReward.streakDay', 1);
+  const streakDay = clampStreakDay(loadNumber('dailyReward.streakDay', 1));
   const nextDay = streakDay >= 7 ? 1 : streakDay + 1;
   const display = resolveDisplay(CALENDAR[nextDay - 1]);
   return { name: display.name, color: display.color };

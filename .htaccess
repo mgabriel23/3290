@@ -1,14 +1,26 @@
-# Development-only: this project has no build step or filename hashing, so
-# every JS/CSS/HTML file is served under the same URL forever — a browser
-# (especially mobile Chrome) that caches those files can end up running a
-# broken MIX of old and new code after an update (e.g. an old Renderer.js
-# without a method a newer scene file already calls), which reads as a
-# random crash/freeze with no obvious cause. Forcing no-cache on every
-# reload avoids that class of bug during active development.
+# This project has no build step or filename hashing, so every JS/CSS/HTML
+# file is served under the same URL forever — a browser that caches those
+# files too aggressively can end up running a broken MIX of old and new code
+# after an update (e.g. an old Renderer.js without a method a newer scene
+# file already calls), which reads as a random crash/freeze with no obvious
+# cause.
+#
+# `no-cache` (NOT `no-store`) is the fix for that without giving up caching
+# entirely: it still lets the browser cache the response, but forces a
+# revalidation request (conditional GET, via ETag/Last-Modified) before ever
+# reusing it — an unchanged file gets a cheap 304 with no body, a changed
+# one gets the new bytes, so the exact "stale mixed code" bug above still
+# can't happen. The previous `no-store, must-revalidate` combo instead
+# forced a full re-download of every JS/CSS/HTML file on every single
+# repeat visit, which is a real Lighthouse "efficient cache policy" hit with
+# no correctness benefit over plain `no-cache` here.
+#
+# Note: this file only takes effect on an Apache host (e.g. this local XAMPP
+# tree). If the production custom domain (see CNAME) is served via GitHub
+# Pages instead, .htaccess is never processed there and this is inert —
+# GitHub Pages already sends its own conditional-caching headers by default.
 <IfModule mod_headers.c>
   <FilesMatch "\.(js|css|html)$">
-    Header set Cache-Control "no-cache, no-store, must-revalidate"
-    Header set Pragma "no-cache"
-    Header set Expires 0
+    Header set Cache-Control "no-cache"
   </FilesMatch>
 </IfModule>

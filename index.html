@@ -38,6 +38,11 @@
     name="twitter:description"
     content="A mobile-first 2D arcade space shooter. Defend your barrier through 30 waves of scouts, rocketeers, snipers, drifters and bouncers, and take down four unique bosses."
   />
+  <!-- No og:image yet — add one (and switch twitter:card to
+       summary_large_image) once a title-card screenshot exists; link
+       previews render text-only without it. -->
+
+  <link rel="canonical" href="https://3290.itsmebryle.com/" />
 
   <!-- Minimal inline wireframe-ship mark, matching the game's void backdrop + neon-cyan chrome. -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305070f'/%3E%3Cpath d='M16 6 L24 24 L16 20 L8 24 Z' fill='none' stroke='%234DEFFF' stroke-width='2'/%3E%3C/svg%3E" />
@@ -56,6 +61,14 @@
          so the accessible name below is the only screen-reader-visible
          description of the page's content. -->
     <canvas class="app__canvas" id="game-canvas" role="img" aria-label="Space Shooter — a 2D arcade space shooter game"></canvas>
+    <!-- All UI is canvas-drawn (score, menus, dialogs), so a screen-reader
+         user gets nothing from the DOM beyond the canvas's one static label
+         above. This hidden live region is the only other accessible-tree
+         content in the page — main.js updates its text at coarse state
+         changes (scene transitions, level number, game over) so a
+         screen-reader user at least hears where they are, without
+         attempting full per-frame HUD parity. -->
+    <div id="sr-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
   </div>
 
   <script type="module" src="js/main.js"></script>

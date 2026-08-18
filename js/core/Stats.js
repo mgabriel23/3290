@@ -29,18 +29,48 @@ const DEFAULTS = Object.freeze({
   playtimeSeconds: 0,
 });
 
-/** @returns {typeof DEFAULTS} a plain (unfrozen) copy — merged with DEFAULTS so a field added in a later update never comes back `undefined` for an existing save. */
+// In-memory cache of the persisted `stats` blob, plus a coalesced flush.
+// WaveManager.handleBulletHit calls recordKill for every kill in one
+// synchronous loop (see triggerSkillBomb — a single skill-bomb tap can kill
+// everything on screen in one frame), so writing to localStorage
+// synchronously on every call was a guaranteed hitch on low-end devices at
+// exactly the moment the frame is already busiest. Every record* function
+// below now mutates this cache directly and schedules one flush via
+// queueMicrotask — multiple record* calls within the same synchronous frame
+// collapse into a single localStorage write at the end of that frame's
+// execution, instead of one write per call.
+let cache = null;
+let flushPending = false;
+
+function readCache() {
+  if (!cache) {
+    const saved = loadJSON('stats', null) || {};
+    cache = {
+      ...DEFAULTS,
+      ...saved,
+      killsByFamily: { ...DEFAULTS.killsByFamily, ...(saved.killsByFamily || {}) },
+    };
+  }
+  return cache;
+}
+
+function scheduleFlush() {
+  if (flushPending) return;
+  flushPending = true;
+  queueMicrotask(() => {
+    flushPending = false;
+    saveJSON('stats', cache);
+  });
+}
+
+/** @returns {typeof DEFAULTS} a plain copy of the current (possibly not-yet-flushed) in-memory stats — always reflects every record* call made so far this session, even ones still pending their microtask flush. */
 export function getStats() {
-  const saved = loadJSON('stats', null) || {};
-  return {
-    ...DEFAULTS,
-    ...saved,
-    killsByFamily: { ...DEFAULTS.killsByFamily, ...(saved.killsByFamily || {}) },
-  };
+  return { ...readCache(), killsByFamily: { ...readCache().killsByFamily } };
 }
 
 function save(stats) {
-  saveJSON('stats', stats);
+  cache = stats;
+  scheduleFlush();
 }
 
 /**

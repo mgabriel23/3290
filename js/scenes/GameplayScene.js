@@ -157,7 +157,7 @@ import { playButtonClick } from '../core/UiSound.js';
 import { cornerBracketPath, heartbeatPath } from '../core/shapes.js';
 import { ScreenShake } from '../core/ScreenShake.js';
 import { consumeLuckyDrop, consumeShieldStart } from '../core/DailyReward.js';
-import { dangerColor } from '../core/Settings.js';
+import { dangerColor, prefersReducedMotion } from '../core/Settings.js';
 import { recordRun, updateLastRunScore, getRunHistory } from '../core/RunHistory.js';
 import { recordGoldCollected, recordPowerUpsCollected, recordBestCombo, recordRunEnd } from '../core/Stats.js';
 import { shareScore } from '../core/Share.js';
@@ -220,9 +220,10 @@ export class GameplayScene {
    *   going through `onGameOver` (which would construct a brand-new
    *   GameplayScene and lose the current run's state).
    */
-  constructor(renderer, { mode = 'survival', level = 1, skillCooldown = 0, onGameOver, onMissionComplete, onMusicDuck, onMusicStop, onMusicResume } = {}) {
+  constructor(renderer, { mode = 'survival', level = 1, skillCooldown = 0, onGameOver, onMissionComplete, onMusicDuck, onMusicStop, onMusicResume, announce } = {}) {
     this.renderer = renderer;
     this._mode = mode;
+    this._announce = announce || (() => {});
     this._onGameOver = onGameOver;
     this._onMissionComplete = onMissionComplete;
     this._onMusicDuck = onMusicDuck;
@@ -427,6 +428,7 @@ export class GameplayScene {
     if (this._levelState === 'intro' && this._levelAge >= Config.level.introDuration) {
       this._levelState  = 'active';
       this._waveManager = new WaveManager(this._mode, this._level, this.barrier, this.hud, this._screenShake, this._powerUps, this._goldPickups, this._dropChanceMultiplier);
+      this._announce(`Level ${this._level}.`);
     }
 
     this.barrier.update(effectiveDt);
@@ -617,8 +619,9 @@ export class GameplayScene {
    */
   _renderDamageFlash() {
     if (this._damageFlashTimer <= 0) return;
-    const { color, peakAlpha, duration } = Config.damageFlash;
-    const alpha = peakAlpha * (this._damageFlashTimer / duration);
+    const { color, peakAlpha, duration, reducedMotionScale } = Config.damageFlash;
+    const scale = prefersReducedMotion() ? reducedMotionScale : 1;
+    const alpha = peakAlpha * scale * (this._damageFlashTimer / duration);
     this.renderer.clear(color, alpha);
   }
 
@@ -948,6 +951,7 @@ export class GameplayScene {
   _triggerGameOver() {
     this._isGameOver  = true;
     this._gameOverAge = 0;
+    this._announce(`Game over. Score: ${this.hud.score}.`);
     this._playerParticles.emit(this.player.x, this.player.y);
     this._deathExplosionAudio.play();
     this._gameOverAudio.play();
@@ -996,6 +1000,7 @@ export class GameplayScene {
     this._missionComplete    = true;
     this._missionCompleteAge = 0;
     this._celebrationBurstsFired = 0;
+    this._announce(`Mission complete. Score: ${this.hud.score}.`);
     this._onMusicStop?.();
     this._missionCompleteAudio.play();
     this._updateCelebrationBursts(); // fire burst #1 immediately — see Config.missionComplete.celebration's doc

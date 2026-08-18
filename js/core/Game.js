@@ -27,14 +27,22 @@ export class Game {
   /**
    * @param {HTMLCanvasElement} canvas
    * @param {HTMLElement} stage  the element whose box defines available space
+   * @param {{ announce?: (text: string) => void }} [options]  `announce`
+   *   pushes a short status string into the one screen-reader-visible piece
+   *   of DOM the page has (see main.js's `#sr-status` live region) — the
+   *   only DOM access this class needs, so it's injected the same way every
+   *   other Game dependency is rather than Game reaching for `document`
+   *   itself. Defaults to a no-op so Game stays usable without it.
    */
-  constructor(canvas, stage) {
+  constructor(canvas, stage, { announce } = {}) {
     this.stage = stage;
+    this._announce = announce || (() => {});
     this.renderer = new Renderer(canvas);
     this.scene = new IntroScene(this.renderer, {
       onContinue: () => this._startPrologue(hasSeenPrologue()),
       onSwipeDetected: () => this._startPrologueMusic(),
     });
+    this._announce('Space Shooter. Swipe up to continue.');
     this._lastTimestamp = 0;
     this._consecutiveTickErrors = 0; // see _tick's doc — trips _showFatalError after too many in a row
 
@@ -148,7 +156,10 @@ export class Game {
           }
         },
         devSkipToTitle,
-        onMainMenuReached: () => this._fadeOutPrologueMusic(),
+        onMainMenuReached: () => {
+          this._fadeOutPrologueMusic();
+          this._announce('Title screen. Tap Play to begin.');
+        },
       });
     } catch (err) {
       console.error('Failed to start the prologue:', err);
@@ -228,6 +239,7 @@ export class Game {
           onDone();
         },
       });
+      this._announce('Tutorial. Follow the on-screen hints.');
     } catch (err) {
       console.error('Failed to start the tutorial:', err);
       this._showFatalError(err);
@@ -248,6 +260,7 @@ export class Game {
         onSelectMission: (level) => this._startMissionLevel(level),
         onBack: () => this._startPrologue(true),
       });
+      this._announce('Mission select.');
     } catch (err) {
       console.error('Failed to start mission select:', err);
       this._showFatalError(err);
@@ -326,9 +339,11 @@ export class Game {
       }
       this._themeAudio.play().catch(() => {});
       this._themeFader.rampTo(1, Config.audio.themeFadeInDuration);
+      this._announce(mode === 'mission' ? `Mission ${level} started.` : 'Survival mode started.');
       this.scene = new GameplayScene(this.renderer, {
         mode,
         level,
+        announce: this._announce,
         // Mission Mode only (see `_missionSkillCooldown`'s own doc) — Survival
         // Mode's GameplayScene instance already persists its own PlayerSkill
         // across level-ups, so it never needs a hand-me-down value here.
@@ -462,6 +477,7 @@ export class Game {
    */
   _showFatalError(err) {
     const message = String(err?.message ?? err ?? 'Unknown error').slice(0, 70);
+    this._announce(`Something went wrong: ${message}. Please reload the page.`);
     const { renderer } = this;
     this.scene = {
       update() {},

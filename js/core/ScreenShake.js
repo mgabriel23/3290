@@ -11,10 +11,14 @@
  * what counts as an impact.
  */
 import { Config } from './Config.js';
+import { prefersReducedMotion } from './Settings.js';
 
 export class ScreenShake {
   constructor() {
     this._trauma = 0;
+    // See Settings.prefersReducedMotion's own doc — scales offset down
+    // rather than zeroing it, so a hit still reads as a hit.
+    this._motionScale = prefersReducedMotion() ? Config.screenShake.reducedMotionScale : 1;
     // Reused every frame by getOffset() (called exactly once/frame, read
     // immediately — see that method's own doc) instead of allocating a new
     // {x, y} object each call.
@@ -44,7 +48,7 @@ export class ScreenShake {
       return this._offset;
     }
     const power = this._trauma * this._trauma;
-    const { maxOffset } = Config.screenShake;
+    const maxOffset = Config.screenShake.maxOffset * this._motionScale;
     this._offset.x = (Math.random() * 2 - 1) * maxOffset * power;
     this._offset.y = (Math.random() * 2 - 1) * maxOffset * power;
     return this._offset;

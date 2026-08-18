@@ -19,9 +19,11 @@ import { Config } from './Config.js';
 // Shop.js for it.
 const PART_IDS = ['wings', 'engine', 'cannon', 'magnet', 'missiles'];
 
-/** @param {string} partId @returns {number} 1-based, defaults to 1 (no upgrades purchased yet) */
+/** @param {string} partId @returns {number} 1-based, defaults to 1 (no upgrades purchased yet), clamped to the part's real level range — Shop._buy already bounds-checks on the write path, but a value written directly into localStorage (tampering, a hand-edited save) isn't caught there, and an out-of-range index into `Config.player.<part>.levels` would throw on every read (Player.js's magnetRadius/maxHealth/etc. getters) instead of just degrading. */
 export function getPartLevel(partId) {
-  return loadNumber(`shop.${partId}.level`, 1);
+  const raw = Math.round(loadNumber(`shop.${partId}.level`, 1));
+  const maxLevel = Config.player[partId].levels.length;
+  return Math.min(Math.max(1, raw), maxLevel);
 }
 
 /** @param {string} partId @param {number} level */

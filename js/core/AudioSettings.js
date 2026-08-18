@@ -17,7 +17,9 @@
 import { loadBool, saveBool, loadNumber, saveNumber } from './Storage.js';
 
 let muted = loadBool('muted', false);
-let volume = loadNumber('volume', 1);
+// Clamped the same way setVolume clamps on write — see Settings.js's
+// analogous sensitivity clamp for why the initial load needs its own guard.
+let volume = Math.max(0, Math.min(1, loadNumber('volume', 1)));
 const listeners = new Set();
 
 export function isMuted() {

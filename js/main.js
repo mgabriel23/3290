@@ -9,6 +9,14 @@ import { Game } from './core/Game.js';
 
 const canvas = document.getElementById('game-canvas');
 const stage = document.getElementById('game-stage');
+const srStatus = document.getElementById('sr-status');
+
+// The only DOM write Game ever needs for screen-reader support — passed in
+// as a plain callback so Game.js itself never touches `document` (see this
+// file's own doc: main.js is the only place that does).
+function announce(text) {
+  srStatus.textContent = text;
+}
 
 // IntroScene measures and positions each letter of its label individually
 // (for the per-letter fade animation), via canvas `measureText`/`fillText`.
@@ -19,7 +27,7 @@ const stage = document.getElementById('game-stage');
 // text. Loading the font up front guarantees the metrics are stable and
 // correct from the very first frame.
 document.fonts.load(Config.intro.font).finally(() => {
-  const game = new Game(canvas, stage);
+  const game = new Game(canvas, stage, { announce });
 
   window.addEventListener('resize', () => game.resize());
   // `window.resize` alone isn't reliable on mobile: the address bar/toolbar

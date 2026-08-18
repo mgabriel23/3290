@@ -18,7 +18,12 @@ const MAX_ENTRIES = 5;
 
 /** @returns {{ score: number, mode: 'mission'|'survival', level: number, timestamp: number }[]} most-recent first */
 export function getRunHistory() {
-  return loadJSON('runHistory', []);
+  // loadJSON's try/catch only guards against invalid JSON *syntax* — a
+  // syntactically-valid but wrong-shaped tampered value (e.g. an object
+  // instead of an array) would pass straight through and throw on
+  // recordRun's `.unshift`/`updateLastRunScore`'s `history[0]` right after.
+  const history = loadJSON('runHistory', []);
+  return Array.isArray(history) ? history : [];
 }
 
 /**

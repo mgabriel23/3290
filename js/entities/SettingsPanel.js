@@ -145,7 +145,8 @@ export class SettingsPanel {
 
   _isInsideToggle(x, y, rowIndex) {
     const b = this._toggleBounds(rowIndex);
-    return x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+    const { hitPaddingY } = Config.settings.toggle;
+    return x >= b.left && x <= b.right && y >= b.top - hitPaddingY && y <= b.bottom + hitPaddingY;
   }
 
   _segmentedBounds(rowIndex) {
@@ -158,7 +159,8 @@ export class SettingsPanel {
   /** @returns {number} the option index at (x, y), or -1 if outside every option. */
   _segmentedIndexAt(x, y, rowIndex) {
     const b = this._segmentedBounds(rowIndex);
-    if (y < b.cy - b.height / 2 || y > b.cy + b.height / 2) return -1;
+    const { hitPaddingY } = Config.settings.segmented;
+    if (y < b.cy - b.height / 2 - hitPaddingY || y > b.cy + b.height / 2 + hitPaddingY) return -1;
     for (let i = 0; i < b.count; i++) {
       const left = b.startX + i * (b.optionWidth + b.gap);
       if (x >= left && x <= left + b.optionWidth) return i;

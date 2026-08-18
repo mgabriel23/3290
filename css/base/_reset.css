@@ -43,3 +43,19 @@ body {
 body {
   background: radial-gradient(circle at 50% 30%, var(--backdrop-2), var(--backdrop));
 }
+
+/* Visually hidden but still reachable by screen readers — standard
+   clip-based hide (not display:none/visibility:hidden, which both remove an
+   element from the accessibility tree too). Used by the #sr-status live
+   region in index.html, the only non-canvas UI content in the page. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
