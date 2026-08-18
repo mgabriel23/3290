@@ -109,7 +109,7 @@
 import { Config } from '../core/Config.js';
 import { Enemy, SCOUT_HULL_PTS } from './Enemy.js';
 import { SniperEnemy } from './SniperEnemy.js';
-import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath, BODY_PTS as DRIFTER_BODY_PTS } from './DrifterEnemy.js';
+import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath, BODY_PTS as DRIFTER_BODY_PTS, TENTACLE_BASES as DRIFTER_TENTACLE_BASES } from './DrifterEnemy.js';
 import { BouncerEnemy } from './BouncerEnemy.js';
 import { BossEnemy } from './BossEnemy.js';
 import { SpiralBoss } from './SpiralBoss.js';
@@ -223,6 +223,30 @@ const _diverFlashHulls  = _mkDrifterPool();
 // violet), own pools (formation of 6, well within DRIFTER_MAX_BATCH).
 const _weaverNormalHulls = _mkDrifterPool();
 const _weaverFlashHulls  = _mkDrifterPool();
+
+// Cross-clone tentacle batching (see DrifterEnemy._updateTentacleGeometry's
+// own doc for why the shape math itself can't move here the way the fixed
+// BODY_PTS hull could) — same 4-variant × 2-flash-state pool shape as the
+// hull pools above, just sized per TENTACLE rather than per clone: each
+// clone contributes up to DRIFTER_TENTACLE_BASES.length normal tentacle
+// paths (one fewer while actively lashing — that one base is drawn
+// separately, unbatched, by _drawIndividualLashTentacles instead, since
+// simultaneous lashes are rare/bounded by fire cadence rather than
+// formation size, so batching them wouldn't buy much). Points-per-path
+// comes from Config.enemy.drifter.tentacleSegs + 1, matching
+// DrifterEnemy._tentaclePaths' own shape.
+const _TENTACLE_BASE_COUNT = DRIFTER_TENTACLE_BASES.length;
+const _TENTACLE_PTS = Config.enemy.drifter.tentacleSegs + 1;
+const _mkTentaclePool = () => Array.from({ length: DRIFTER_MAX_BATCH * _TENTACLE_BASE_COUNT }, () =>
+  ({ points: Array.from({ length: _TENTACLE_PTS }, () => [0, 0]), closed: false }));
+const _drifterNormalTentacles = _mkTentaclePool();
+const _drifterFlashTentacles  = _mkTentaclePool();
+const _sweeperNormalTentacles = _mkTentaclePool();
+const _sweeperFlashTentacles  = _mkTentaclePool();
+const _diverNormalTentacles   = _mkTentaclePool();
+const _diverFlashTentacles    = _mkTentaclePool();
+const _weaverNormalTentacles  = _mkTentaclePool();
+const _weaverFlashTentacles   = _mkTentaclePool();
 
 export class WaveManager {
   /**
@@ -765,6 +789,7 @@ export class WaveManager {
     this._renderProjectiles(renderer);
     this._renderEngineFlames(renderer);
     this._renderHullBatches(renderer);
+    this._renderDrifterTentacles(renderer);
     this._renderEngineCores(renderer);
     this._renderSniperExtras(renderer);
     this._renderIndividualEnemies(renderer);
@@ -959,6 +984,125 @@ export class WaveManager {
     }
   }
 
+  /**
+   * Draws every visible Drifter clone's tentacles in as few shadow-blur
+   * passes as the hull batching above gets away with — a formation (up to
+   * 15 clones for a Sweeper wave) previously cost one `strokePaths` call
+   * PER CLONE (each with its own glow pass) since tentacle geometry is
+   * dynamic and can't just be transformed like the fixed BODY_PTS hull can.
+   * Split the same "assign then draw" way as _renderHullBatches: world-
+   * transform every clone's tentacle points into shared (variant × flash)
+   * pools, then issue one strokePaths call per non-empty pool.
+   */
+  _renderDrifterTentacles(renderer) {
+    const counts = this._assignTentacleBatches();
+    this._drawTentacleBatches(renderer, counts);
+    this._drawIndividualLashTentacles(renderer);
+  }
+
+  /**
+   * Walks live Drifter clones, recomputes each one's tentacle geometry
+   * (DrifterEnemy._updateTentacleGeometry — the wave animation has to
+   * actually run every frame, unlike the hull's static shape), and
+   * world-transforms its NORMAL tentacle paths into the matching (variant ×
+   * flash) pool. Mirrors _assignHullBatches' bucket selection exactly, just
+   * with an inner per-tentacle loop instead of one point-set per clone.
+   */
+  _assignTentacleBatches() {
+    let drifterNormalCount = 0, drifterFlashCount = 0, sweeperNormalCount = 0, sweeperFlashCount = 0,
+        diverNormalCount = 0, diverFlashCount = 0, weaverNormalCount = 0, weaverFlashCount = 0;
+
+    for (let i = 0; i < this._enemies.length; i++) {
+      const e = this._enemies[i];
+      if (e.type !== 'drifter' || !e._visible) continue;
+      e._updateTentacleGeometry();
+
+      const isFlash = e._hitFlash > 0;
+      let pool, count;
+      if (e._variant === 2) { pool = isFlash ? _sweeperFlashTentacles : _sweeperNormalTentacles; count = isFlash ? sweeperFlashCount : sweeperNormalCount; }
+      else if (e._variant === 3) { pool = isFlash ? _diverFlashTentacles : _diverNormalTentacles; count = isFlash ? diverFlashCount : diverNormalCount; }
+      else if (e._variant === 4) { pool = isFlash ? _weaverFlashTentacles : _weaverNormalTentacles; count = isFlash ? weaverFlashCount : weaverNormalCount; }
+      else { pool = isFlash ? _drifterFlashTentacles : _drifterNormalTentacles; count = isFlash ? drifterFlashCount : drifterNormalCount; }
+
+      const c = e._cosA, s = e._sinA;
+      for (let t = 0; t < e._normalTentacleCount && count < pool.length; t++) {
+        const localPts = e._normalTentacleBatch[t].points;
+        const worldPts = pool[count].points;
+        for (let k = 0; k < localPts.length; k++) {
+          const lx = localPts[k][0], ly = localPts[k][1];
+          worldPts[k][0] = e.x + c * lx - s * ly;
+          worldPts[k][1] = e.y + s * lx + c * ly;
+        }
+        count++;
+      }
+
+      if (e._variant === 2) { if (isFlash) sweeperFlashCount = count; else sweeperNormalCount = count; }
+      else if (e._variant === 3) { if (isFlash) diverFlashCount = count; else diverNormalCount = count; }
+      else if (e._variant === 4) { if (isFlash) weaverFlashCount = count; else weaverNormalCount = count; }
+      else { if (isFlash) drifterFlashCount = count; else drifterNormalCount = count; }
+    }
+
+    return {
+      drifterNormalCount, drifterFlashCount, sweeperNormalCount, sweeperFlashCount,
+      diverNormalCount, diverFlashCount, weaverNormalCount, weaverFlashCount,
+    };
+  }
+
+  /** Issues one strokePaths call per non-empty pool _assignTentacleBatches just filled — same table-driven shape as _drawHullBatches' drifterHullGroups. */
+  _drawTentacleBatches(renderer, counts) {
+    const {
+      drifterNormalCount, drifterFlashCount, sweeperNormalCount, sweeperFlashCount,
+      diverNormalCount, diverFlashCount, weaverNormalCount, weaverFlashCount,
+    } = counts;
+    const dCfg = Config.enemy.drifter;
+    const tentacleGroups = [
+      { cfg: dCfg,         normalPool: _drifterNormalTentacles, normalCount: drifterNormalCount, flashPool: _drifterFlashTentacles, flashCount: drifterFlashCount },
+      { cfg: dCfg.sweeper, normalPool: _sweeperNormalTentacles, normalCount: sweeperNormalCount, flashPool: _sweeperFlashTentacles, flashCount: sweeperFlashCount },
+      { cfg: dCfg.diver,   normalPool: _diverNormalTentacles,   normalCount: diverNormalCount,   flashPool: _diverFlashTentacles,   flashCount: diverFlashCount },
+      { cfg: dCfg.weaver,  normalPool: _weaverNormalTentacles,  normalCount: weaverNormalCount,  flashPool: _weaverFlashTentacles,  flashCount: weaverFlashCount },
+    ];
+    // color/glowColor share one value (bodyColor in the old per-clone code)
+    // and glowBlur is always tentacleGlowBlur regardless of flash state —
+    // flash only swaps the color to white, matching DrifterEnemy.render's
+    // original per-clone behavior exactly (unlike hull flashes, tentacles
+    // never had a distinct hit-glow value of their own).
+    for (const g of tentacleGroups) {
+      if (g.normalCount > 0) renderer.strokePaths(g.normalPool, {
+        color: g.cfg.color, lineWidth: 2.2, lineCap: 'round',
+        glowBlur: g.cfg.tentacleGlowBlur, glowColor: g.cfg.color, alpha: 0.85,
+        singleStroke: true,
+      }, g.normalCount);
+      if (g.flashCount > 0) renderer.strokePaths(g.flashPool, {
+        color: '#ffffff', lineWidth: 2.2, lineCap: 'round',
+        glowBlur: g.cfg.tentacleGlowBlur, glowColor: '#ffffff', alpha: 0.85,
+        singleStroke: true,
+      }, g.flashCount);
+    }
+  }
+
+  /**
+   * Actively-lashing tentacles, one strokePaths call each — rare enough
+   * (bounded by how many clones can be simultaneously mid-lash, not
+   * formation size) that batching them the way normal tentacles are above
+   * wouldn't meaningfully cut shadow-blur passes, so this just issues the
+   * same per-clone call DrifterEnemy.render() always did, from here instead.
+   * Relies on _assignTentacleBatches having already run this frame (called
+   * right before this in _renderDrifterTentacles) so `_lashTentaclePath` is
+   * fresh.
+   */
+  _drawIndividualLashTentacles(renderer) {
+    for (let i = 0; i < this._enemies.length; i++) {
+      const e = this._enemies[i];
+      if (e.type !== 'drifter' || !e._visible || !e._lashTentaclePath) continue;
+      const bodyColor = e._hitFlash > 0 ? '#ffffff' : e._palette.color;
+      renderer.strokePaths([e._lashTentaclePath], {
+        x: e.x, y: e.y, rotation: e._angle,
+        color: bodyColor, lineWidth: 3, lineCap: 'round',
+        glowBlur: e._palette.lashGlowBlur, glowColor: bodyColor, alpha: 0.85,
+      }, 1);
+    }
+  }
+
   /** Engine core orbs — rendered on top of hulls (Drifter/Bouncer have none). */
   _renderEngineCores(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
@@ -975,11 +1119,17 @@ export class WaveManager {
     }
   }
 
-  /** Drifters and Bouncers — variable/per-clone geometry can't be batched into the shared hull pools above. */
+  /**
+   * Bouncer/boss/tetra — variable/per-clone geometry can't be batched into
+   * the shared hull pools above. Drifter's hull/tentacles are already
+   * handled by _renderHullBatches/_renderDrifterTentacles above; only its
+   * eyes (cheap — no glow pass, so there's no batching win to chase) are
+   * still drawn individually, here.
+   */
   _renderIndividualEnemies(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'drifter' && e._visible) e.render(renderer);
+      if (e.type === 'drifter' && e._visible) e.renderEyes(renderer);
       else if (e.type === 'bouncer' || e.type === 'boss' || e.type === 'tetra') e.render(renderer);
     }
   }

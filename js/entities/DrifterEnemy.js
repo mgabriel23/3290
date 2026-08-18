@@ -45,7 +45,10 @@ const EYES = [[-4,-2],[4,-2]];
 // Tentacle base attachment points along the bottom rim, local space.
 // Local +y = trailing edge (the path's heading convention points local
 // -y in the direction of travel, same as Scout's nose-forward convention).
-const TENTACLE_BASES = [[-7,7],[-2.5,9],[2.5,9],[7,7]];
+// Exported so WaveManager can size its cross-clone tentacle-batching pools
+// (see WaveManager._assignTentacleBatches) off the real tentacle count
+// rather than a hardcoded duplicate of this array's length.
+export const TENTACLE_BASES = [[-7,7],[-2.5,9],[2.5,9],[7,7]];
 
 const randInterval = (cfg, mult = 1) => (cfg.fireMinInterval + Math.random() * (cfg.fireMaxInterval - cfg.fireMinInterval)) * mult;
 
@@ -307,13 +310,16 @@ export class DrifterEnemy {
 
     // Pre-allocated tentacle paths — mutated in place each frame, never
     // reallocated. Normal tentacles are batched into one singleStroke call
-    // (1 shadow pass); an actively-lashing tentacle (different width/glow)
-    // gets its own pass.
+    // (1 shadow pass, either this clone's own via render() or WaveManager's
+    // cross-clone pool via _updateTentacleGeometry — see that method's doc);
+    // an actively-lashing tentacle (different width/glow) gets its own pass.
     this._tentaclePaths = TENTACLE_BASES.map(() => ({
       points: Array.from({ length: this._cfg.tentacleSegs + 1 }, () => [0, 0]),
       closed: false,
     }));
     this._normalTentacleBatch = new Array(TENTACLE_BASES.length);
+    this._normalTentacleCount = 0;
+    this._lashTentaclePath = null;
   }
 
   get type()  { return this._type;  }
@@ -476,25 +482,28 @@ export class DrifterEnemy {
   }
 
   /**
-   * Tentacles and eyes — drawn individually per clone (variable tentacle
-   * geometry can't be pooled). The body is NOT drawn here: WaveManager
-   * batches every visible clone's body (using the exported BODY_PTS) into
-   * its shared hull pools, the same way it batches Scout/Rocketeer/Sniper.
-   * (For a standalone single-clone render, call `renderBody` first — see
-   * EnemyCodex.) `alpha` is an optional entrance-fade multiplier (default
-   * 1, so WaveManager's real per-frame calls are unaffected).
+   * Recomputes this frame's tentacle geometry in LOCAL space — the wave
+   * animation depends on `_age`/fire state, so (unlike the fixed BODY_PTS
+   * hull, which is a static shape WaveManager can batch by just
+   * transforming it per-clone) this math has to actually run every frame.
+   * Writes into `_tentaclePaths` (pre-allocated, mutated in place, never
+   * reallocated) and populates `_normalTentacleBatch`/`_normalTentacleCount`
+   * (every base EXCEPT an actively-lashing one) plus `_lashTentaclePath`
+   * (that one base, or null).
+   *
+   * Called by `render()` below (so a standalone single-clone render —
+   * EnemyCodex's preview cards, which never call `update()` — still
+   * produces correct geometry on its own) AND by WaveManager's
+   * `_assignTentacleBatches` (real gameplay clones, which WaveManager
+   * renders through its own cross-clone batched pools instead of ever
+   * calling `render()` — see that method's own doc for why: this is the
+   * one place the shape math lives, WaveManager just decides where the
+   * transformed result goes).
    */
-  render(renderer, alpha = 1) {
-    const cfg   = this._cfg;
-    const flash = this._hitFlash > 0;
-    const c     = this._cosA, s = this._sinA;
-    const bodyColor = flash ? '#ffffff' : this._palette.color;
-
-    // Tentacles — drawn first so they trail out from behind the body.
-    // Normal tentacles share one singleStroke pass; an actively-lashing
-    // tentacle (different width/glow/aim) gets its own pass.
-    let normalCount = 0;
-    let lashPath = null;
+  _updateTentacleGeometry() {
+    const cfg = this._cfg;
+    this._normalTentacleCount = 0;
+    this._lashTentaclePath = null;
     for (let j = 0; j < TENTACLE_BASES.length; j++) {
       const [bx, by] = TENTACLE_BASES[j];
       const isLashTentacle = j === this._tentacleIdx && this._fireState === 'lashing';
@@ -523,29 +532,21 @@ export class DrifterEnemy {
         pts[k][1] = by + dirY * len * t + perpY * wave;
       }
 
-      if (isLashTentacle) lashPath = path;
-      else this._normalTentacleBatch[normalCount++] = path;
+      if (isLashTentacle) this._lashTentaclePath = path;
+      else this._normalTentacleBatch[this._normalTentacleCount++] = path;
     }
+  }
 
-    renderer.strokePaths(this._normalTentacleBatch, {
-      x: this.x, y: this.y, rotation: this._angle,
-      color: bodyColor, lineWidth: 2.2, lineCap: 'round',
-      glowBlur: this._palette.tentacleGlowBlur, glowColor: bodyColor, alpha: 0.85 * alpha,
-      singleStroke: true,
-    }, normalCount);
-
-    if (lashPath) {
-      renderer.strokePaths([lashPath], {
-        x: this.x, y: this.y, rotation: this._angle,
-        color: bodyColor, lineWidth: 3, lineCap: 'round',
-        glowBlur: this._palette.lashGlowBlur, glowColor: bodyColor, alpha: 0.85 * alpha,
-      }, 1);
-    }
-
-    if (flash) return;
-
-    // Pulsing eyes — small alpha-pulsed dots, no per-eye glow (the body's
-    // single shared glow pass is enough to sell the "alien" look cheaply).
+  /**
+   * Pulsing eyes only — split out from `render()` so WaveManager can call
+   * this individually per clone while drawing tentacles through its own
+   * batched pools instead. Cheap either way (no glow/shadow-blur pass), so
+   * unlike tentacles there's no batching win to chase here. `alpha` is an
+   * optional entrance-fade multiplier (default 1).
+   */
+  renderEyes(renderer, alpha = 1) {
+    if (this._hitFlash > 0) return;
+    const c = this._cosA, s = this._sinA;
     for (let j = 0; j < EYES.length; j++) {
       const [lx, ly] = EYES[j];
       const wx = this.x + c * lx - s * ly;
@@ -556,5 +557,42 @@ export class DrifterEnemy {
         alpha: pulse * alpha,
       });
     }
+  }
+
+  /**
+   * Tentacles and eyes — drawn individually for ONE clone (standalone use
+   * only, e.g. EnemyCodex's preview cards; real gameplay never calls this —
+   * see WaveManager._renderDrifterTentacles). The body is NOT drawn here:
+   * WaveManager batches every visible clone's body (using the exported
+   * BODY_PTS) into its shared hull pools, the same way it batches Scout/
+   * Rocketeer/Sniper. (For a standalone single-clone render, call
+   * `renderBody` first — see EnemyCodex.) `alpha` is an optional entrance-
+   * fade multiplier (default 1).
+   */
+  render(renderer, alpha = 1) {
+    const flash = this._hitFlash > 0;
+    const bodyColor = flash ? '#ffffff' : this._palette.color;
+
+    this._updateTentacleGeometry();
+
+    // Tentacles — drawn first so they trail out from behind the eyes.
+    // Normal tentacles share one singleStroke pass; an actively-lashing
+    // tentacle (different width/glow/aim) gets its own pass.
+    renderer.strokePaths(this._normalTentacleBatch, {
+      x: this.x, y: this.y, rotation: this._angle,
+      color: bodyColor, lineWidth: 2.2, lineCap: 'round',
+      glowBlur: this._palette.tentacleGlowBlur, glowColor: bodyColor, alpha: 0.85 * alpha,
+      singleStroke: true,
+    }, this._normalTentacleCount);
+
+    if (this._lashTentaclePath) {
+      renderer.strokePaths([this._lashTentaclePath], {
+        x: this.x, y: this.y, rotation: this._angle,
+        color: bodyColor, lineWidth: 3, lineCap: 'round',
+        glowBlur: this._palette.lashGlowBlur, glowColor: bodyColor, alpha: 0.85 * alpha,
+      }, 1);
+    }
+
+    this.renderEyes(renderer, alpha);
   }
 }
