@@ -92,13 +92,13 @@ export const Config = Object.freeze({
 		color: "#4DEFFF", // electric-cyan neon outline
 		lineWidth: 2.5, // virtual px (kept visually constant regardless of `scale`)
 		glowBlur: 14, // shadow-blur radius behind the stroke (the "neon" halo)
-		scale: 0.5, // shrinks the authored ~64x80 silhouette down to a small ship
+		scale: 0.44, // shrinks the authored ~64x80 silhouette down to a small ship
 		width: 64, // authored bounding width, virtual px (pre-`scale`)
 		height: 80, // authored bounding height, virtual px (pre-`scale`) — used to place it off-screen
 		restingYRatio: 0.78, // resting position as a fraction down the virtual height
 		entryDuration: 1.4, // seconds for the ease-out fly-up entrance
 
-		// +2% render scale per Shop-upgrade level step purchased beyond each
+		// +1.5% render scale per Shop-upgrade level step purchased beyond each
 		// part's free starting tier (0-10 steps total across the 5 parts —
 		// see Player.renderScale) — so a heavily-upgraded ship (and its added
 		// wing-cannon/missile-pod/nose-spike detail) reads as visibly bigger
@@ -107,7 +107,7 @@ export const Config = Object.freeze({
 		// of how loaded out it is. Deliberately visual only: movement bounds
 		// and `hitRadius` below stay fixed at the base `scale`, so a
 		// bigger-looking ship isn't also a bigger target.
-		upgradeScaleGrowth: 0.02,
+		upgradeScaleGrowth: 0.015,
 
 		damage: 1, // health points removed from an enemy per bullet hit, at level 1 — multiplied by Player.damageMultiplier (see `cannon` below) at the point of use, not baked in here
 		damagePerLevel: 0.25, // added to `damage` for each level beyond 1 (level 4 → 1 + 3*0.25 = 1.75)
