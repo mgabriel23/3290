@@ -15,6 +15,15 @@
  *               homing) — bursts into SpitterBullets shrapnel after a delay,
  *               same "pool reports WHEN, WaveManager decides WHAT" fan-out
  *               split every boss's own seed→fragment chain already keeps
+ *   tetra     → not routed through the generic per-frame onFire dispatch
+ *               below at all — a scaled-down copy of Boss Tetra's own
+ *               bounce/laser state machine (TetraEnemy.js), updated via its
+ *               own `_tetraEnemyContext` bag the same way every boss reads
+ *               `_bossContext`. Its phase-1 seed→fragment scatter uses its
+ *               own TetraEnemySeedBullets/TetraEnemyBullets pools — separate
+ *               from the boss's TetraSeedBullets/TetraBullets, since several
+ *               clones can be alive at once sharing one pair of pools at
+ *               this type's own (weaker) tuning.
  *
  * `checkPlayerHit` is the reverse of `handleBulletHit` — every enemy-attack
  * source (enemy bullets, sniper bullets, rocket proximity, drifter orb
@@ -62,12 +71,17 @@
  * `levels` array, so the existing spawn machinery (`_spawnNext`/
  * `_groupForIdx`) builds a single boss instance the same way it builds any
  * other group. WHICH boss is read off the active mode's `roster`, cycling
- * once every boss has had a turn (under Survival Mode's canonical schedule:
- * level 7 → roster[0] "scout1", 14 → roster[1] "spiral", 21 → roster[2]
- * "bouncerPrimal", 28 → roster[3] "snake", 35 → roster[4] "tetra", 42 →
- * roster[5] "nova", 49 → roster[6] "pulsor", 56 → roster[7] "zigzag", 63 →
- * roster[8] "phoenix", 70 → roster[9] "electron", 77 → roster[0] again, ...)
- * — see the constructor's `_bossKey`/`_bossCfg`
+ * once every boss has had a turn — both modes now share the exact same
+ * every-5th-level cadence and roster order (level 5 → roster[0] "scout1", 10
+ * → roster[1] "spiral", 15 → roster[2] "bouncerPrimal", 20 → roster[3]
+ * "snake", 25 → roster[4] "tetra", 30 → roster[5] "nova", 35 → roster[6]
+ * "pulsor", 40 → roster[7] "zigzag", 45 → roster[8] "phoenix", 50 →
+ * roster[9] "electron", 55 → roster[0] again, ...) — see
+ * Config.bossSchedule's own doc for why Survival's own `levels` content
+ * still WRAPS back to level 1 past level 50 (Mission's own campaign just
+ * ends there) even though the boss cadence itself needs no such wrap (it's
+ * computed off the raw, never-wrapped `level` number). See the
+ * constructor's `_bossKey`/`_bossCfg`
  * lookup and the `BOSS_CLASSES` table above for the matching class
  * construction. Every boss class shares one `update(dt, playerX, playerY,
  * ctx)` shape, where `ctx` is a bag of every callback ANY boss might need —
@@ -110,6 +124,9 @@ import { ElectronBoss } from './ElectronBoss.js';
 import { EnemyBullets } from './EnemyBullet.js';
 import { SpitterSeedBullets } from './SpitterSeedBullets.js';
 import { SpitterBullets } from './SpitterBullets.js';
+import { TetraEnemy } from './TetraEnemy.js';
+import { TetraEnemySeedBullets } from './TetraEnemySeedBullets.js';
+import { TetraEnemyBullets } from './TetraEnemyBullets.js';
 import { Rockets } from './Rockets.js';
 import { SniperBullets } from './SniperBullets.js';
 import { SpiralBullets } from './SpiralBullets.js';
@@ -274,9 +291,9 @@ export class WaveManager {
    * (Config.bossSchedule.survival or .mission, see class doc) — which boss
    * takes over the wave entirely. Checked against the raw level number
    * rather than read from the mode's `levels` array (which only defines a
-   * handful of entries and caps at the last one forever), so boss levels
-   * keep recurring past the end of that array too. Sets `_mode`, `_level`,
-   * `_wavesCfg`, `_isBossLevel`, `_bossKey`, `_bossCfg`, `_waveCfg`.
+   * handful of entries), so boss levels keep recurring past the end of that
+   * array too. Sets `_mode`, `_level`, `_wavesCfg`, `_isBossLevel`,
+   * `_bossKey`, `_bossCfg`, `_waveCfg`.
    */
   _resolveLevelAndBoss(mode, level) {
     this._mode = mode;
@@ -307,9 +324,21 @@ export class WaveManager {
       this._bossKey = bossSchedule.roster[(bossEncounterNum - 1) % bossSchedule.roster.length];
       this._bossCfg = Config.boss[this._bossKey];
     }
+    // Content-index resolution differs by mode once `level` runs past the
+    // array: Mission Mode's 50-level campaign just ends (Config.mission.count
+    // caps the run before this ever matters, so clamping to the last entry is
+    // harmless dead-code headroom); Survival Mode is endless, so it WRAPS
+    // back to index 0 (level 1's content) via modulo instead — the same
+    // 50-level roster repeats indefinitely, reading as harder each loop
+    // purely because `level` itself (used for health/damage scaling and the
+    // boss roster's own cycling position below) is never wrapped, only this
+    // content lookup is — see the doc comment above Config.waves.levels.
+    const levelIdx = mode === 'survival'
+      ? (level - 1) % levels.length
+      : Math.min(level - 1, levels.length - 1);
     this._waveCfg = this._isBossLevel
       ? { enemies: [{ type: 'boss', count: 1, spawnInterval: 0 }] }
-      : levels[Math.min(level - 1, levels.length - 1)];
+      : levels[levelIdx];
   }
 
   /** Sets `_barrierSurfaceY`, `_onBarrierHit`, `_onDrifterBarrierHit` — shared by every attack source that can hit the barrier. */
@@ -356,6 +385,21 @@ export class WaveManager {
         const step  = fragment.count > 1 ? fragment.spreadAngle / (fragment.count - 1) : 0;
         for (let i = 0; i < fragment.count; i++) {
           this._spitterBullets.fire(x, y, start + i * step);
+        }
+      },
+    });
+    // The normal Tetra enemy's own glob→shrapnel chain (TetraEnemy.js) —
+    // separate pools from the boss's own TetraSeedBullets/TetraBullets below,
+    // at this type's own (weaker) Config.enemy.tetra tuning, since several
+    // clones can be alive at once sharing this ONE pair of pools.
+    this._tetraEnemyBullets = new TetraEnemyBullets();
+    this._tetraEnemySeedBullets = new TetraEnemySeedBullets({
+      onDetonate: (x, y) => {
+        const { fragment } = Config.enemy.tetra;
+        const startAngle = Math.random() * Math.PI * 2;
+        const angleStep = (Math.PI * 2) / fragment.count;
+        for (let i = 0; i < fragment.count; i++) {
+          this._tetraEnemyBullets.fire(x, y, startAngle + i * angleStep);
         }
       },
     });
@@ -471,6 +515,7 @@ export class WaveManager {
     this._rocketeerParticles = new Particles(Config.enemy.rocketeer.color);
     this._sniperParticles    = new Particles(Config.enemy.sniper.color);
     this._spitterParticles   = new Particles(Config.enemy.spitter.color);
+    this._tetraEnemyParticles = new Particles(Config.enemy.tetra.color, Config.enemy.tetra.sparksPerEmit);
     this._drifterParticles   = new Particles(Config.enemy.drifter.color);
     this._sweeperParticles   = new Particles(Config.enemy.drifter.sweeper.color, Config.enemy.drifter.sweeper.sparksPerEmit);
     this._diverParticles     = new Particles(Config.enemy.drifter.diver.color, Config.enemy.drifter.diver.sparksPerEmit);
@@ -501,6 +546,7 @@ export class WaveManager {
     // default (1) applies and its shot is unaffected.
     this._fireSniperBullet = (ox, oy, tx, ty, speedMult) => this._sniperBullets.fire(ox, oy, tx, ty, speedMult);
     this._fireSpitterSeed = (ox, oy, tx, ty) => this._spitterSeedBullets.fire(ox, oy, tx, ty);
+    this._fireTetraEnemySeed = (ox, oy, angle) => this._tetraEnemySeedBullets.fireAngle(ox, oy, angle);
     this._fireSpiralBullet = (ox, oy, angle) => this._spiralBullets.fire(ox, oy, angle);
     this._fireTetraSeed = (ox, oy, angle) => this._tetraSeedBullets.fireAngle(ox, oy, angle);
     this._fireNovaSeed = (ox, oy, tx, ty) => this._novaSeedBullets.fire(ox, oy, tx, ty);
@@ -552,6 +598,16 @@ export class WaveManager {
       barrierSurfaceY: this._barrierSurfaceY,
       onBarrierHit: this._onBarrierHit,
     };
+
+    // The normal Tetra enemy's own small context bag — same shape as
+    // `_bossContext` above but scoped to only what TetraEnemy.update actually
+    // reads (see that class's own doc), since it's not a boss and doesn't
+    // need the other dozen boss-only fire callbacks.
+    this._tetraEnemyContext = {
+      barrierSurfaceY: this._barrierSurfaceY,
+      onBarrierHit: this._onBarrierHit,
+      fireTetraEnemySeed: this._fireTetraEnemySeed,
+    };
   }
 
   /**
@@ -567,6 +623,7 @@ export class WaveManager {
     this._rocketeerParticles.update(dt);
     this._sniperParticles.update(dt);
     this._spitterParticles.update(dt);
+    this._tetraEnemyParticles.update(dt);
     this._drifterParticles.update(dt);
     this._sweeperParticles.update(dt);
     this._diverParticles.update(dt);
@@ -581,6 +638,8 @@ export class WaveManager {
     this._sniperBullets.update(dt);
     this._spitterSeedBullets.update(dt);
     this._spitterBullets.update(dt);
+    this._tetraEnemySeedBullets.update(dt);
+    this._tetraEnemyBullets.update(dt);
     this._spiralBullets.update(dt);
     this._tetraSeedBullets.update(dt);
     this._tetraBullets.update(dt);
@@ -638,6 +697,10 @@ export class WaveManager {
       }
       if (e.type === 'boss') {
         e.update(dt, playerX, playerY, this._bossContext);
+        continue;
+      }
+      if (e.type === 'tetra') {
+        e.update(dt, playerX, playerY, this._tetraEnemyContext);
         continue;
       }
       if (e.type === 'snakeSegment') {
@@ -714,6 +777,8 @@ export class WaveManager {
     this._sniperBullets.render(renderer);
     this._spitterSeedBullets.render(renderer);
     this._spitterBullets.render(renderer);
+    this._tetraEnemySeedBullets.render(renderer);
+    this._tetraEnemyBullets.render(renderer);
     this._spiralBullets.render(renderer);
     this._tetraSeedBullets.render(renderer);
     this._tetraBullets.render(renderer);
@@ -737,7 +802,7 @@ export class WaveManager {
   _renderEngineFlames(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss' || e.type === 'snakeSegment') continue;
+      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss' || e.type === 'tetra' || e.type === 'snakeSegment') continue;
       e.renderFlame(renderer);
     }
   }
@@ -765,7 +830,7 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'bouncer' || e.type === 'boss' || e.type === 'snakeSegment') continue; // rendered individually/batched separately below
+      if (e.type === 'bouncer' || e.type === 'boss' || e.type === 'tetra' || e.type === 'snakeSegment') continue; // rendered individually/batched separately below
       if (e.type === 'drifter') {
         if (!e._visible) continue;
         const isFlash = e._hitFlash > 0;
@@ -898,7 +963,7 @@ export class WaveManager {
   _renderEngineCores(renderer) {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss' || e.type === 'snakeSegment') continue;
+      if (e.type === 'drifter' || e.type === 'bouncer' || e.type === 'boss' || e.type === 'tetra' || e.type === 'snakeSegment') continue;
       e.renderCore(renderer);
     }
   }
@@ -915,7 +980,7 @@ export class WaveManager {
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
       if (e.type === 'drifter' && e._visible) e.render(renderer);
-      else if (e.type === 'bouncer' || e.type === 'boss') e.render(renderer);
+      else if (e.type === 'bouncer' || e.type === 'boss' || e.type === 'tetra') e.render(renderer);
     }
   }
 
@@ -925,6 +990,7 @@ export class WaveManager {
     this._rocketeerParticles.render(renderer);
     this._sniperParticles.render(renderer);
     this._spitterParticles.render(renderer);
+    this._tetraEnemyParticles.render(renderer);
     this._drifterParticles.render(renderer);
     this._sweeperParticles.render(renderer);
     this._diverParticles.render(renderer);
@@ -1035,6 +1101,9 @@ export class WaveManager {
       } else if (enemy.type === 'spitter') {
         this._spitterParticles.emit(enemy.x, enemy.y);
         this._playExplosionSfx(Config.enemy.spitter.audio.volume);
+      } else if (enemy.type === 'tetra') {
+        this._tetraEnemyParticles.emit(enemy.x, enemy.y);
+        this._playExplosionSfx(Config.enemy.tetra.audio.volume);
       } else if (enemy.type === 'drifter') {
         const { particles, audio } = this._drifterVarietyAssets(enemy._variant);
         particles.emit(enemy.x, enemy.y);
@@ -1148,7 +1217,7 @@ export class WaveManager {
       if (enemy._variant === 'fragment') return { points: cfg.splitter.fragmentPoints, gold: cfg.splitter.fragmentGold };
       return { points: cfg.points, gold: cfg.gold };
     }
-    const cfg = Config.enemy[enemy.type]; // scout, rocketeer, sniper, spitter
+    const cfg = Config.enemy[enemy.type]; // scout, rocketeer, sniper, spitter, tetra
     return { points: cfg.points, gold: cfg.gold };
   }
 
@@ -1172,10 +1241,10 @@ export class WaveManager {
    * check invulnerability — Player.takeDamage already no-ops while
    * invulnerable, so a hit source here just gets consumed (bullet removed,
    * etc.) even during that window, same as a real impact would be. The one
-   * exception is a boss's own `checkLaserHit` (currently Tetra's phase-2
-   * beams and Spiral's own phase-2 beams) — nothing to consume, it's a live
-   * geometry test re-run every frame the beam is up, same as Bouncer's
-   * circle-based `contactDamage`.
+   * exception is a `checkLaserHit` (currently Boss Tetra's, the normal Tetra
+   * enemy's own, and Spiral's own phase-2 beams) — nothing to consume, it's
+   * a live geometry test re-run every frame the beam is up, same as
+   * Bouncer's circle-based `contactDamage`.
    * @param {{ x: number, y: number, hitRadius: number }} player
    * @returns {number}
    */
@@ -1190,6 +1259,8 @@ export class WaveManager {
     if (this._sniperBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.sniper.bullet.damage * mult;
     if (this._spitterSeedBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.spitter.bullet.damage * mult;
     if (this._spitterBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.spitter.fragment.damage * mult;
+    if (this._tetraEnemySeedBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.tetra.seed.damage * mult;
+    if (this._tetraEnemyBullets.checkHit(x, y, hitRadius)) damage += Config.enemy.tetra.fragment.damage * mult;
     if (this._spiralBullets.checkHit(x, y, hitRadius)) damage += Config.boss.spiral.bullet.damage * mult;
     if (this._tetraSeedBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.seed.damage * mult;
     if (this._tetraBullets.checkHit(x, y, hitRadius)) damage += Config.boss.tetra.fragment.damage * mult;
@@ -1208,11 +1279,12 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const e = this._enemies[i];
-      // A regular Bouncer always deals contact damage; a boss opts in by
-      // exposing its own `.contactDamage` (currently Bouncer Primal/Tetra's
-      // own bounce phase/Phoenix's charge/Electron's surge — see each
-      // class's doc) rather than every other boss needing a no-op getter
-      // just to be excluded here. The
+      // A regular Bouncer always deals contact damage; anything else opts in
+      // by exposing its own `.contactDamage` (currently Bouncer Primal/Boss
+      // Tetra's own bounce phase/Phoenix's charge/Electron's surge/the
+      // normal Tetra enemy's own bounce phase — see each class's doc) rather
+      // than every other type needing a no-op getter just to be excluded
+      // here. The
       // circle radius defaults to the enemy's own `hitRadius` (the hull
       // player bullets also test against) but a boss can override it via an
       // optional `.contactRadius` (currently only Electron's surge, whose
@@ -1225,10 +1297,11 @@ export class WaveManager {
           damage += (e.type === 'bouncer' ? Config.enemy.bouncer.contactDamage : e.contactDamage) * mult;
         }
       }
-      // A boss with a continuous beam attack (currently Tetra's and Spiral's
-      // own phase-2 lasers) opts in by exposing `.checkLaserHit`, a live
-      // point-to-segment test rather than a circle — see
-      // TetraBoss.checkLaserHit/SpiralBoss.checkLaserHit's own docs.
+      // Anything with a continuous beam attack (currently Boss Tetra's, the
+      // normal Tetra enemy's own, and Spiral's own phase-2 lasers) opts in by
+      // exposing `.checkLaserHit`, a live point-to-segment test rather than a
+      // circle — see TetraBoss.checkLaserHit/TetraEnemy.checkLaserHit/
+      // SpiralBoss.checkLaserHit's own docs.
       if (e.checkLaserHit) damage += e.checkLaserHit(x, y, hitRadius) * mult;
     }
 
@@ -1365,6 +1438,10 @@ export class WaveManager {
   _clearEnemyProjectiles() {
     this._enemyBullets.clear();
     this._sniperBullets.clear();
+    this._spitterSeedBullets.clear(); // was missing entirely, like phoenixFireballs below — a pre-existing gap, fixed alongside adding this type's own pools
+    this._spitterBullets.clear();
+    this._tetraEnemySeedBullets.clear();
+    this._tetraEnemyBullets.clear();
     this._spiralBullets.clear();
     this._tetraSeedBullets.clear();
     this._tetraBullets.clear();
@@ -1464,6 +1541,7 @@ export class WaveManager {
       && !this._rocketeerParticles.active
       && !this._sniperParticles.active
       && !this._spitterParticles.active
+      && !this._tetraEnemyParticles.active
       && !this._drifterParticles.active
       && !this._sweeperParticles.active
       && !this._diverParticles.active
@@ -1478,6 +1556,8 @@ export class WaveManager {
       && !this._sniperBullets.active
       && !this._spitterSeedBullets.active
       && !this._spitterBullets.active
+      && !this._tetraEnemySeedBullets.active
+      && !this._tetraEnemyBullets.active
       && !this._spiralBullets.active
       && !this._tetraSeedBullets.active
       && !this._tetraBullets.active
@@ -1505,11 +1585,11 @@ export class WaveManager {
 
     for (let i = 0; i < this._enemies.length; i++) {
       const a = this._enemies[i];
-      if (a._state === 'entering' || a._type === 'drifter' || a._type === 'bouncer' || a._type === 'boss' || a._type === 'snakeSegment') continue;
+      if (a._state === 'entering' || a._type === 'drifter' || a._type === 'bouncer' || a._type === 'boss' || a._type === 'tetra' || a._type === 'snakeSegment') continue;
 
       for (let j = i + 1; j < this._enemies.length; j++) {
         const b = this._enemies[j];
-        if (b._state === 'entering' || b._type === 'drifter' || b._type === 'bouncer' || b._type === 'boss' || b._type === 'snakeSegment') continue;
+        if (b._state === 'entering' || b._type === 'drifter' || b._type === 'bouncer' || b._type === 'boss' || b._type === 'tetra' || b._type === 'snakeSegment') continue;
 
         const minSep = Math.max(a._cfg.minSeparation, b._cfg.minSeparation);
         const ddx    = b.x - a.x;
@@ -1567,7 +1647,7 @@ export class WaveManager {
       let clear = true;
       for (let i = 0; i < this._enemies.length; i++) {
         const other = this._enemies[i];
-        if (other === enemy || other._state === 'entering' || other._type === 'drifter' || other._type === 'bouncer' || other._type === 'boss' || other._type === 'snakeSegment') continue;
+        if (other === enemy || other._state === 'entering' || other._type === 'drifter' || other._type === 'bouncer' || other._type === 'boss' || other._type === 'tetra' || other._type === 'snakeSegment') continue;
         const sep = Math.max(minSeparation, other._cfg.minSeparation);
         const dx  = other.x - x, dy = other.y - y;
         if (dx * dx + dy * dy < sep * sep) { clear = false; break; }
@@ -1613,6 +1693,12 @@ export class WaveManager {
       // elevated per-level scaling and letting their long-run tankiness
       // decay toward a plain Bouncer's over many levels.
       this._enemies.push(new BouncerEnemy({ variant, healthBonus: this._healthBonus(healthCfg) }));
+      this._advanceSpawnIndex();
+      return;
+    }
+
+    if (type === 'tetra') {
+      this._enemies.push(new TetraEnemy(this._healthBonus(Config.enemy.tetra)));
       this._advanceSpawnIndex();
       return;
     }

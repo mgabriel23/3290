@@ -10,7 +10,7 @@
  *
  * No image assets, and no re-derived approximation of each enemy's look
  * either: every card constructs a real instance of the actual enemy class
- * (`Enemy`/`SniperEnemy`/`DrifterEnemy`/`BouncerEnemy`) and calls its real
+ * (`Enemy`/`SniperEnemy`/`DrifterEnemy`/`BouncerEnemy`/`TetraEnemy`) and calls its real
  * render method(s), so a card is guaranteed to match gameplay exactly —
  * same hull points, same colors, same glow — at the enemy's real in-game
  * size (see `createPreviewInstance`). These preview instances are frozen
@@ -27,6 +27,7 @@ import { Enemy } from './Enemy.js';
 import { SniperEnemy } from './SniperEnemy.js';
 import { DrifterEnemy, createDrifterPath, createSweeperPath, createDiverPath, createWeaverPath } from './DrifterEnemy.js';
 import { BouncerEnemy } from './BouncerEnemy.js';
+import { TetraEnemy } from './TetraEnemy.js';
 import { wrapText } from '../core/textLayout.js';
 import { cornerBracketPath } from '../core/shapes.js';
 import { playButtonClick } from '../core/UiSound.js';
@@ -77,6 +78,9 @@ function createPreviewInstance(type) {
       break;
     case 'fragment':
       instance = new BouncerEnemy({ variant: 'fragment', x: PREVIEW_X, y: PREVIEW_Y, vx: 0, vy: 0 });
+      break;
+    case 'tetra':
+      instance = new TetraEnemy(0);
       break;
   }
   // Pin every preview to the frame center in a consistent, upright pose,
@@ -176,7 +180,13 @@ const ENTRIES = [
     points: Config.enemy.bouncer.shielded.points, gold: Config.enemy.bouncer.shielded.gold,
     description: `A normal Bouncer core wrapped in a shield ring that absorbs ${Config.enemy.bouncer.shielded.shieldHits} hits before the core takes any damage.` },
 
-  { buildOrder: 12, type: 'fragment', name: 'Splitter Fragment', family: 'Bouncer family (spawned only)', kind: 'bouncer',
+  { buildOrder: 12, type: 'tetra', name: 'Tetra', family: 'Tetra', kind: 'tetra',
+    color: Config.enemy.tetra.color,
+    hp: Config.enemy.tetra.health, hpPerLevel: Config.enemy.tetra.healthPerLevel,
+    points: Config.enemy.tetra.points, gold: Config.enemy.tetra.gold,
+    description: 'A small cousin of Boss Tetra. Bounces off walls and the barrier while lobbing a scatter volley, then settles and sweeps 3 damaging beams before bouncing again.' },
+
+  { buildOrder: 13, type: 'fragment', name: 'Splitter Fragment', family: 'Bouncer family (spawned only)', kind: 'bouncer',
     color: Config.enemy.bouncer.color,
     hp: Config.enemy.bouncer.splitter.fragmentHealth, hpPerLevel: Config.enemy.bouncer.splitter.fragmentHealthPerLevel,
     points: Config.enemy.bouncer.splitter.fragmentPoints, gold: Config.enemy.bouncer.splitter.fragmentGold,

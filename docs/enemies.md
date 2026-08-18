@@ -40,6 +40,14 @@ Wireframe-only hexagon (no fill), drops from the top and bounces indefinitely of
 | 11 | **Shielded** | `shielded` | Amber core + ice-blue `#6FE0FF` shield ring | 32vp shield / 20vp core | 4 (+1.8) core | An outer shield ring (spins with the core) absorbs 2 hits — and sets the bounce/collision radius while up — before the core takes damage like a normal Bouncer. |
 | — | *Fragment* | `'fragment'` (runtime-only, not a level `type`) | Amber | 12vp | 1 | Spawned only by a Splitter's death — not directly placeable in a level's enemy list. |
 
+## Tetra — `js/entities/TetraEnemy.js`
+
+A small, placeable-in-any-wave cousin of Boss #5 "Tetra" (`js/entities/TetraBoss.js`) — same square silhouette and electric-blue color, "a little larger" than Scout rather than boss-sized, sharing its two-phase bounce/laser state machine at this type's own weaker tuning (own health/damage/timing numbers, and its own dedicated `TetraEnemySeedBullets.js`/`TetraEnemyBullets.js` projectile pools, separate from the boss's).
+
+| # | Name | `type` | Color | Base HP (+/level) | Behavior |
+|---|------|--------|-------|-------------------|----------|
+| 12 | **Tetra** | `tetra` | Electric blue `#3DA5FF` | 10 (+4.46) | Falls in bouncing off walls/top/barrier under gravity (like a Bouncer), lobbing a 4-direction scatter-seed volley that bursts into shrapnel, for `phase1Duration` seconds. Then settles to its own rolled rest point and sweeps 3 damaging beams that sway left-right for a few seconds before bouncing again. |
+
 ## Shared combat plumbing
 
-Hit-flash, death-flash-then-remove, entry-glide, and engine-flame/core rendering are shared across Scout/Rocketeer/Spitter/Sniper/Drifter (and partially Bouncer) via `js/entities/EnemyCombat.js` rather than duplicated per file — see that file if you're adding a 12th enemy type and want to reuse the same building blocks.
+Hit-flash, death-flash-then-remove, entry-glide, and engine-flame/core rendering are shared across Scout/Rocketeer/Spitter/Sniper/Drifter (and partially Bouncer/Tetra) via `js/entities/EnemyCombat.js` rather than duplicated per file — see that file if you're adding a 13th enemy type and want to reuse the same building blocks.

@@ -742,7 +742,8 @@ export const Config = Object.freeze({
 			]) }),
 
 			// ---- Chapter 5 — Escalation (boss: Tetra, L25) ----
-			// Level 21 — density ramp, full roster.
+			// Level 21 — density ramp, full roster. {+Tetra} — the small cousin
+			// of this chapter's boss starts showing up here, ahead of the fight.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.5 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.3 }),
@@ -752,8 +753,9 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.7 }),
 				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.7 }),
 				Object.freeze({ type: "weaver", count: 1, spawnInterval: 3.2 }),
+				Object.freeze({ type: "tetra", count: 1, spawnInterval: 3.6 }),
 			]) }),
-			// Level 22 — alien-heavy.
+			// Level 22 — alien-heavy. {+Tetra}.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "drifter", count: 1, spawnInterval: 3.2 }),
 				Object.freeze({ type: "sweeper", count: 1, spawnInterval: 3.2 }),
@@ -762,6 +764,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.2 }),
 				Object.freeze({ type: "bouncer", count: 2, spawnInterval: 2.3 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.5 }),
+				Object.freeze({ type: "tetra", count: 1, spawnInterval: 3.5 }),
 			]) }),
 			// Level 23 — mechanical-heavy (Bouncer/Splitter/Shielded).
 			Object.freeze({ enemies: Object.freeze([
@@ -772,6 +775,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.6 }),
 				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.6 }),
 				Object.freeze({ type: "sniper", count: 2, spawnInterval: 2.1 }),
+				Object.freeze({ type: "tetra", count: 1, spawnInterval: 3.4 }),
 			]) }),
 			// Level 24 — full roster, tight overlap.
 			Object.freeze({ enemies: Object.freeze([
@@ -786,6 +790,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 2.1 }),
 				Object.freeze({ type: "splitter", count: 1, spawnInterval: 3.1 }),
 				Object.freeze({ type: "shielded", count: 1, spawnInterval: 3.5 }),
+				Object.freeze({ type: "tetra", count: 1, spawnInterval: 3.3 }),
 			]) }),
 			// Level 25 — BOSS: Tetra. Dead entry (see Level 5).
 			Object.freeze({ enemies: Object.freeze([
@@ -809,6 +814,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 2.0 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 3.0 }),
 				Object.freeze({ type: "drifter", count: 2, spawnInterval: 2.9 }),
+				Object.freeze({ type: "tetra", count: 1, spawnInterval: 3.2 }),
 			]) }),
 			// Level 27.
 			Object.freeze({ enemies: Object.freeze([
@@ -819,6 +825,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 2.0 }),
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.9 }),
 				Object.freeze({ type: "scout", count: 3, spawnInterval: 1.3 }),
+				Object.freeze({ type: "tetra", count: 1, spawnInterval: 3.1 }),
 			]) }),
 			// Level 28.
 			Object.freeze({ enemies: Object.freeze([
@@ -829,6 +836,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.5 }),
 				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.5 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.9 }),
+				Object.freeze({ type: "tetra", count: 1, spawnInterval: 3.1 }),
 			]) }),
 			// Level 29 — full-roster max density before the chapter's boss.
 			Object.freeze({ enemies: Object.freeze([
@@ -843,6 +851,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.9 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.8 }),
 				Object.freeze({ type: "shielded", count: 2, spawnInterval: 3.1 }),
+				Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.8 }),
 			]) }),
 			// Level 30 — BOSS: Nova. Dead entry (see Level 5).
 			Object.freeze({ enemies: Object.freeze([
@@ -866,6 +875,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.8 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.6 }),
 				Object.freeze({ type: "weaver", count: 2, spawnInterval: 2.6 }),
+				Object.freeze({ type: "tetra", count: 2, spawnInterval: 3.0 }),
 			]) }),
 			// Level 32.
 			Object.freeze({ enemies: Object.freeze([
@@ -876,6 +886,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.8 }),
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.8 }),
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.2 }),
+				Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.9 }),
 			]) }),
 			// Level 33.
 			Object.freeze({ enemies: Object.freeze([
@@ -886,6 +897,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.4 }),
 				Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.4 }),
 				Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.7 }),
+				Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.8 }),
 			]) }),
 			// Level 34.
 			Object.freeze({ enemies: Object.freeze([
@@ -900,6 +912,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.7 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.5 }),
 				Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.9 }),
+				Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.7 }),
 			]) }),
 			// Level 35 — BOSS: Pulsor. Dead entry (see Level 5).
 			Object.freeze({ enemies: Object.freeze([
@@ -923,6 +936,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.7 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.4 }),
 				Object.freeze({ type: "weaver", count: 2, spawnInterval: 2.4 }),
+				Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.6 }),
 			]) }),
 			// Level 37.
 			Object.freeze({ enemies: Object.freeze([
@@ -933,6 +947,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.6 }),
 				Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.6 }),
 				Object.freeze({ type: "scout", count: 4, spawnInterval: 1.1 }),
+				Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.5 }),
 			]) }),
 			// Level 38.
 			Object.freeze({ enemies: Object.freeze([
@@ -943,6 +958,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.2 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.6 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.5 }),
 			]) }),
 			// Level 39.
 			Object.freeze({ enemies: Object.freeze([
@@ -957,6 +973,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.6 }),
 				Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.3 }),
 				Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.7 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.4 }),
 			]) }),
 			// Level 40 — BOSS: Zigzag. Dead entry (see Level 5).
 			Object.freeze({ enemies: Object.freeze([
@@ -980,6 +997,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.2 }),
 				Object.freeze({ type: "weaver", count: 2, spawnInterval: 2.2 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.4 }),
 			]) }),
 			// Level 42.
 			Object.freeze({ enemies: Object.freeze([
@@ -990,6 +1008,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.3 }),
 			]) }),
 			// Level 43.
 			Object.freeze({ enemies: Object.freeze([
@@ -1000,6 +1019,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.3 }),
 			]) }),
 			// Level 44.
 			Object.freeze({ enemies: Object.freeze([
@@ -1014,6 +1034,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.1 }),
 				Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.4 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.2 }),
 			]) }),
 			// Level 45 — BOSS: Phoenix. Dead entry (see Level 5).
 			Object.freeze({ enemies: Object.freeze([
@@ -1037,6 +1058,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.1 }),
 				Object.freeze({ type: "weaver", count: 2, spawnInterval: 2.0 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.2 }),
 			]) }),
 			// Level 47.
 			Object.freeze({ enemies: Object.freeze([
@@ -1047,6 +1069,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.1 }),
 			]) }),
 			// Level 48.
 			Object.freeze({ enemies: Object.freeze([
@@ -1057,9 +1080,10 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
 				Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.5 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.1 }),
 			]) }),
 			// Level 49 — the campaign's final non-boss gauntlet: the entire
-			// 11-type roster, at its highest density, one step before Electron.
+			// 12-type roster, at its highest density, one step before Electron.
 			Object.freeze({ enemies: Object.freeze([
 				Object.freeze({ type: "scout", count: 6, spawnInterval: 1.1 }),
 				Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
@@ -1072,6 +1096,7 @@ export const Config = Object.freeze({
 				Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.5 }),
 				Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.1 }),
 				Object.freeze({ type: "shielded", count: 3, spawnInterval: 2.4 }),
+				Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.0 }),
 			]) }),
 			// Level 50 — BOSS: Electron, the campaign's final boss. Dead
 			// entry (see Level 5) — the true finale content lives in
@@ -2772,6 +2797,151 @@ export const Config = Object.freeze({
 				gold: 37,
 			}),
 		}),
+
+		/**
+		 * Tetra — a small original square hull, "a little larger" than
+		 * Scout's (see `size`/`hitRadius` below vs. Config.enemy.scout's own
+		 * 22/16), placeable in normal mission/survival waves rather than only
+		 * as the endgame Boss #5 (Config.boss.tetra, TetraBoss.js) that shares
+		 * its name/color/silhouette — this IS that same creature, just young
+		 * (or small), the way Splitter/Shielded are still "Bouncers" despite
+		 * their own extra tricks. `type` is `'tetra'` (not `'boss'`), so it's
+		 * a real, independent WaveManager._spawnNext branch — see
+		 * TetraEnemy.js's own class doc for the full bounce/laser state
+		 * machine, a scaled-down copy of TetraBoss's own two-phase loop.
+		 *
+		 * EffortScore 22.10 (hitsToKill 17 from 10 HP @ healthPerLevel 4.46,
+		 * evaluated at Survival's debut level 22, erratic-bounce mobility
+		 * ×1.3, mandatory so no engagement bonus) — lands at the exact same
+		 * tier as Splitter/Shielded (also EffortScore 22.10), fitting for the
+		 * roster's other top-end non-boss threat. See the EffortScore
+		 * methodology comment above `hitFlashDuration`.
+		 */
+		tetra: Object.freeze({
+			size: 20, // vp — half-extent of the square hull (TetraEnemy.js's TETRA_ENEMY_HULL_PTS), matches hitRadius same as the boss's own size/hitRadius convention
+			health: 10,
+			healthPerLevel: 4.46, // 2.7 × SHOP_HEALTH_FACTOR, see the methodology comment above `hitFlashDuration`
+			color: "#3DA5FF", // same electric blue as Boss Tetra — same creature, not a reskin
+			fillColor: "#081428",
+			lineWidth: 1.8,
+			glowBlur: 12,
+			hitGlowBlur: 22,
+			hitRadius: 20,
+
+			// Phase-2 settle target: unlike the boss (a single instance always
+			// settling to a fixed screen-center point), several of these can be
+			// alive at once, so each instance rolls its OWN random rest point
+			// once at construction (TetraEnemy's constructor) — same
+			// restXMargin/restYMin/restYMax shape Scout/Sniper/Rocketeer/
+			// Spitter already use for their own rest points, just consumed
+			// directly by TetraEnemy itself rather than by WaveManager._spawnNext.
+			restXMargin: 70,
+			restYMin: 0.18,
+			restYMax: 0.32,
+
+			// Phase 1 — real Bouncer physics (BouncerEnemy.js's exported
+			// `stepBouncePhysics`), same technique the boss's own phase 1
+			// uses, just this type's own smaller/nimbler numbers. Falls in
+			// from the top exactly like a Bouncer/Boss Tetra do — no
+			// entry-glide state, see TetraEnemy.js's constructor.
+			bounce: Object.freeze({
+				gravity: 300, // vp/sec^2 — same constant every bounce-physics type in the game shares
+				spinFactor: 0.04, // rad/sec of spin per vp/sec of horizontal speed — matches the base Bouncer's own feel
+				speedMin: 100, // vp/sec — a touch peppier than a plain Bouncer's 80-160, reads as agile
+				speedMax: 190,
+				barrierDamage: 6, // Barrier.health lost per bounce off the barrier — between a plain Bouncer's 5 and the boss's 12
+			}),
+			contactDamage: 9, // player HP lost per contact tick if the player touches the hull — throttled by Config.player.invulnDuration, same convention as Bouncer/Boss Tetra's own contactDamage
+
+			phase1Duration: 5, // seconds of bouncing before the next charge/laser telegraph — shorter than the boss's 8s, a faster loop for a smaller, less tanky threat
+			settleDuration: 0.5, // seconds to ease from wherever the bounce ended back to this instance's own rest point
+
+			// Phase 1's ranged attack — see class doc. Scaled-down copy of the
+			// boss's own seed/fragment scatter (TetraEnemySeedBullets.js/
+			// TetraEnemyBullets.js — separate pools from the boss's
+			// TetraSeedBullets/TetraBullets, since several of these can be
+			// alive sharing one pool at tuning this type's own, not the
+			// boss's).
+			seed: Object.freeze({
+				fireInterval: 1.6, // seconds between 4-bullet volleys while bouncing — a touch slower than the boss's 1.4s, so multiple live clones don't stack into bullet spam
+				speed: 70, // vp/sec — same deliberately slow, clearly-telegraphed speed as the boss's own seed
+				scatterDelay: 1.1, // seconds alive before it bursts into shrapnel
+				color: "#3DA5FF",
+				lineWidth: 2,
+				glowBlur: 6,
+				radius: 4, // vp — base drawn radius
+				growthMult: 1.6, // radius multiplies up to this factor as scatterDelay approaches
+				poolSize: 24, // sized for a couple of simultaneous clones each mid-volley, not just one boss
+				damage: 4, // player HP lost on a direct hit, before it ever gets to burst
+			}),
+
+			// Phase 1's scatter burst — see class doc. Same plain evenly-spaced
+			// ring as the boss's own fragment burst, this type's own weaker numbers.
+			fragment: Object.freeze({
+				count: 4, // shrapnel pieces per burst, evenly spaced around a full ring — one fewer than the boss's 5
+				speed: 100, // vp/sec
+				color: "#3DA5FF",
+				lineWidth: 2,
+				glowBlur: 5,
+				halfLen: 4,
+				poolSize: 64, // sized for a couple of simultaneous clones each bursting near-together, plus stragglers
+				damage: 4,
+			}),
+
+			// Phase 2 — same 3-beam sweeping-fan laser as the boss, shorter
+			// and less damaging so a normal-wave encounter (possibly several
+			// clones at once) stays fair. See TetraBoss.js's own `laser` doc
+			// for the full mechanic (collision is a live point-to-segment
+			// test, TetraEnemy.checkLaserHit, read generically by
+			// WaveManager.checkPlayerHit the same way a regular Bouncer's
+			// `contactDamage` already is).
+			laser: Object.freeze({
+				chargeDuration: 1.1, // seconds the dashed preview fan + growing chargeOrb are visible but harmless before the beams go live
+				liveDuration: 2.6, // seconds the beams are live/damaging and swaying before looping back to phase 1 — much shorter than the boss's 4.5s
+				spreadAngle: 0.22, // rad (~13°) between each beam and the center one
+				swaySpeed: 0.7, // rad/sec — same slow, readable drift as the boss's own sway
+				swayAmplitude: 0.4, // rad (~23°) — how far the fan swings from its locked center direction, each way
+				length: 1300, // vp — same "always reaches past every edge" length as the boss's own beams, screen size doesn't change with hull size
+				halfWidth: 4, // vp — collision half-thickness (added to the player's own hitRadius) — thinner than the boss's 6
+				damage: 8, // player HP lost per overlapping hit tick — half the boss's 16
+				color: "#3DA5FF",
+				coreColor: "#ffffff",
+				lineWidth: 7,
+				coreLineWidth: 2,
+				glowBlur: 12,
+
+				warningLineWidth: 2,
+				warningLineDash: Object.freeze([8, 6]),
+				warningMarkerRadius: 6,
+				warningMarkerLineWidth: 2,
+				warningMarkerGlowBlur: 8,
+				chargePulseSpeed: 6,
+			}),
+
+			// 'charging' growing ring at the center hole — same grow-from-nothing idiom as the boss's own chargeOrb.
+			chargeOrb: Object.freeze({
+				startRadius: 3,
+				growth: 8,
+				lineWidth: 1.5,
+				glowBlur: 6,
+				alphaMin: 0.25,
+			}),
+
+			// Idle pulsing core-ring glow at the center — same reasoning as the boss's own coreRadius/coreGlow* fields.
+			coreRadius: 6,
+			coreGlowLineWidth: 2,
+			coreGlowBlur: 6,
+			coreGlowPulseSpeed: 3,
+
+			sparksPerEmit: 14,
+			points: 740,
+			gold: 37,
+			audio: Object.freeze({
+				src: "assets/audio/explosion.mp3",
+				volume: 0.55,
+				poolSize: 4,
+			}),
+		}),
 	}),
 
 	/**
@@ -3113,8 +3283,22 @@ export const Config = Object.freeze({
 
 	/**
 	 * Wave / level definitions. `type` maps to a key in `Config.enemy`.
-	 * WaveManager caps the index at the last entry — levels beyond the
-	 * array repeat the final wave indefinitely.
+	 * A full 50-level hand-authored campaign, matching Mission Mode's own
+	 * `Config.missionWaves.levels` in length and boss cadence (see
+	 * `Config.bossSchedule.survival`) — but unlike Mission Mode, which just
+	 * ends at level 50, Survival Mode is endless: once level 50's boss falls,
+	 * WaveManager._resolveLevelAndBoss WRAPS the content index back to level
+	 * 1 (`(level - 1) % levels.length`, not a clamp to the last entry) and the
+	 * whole 50-level roster repeats from the top, indefinitely. `level` itself
+	 * (used everywhere else — health/damage scaling, the boss roster's own
+	 * cycling position) is never wrapped, only the CONTENT lookup is — so the
+	 * exact same enemy mix that felt manageable the first time through reads
+	 * as meaningfully harder every subsequent loop, purely from the normal
+	 * per-level health/damage growth (Config.enemy.*.healthPerLevel,
+	 * Config.enemy.damageGrowthPerLevel — both explicitly unbounded, see that
+	 * field's own doc) continuing to climb underneath it. No separate
+	 * "New Game+" multiplier needed — the escalation was already eternal by
+	 * design, this just stops freezing the CONTENT once it runs out.
 	 *
 	 * Each level's group sequence is governed by `simultaneous`:
 	 *   true  — groups can overlap; the next group starts spawning on its
@@ -3132,30 +3316,22 @@ export const Config = Object.freeze({
 		// `_spawnTimer` with this instead of 0) — gives the player a beat to
 		// get oriented (barrier/HUD state, own position) before anything fires.
 		startDelay: 2,
-		// Ten levels, rebuilt around OVERLAP as the main hype/difficulty lever.
 		// Every level uses `simultaneous: true` (the default — none of them
 		// override it): groups spawn on their own independent timers regardless
 		// of what's still on screen, so a Sniper telegraph, a homing Rocketeer,
 		// and a ricocheting Bouncer can all be live at once, forcing real
 		// split-attention decisions instead of one enemy type politely waiting
 		// its turn. That layering — not raw type-count — is what actually
-		// reads as "interaction." Each level still introduces exactly one new
-		// type in order (so the escalation stays legible — you always know
-		// what's new) — the one exception is Spitter, paired into level 2
-		// alongside Rocketeer rather than getting a dedicated debut level of
-		// its own (see Config.enemy.spitter's own doc for why it's
-		// calibrated equal to Rocketeer) — but composition is NOT capped:
-		// level 7 ("Alien Invasion") deliberately stacks all four
-		// Drifter-family variants together for the only time in the game,
-		// and level 10 throws the entire 11-type roster into one finale. Formation sizes and spawn
-		// density both climb harder in the back half (levels 6/7/10 land
-		// 50+ individual enemies) for real spectacle, not just a longer list.
-		// Health/damage still scale with `level` on their own (see
-		// Config.player.damagePerLevel / each enemy's healthPerLevel), so this
-		// arc's difficulty is driven by composition/overlap/density, not stat
-		// inflation. Level 10 repeats forever once reached (WaveManager caps
-		// at the last entry) — the full-roster finale IS what endless mode
-		// plays like, on purpose.
+		// reads as "interaction." A boss level (every 5th, see
+		// Config.bossSchedule.survival) completely replaces whatever's written
+		// here with a synthetic single-boss wave — WaveManager checks that
+		// BEFORE ever reading this array — so every multiple of 5 below (5,
+		// 10, 15, 20, 25, 30, 35, 40, 45, 50) is a real, playable config that
+		// simply never spawns; see level 5's own comment for why these are
+		// kept real rather than left as placeholders. Health/damage still
+		// scale with `level` on their own (see Config.player.damagePerLevel /
+		// each enemy's healthPerLevel), so this arc's difficulty is driven by
+		// composition/overlap/density on top of that, not stat inflation alone.
 		levels: Object.freeze([
 			// Level 1 — {Scout}. Nothing to learn but "aim and shoot" — three
 			// escalating bursts instead of two flat ones, so even a one-enemy
@@ -3309,9 +3485,19 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 5 — {Scout, Rocketeer, Diver, Sniper, Drifter}. First alien
-			// formation arrival, dropped in while the ship-family threats are
-			// still going — the "wait, what is THAT" moment.
+			// Level 5 — {Scout, Rocketeer, Diver, Sniper, Drifter}. Every 5th
+			// level is a boss level (see Config.bossSchedule.survival.everyNLevels,
+			// changed from 7 to 5 once the campaign was extended to 50 levels to
+			// match Mission Mode's own cadence) — WaveManager checks that BEFORE
+			// ever reading this array, so this entry (and every other multiple
+			// of 5 below: 10, 15, 20, 25, 30, 35, 40, 45, 50) never actually
+			// plays while that stays true. Kept as a real, playable config
+			// anyway rather than a placeholder — everyNLevels has already
+			// changed more than once during development, and a stale/broken
+			// entry would only turn into a problem the next time it does. (This
+			// used to be the live "first alien formation arrival" level, back
+			// when the boss cadence was every 7th — that beat now effectively
+			// lands at level 6/7 instead.)
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3398,14 +3584,10 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 7 — {Scout, Rocketeer, Sniper, Bouncer, Diver}. Every 7th
-			// level is a boss level (see Config.bossSchedule.survival.everyNLevels)
-			// — WaveManager checks that BEFORE ever reading this array, so this entry (and
-			// every other multiple of 7 below) never actually plays while that
-			// stays true. Kept as a real, playable config anyway rather than a
-			// placeholder — everyNLevels has already changed more than once
-			// during development, and a stale/broken entry would only turn into
-			// a problem the next time it does.
+			// Level 7 — {+Bouncer}. Bouncer's real debut now lands here (one
+			// level earlier than before) since level 5, not 7, is the boss
+			// level under the new every-5th cadence — see level 5's own
+			// comment. This entry used to be the dead every-7th boss slot.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3440,9 +3622,10 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 8 — {Scout, Rocketeer, Sniper, Drifter, Bouncer}. Persistent-
-			// threat debut, layered under active ship-family fire — juggling
-			// "hunt the Bouncer down" against "keep dodging everything else."
+			// Level 8 — {Scout, Rocketeer, Sniper, Drifter, Bouncer}. Bouncer
+			// pressure continues from level 7, layered under active ship-family
+			// fire — juggling "hunt the Bouncer down" against "keep dodging
+			// everything else."
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3536,11 +3719,10 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 10 — "Last Stand" — every single one of the 11 placeable
-			// types, all overlapping. The campaign continues past this one now
-			// (see levels 11-30 below) — it was the endless-mode repeat cap
-			// before the campaign was extended, and reads as a real mid-campaign
-			// gut-check rather than a final wall.
+			// Level 10 — BOSS: Spiral. Dead entry (see level 5's comment) — this
+			// used to be the live "Last Stand" full-11-type-roster spectacle,
+			// back when the boss cadence was every 7th; level 19's "Full Roster
+			// Redux" now carries that beat instead.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3729,10 +3911,10 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 14 — {Scout, Sniper, Rocketeer, Bouncer}. A boss level (see
-			// the comment on level 7's entry above for why this never actually
-			// plays while Config.bossSchedule.survival.everyNLevels stays 7 —
-			// kept as a real config for the same reason).
+			// Level 14 — {Scout, Sniper, Rocketeer, Bouncer}. A steady ship-
+			// family/Bouncer mix between the "Shielded Wall" and "Diver Storm"
+			// spikes on either side. This entry used to be the dead every-7th
+			// boss slot — see level 5's own comment.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3762,8 +3944,9 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 15 — "Diver Storm" — Divers and Weavers layered together,
-			// both diving/descending toward the barrier at once.
+			// Level 15 — BOSS: Bouncer Primal. Dead entry (see level 5's
+			// comment) — this used to be the live "Diver Storm" level, back
+			// when the boss cadence was every 7th.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3948,8 +4131,9 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 20 — "Iron Wall" — Shielded, Bouncer, and Splitter all
-			// together, the tankiest non-boss lineup in the game.
+			// Level 20 — BOSS: Snake. Dead entry (see level 5's comment) — this
+			// used to be the live "Iron Wall" level, back when the boss cadence
+			// was every 7th.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -3979,8 +4163,9 @@ export const Config = Object.freeze({
 					}),
 				]),
 			}),
-			// Level 21 — {Scout, Sniper, Rocketeer, Splitter}. A boss level (see
-			// the comment on level 7's entry above).
+			// Level 21 — {Scout, Sniper, Rocketeer, Splitter}. {+Tetra} — the
+			// small cousin of level 25's boss starts showing up here. This
+			// entry used to be the dead every-7th boss slot — see level 5's own comment.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -4008,10 +4193,16 @@ export const Config = Object.freeze({
 						count: 1,
 						spawnInterval: 3.1,
 					}),
+					Object.freeze({
+						type: "tetra",
+						count: 1,
+						spawnInterval: 3.6,
+					}),
 				]),
 			}),
 			// Level 22 — "Crossfire" — Snipers and Rocketeers at their fastest
 			// reload yet, forcing constant movement between two aimed threats.
+			// {+Tetra}.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -4038,6 +4229,11 @@ export const Config = Object.freeze({
 						type: "bouncer",
 						count: 2,
 						spawnInterval: 2.3,
+					}),
+					Object.freeze({
+						type: "tetra",
+						count: 1,
+						spawnInterval: 3.4,
 					}),
 				]),
 			}),
@@ -4069,6 +4265,11 @@ export const Config = Object.freeze({
 						type: "scout",
 						count: 3,
 						spawnInterval: 1.5,
+					}),
+					Object.freeze({
+						type: "tetra",
+						count: 1,
+						spawnInterval: 3.5,
 					}),
 				]),
 			}),
@@ -4111,11 +4312,17 @@ export const Config = Object.freeze({
 						count: 3,
 						spawnInterval: 2.3,
 					}),
+					Object.freeze({
+						type: "tetra",
+						count: 1,
+						spawnInterval: 3.3,
+					}),
 				]),
 			}),
-			// Level 25 — "Endurance" — more, smaller groups than any level
-			// before it, so the wave keeps producing fresh threats for longer
-			// rather than front-loading everything into one dense burst.
+			// Level 25 — BOSS: Tetra. Dead entry (see level 5's comment) — this
+			// used to be the live "Endurance" level, back when the boss cadence
+			// was every 7th. Fittingly, the small Tetra enemies that have been
+			// showing up since level 21 were foreshadowing exactly this fight.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -4214,10 +4421,15 @@ export const Config = Object.freeze({
 						count: 4,
 						spawnInterval: 1.4,
 					}),
+					Object.freeze({
+						type: "tetra",
+						count: 1,
+						spawnInterval: 3.0,
+					}),
 				]),
 			}),
-			// Level 27 — "Last Stretch" — the run-up to the Snake fight, dense
-			// ship-family and Bouncer-family pressure with a Weaver descent on top.
+			// Level 27 — "Last Stretch" — dense ship-family and Bouncer-family
+			// pressure with a Weaver descent on top.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -4255,10 +4467,15 @@ export const Config = Object.freeze({
 						count: 2,
 						spawnInterval: 3.5,
 					}),
+					Object.freeze({
+						type: "tetra",
+						count: 2,
+						spawnInterval: 2.9,
+					}),
 				]),
 			}),
-			// Level 28 — {Scout, Sniper, Rocketeer, Shielded}. A boss level (see
-			// the comment on level 7's entry above).
+			// Level 28 — {Scout, Sniper, Rocketeer, Shielded}. {+Tetra}. This
+			// entry used to be the dead every-7th boss slot — see level 5's own comment.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -4286,10 +4503,15 @@ export const Config = Object.freeze({
 						count: 2,
 						spawnInterval: 2.5,
 					}),
+					Object.freeze({
+						type: "tetra",
+						count: 2,
+						spawnInterval: 2.8,
+					}),
 				]),
 			}),
-			// Level 29 — "Final Wave" — every family at once, one step short of
-			// the finale — the last chance to get comfortable before level 30.
+			// Level 29 — "Final Wave" — every family at once, the last live
+			// level before the campaign's second half begins.
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -4347,12 +4569,19 @@ export const Config = Object.freeze({
 						count: 1,
 						spawnInterval: 3.5,
 					}),
+					Object.freeze({
+						type: "tetra",
+						count: 2,
+						spawnInterval: 2.8,
+					}),
 				]),
 			}),
-			// Level 30 — "The Reckoning" — the entire roster at the campaign's
-			// highest density. This is the level that repeats forever once
-			// reached (WaveManager caps at the last entry), so "endless mode" is
-			// genuinely the whole roster colliding at once, not a curated subset.
+			// Level 30 — BOSS: Nova. Dead entry (see level 5's comment) — this
+			// used to be "The Reckoning," the live full-roster finale that
+			// capped endless mode before the campaign was extended to 50
+			// levels; level 49 now carries that "everything at once, right
+			// before the wrap-around" beat instead (see the doc comment above
+			// `levels` for how the full 50-level cycle repeats).
 			Object.freeze({
 				enemies: Object.freeze([
 					Object.freeze({
@@ -4415,6 +4644,275 @@ export const Config = Object.freeze({
 						count: 2,
 						spawnInterval: 2.3,
 					}),
+					Object.freeze({
+						type: "tetra",
+						count: 2,
+						spawnInterval: 2.6,
+					}),
+				]),
+			}),
+
+			// ---- Chapter 7 — Storm Front (boss: Pulsor, L35) ----
+			// Level 31 — density resets after level 30's boss, Bouncer-family
+			// and Tetra carrying the pressure.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "bouncer", count: 3, spawnInterval: 2.0 }),
+					Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.7 }),
+					Object.freeze({ type: "shielded", count: 2, spawnInterval: 3.0 }),
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.3 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.6 }),
+					Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.6 }),
+					Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.9 }),
+				]),
+			}),
+			// Level 32 — alien-heavy, all four Drifter-family variants again.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "drifter", count: 2, spawnInterval: 3.4 }),
+					Object.freeze({ type: "sweeper", count: 2, spawnInterval: 3.4 }),
+					Object.freeze({ type: "diver", count: 3, spawnInterval: 2.1 }),
+					Object.freeze({ type: "weaver", count: 2, spawnInterval: 3.4 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 2.1 }),
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.3 }),
+					Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.8 }),
+				]),
+			}),
+			// Level 33 — ship-family gauntlet, tightened intervals.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 5, spawnInterval: 1.2 }),
+					Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.5 }),
+					Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.5 }),
+					Object.freeze({ type: "sniper", count: 4, spawnInterval: 2.0 }),
+					Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.9 }),
+					Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.7 }),
+				]),
+			}),
+			// Level 34 — "Before the Storm" — full roster, max density before
+			// Pulsor.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.2 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.5 }),
+					Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.5 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.9 }),
+					Object.freeze({ type: "drifter", count: 1, spawnInterval: 3.3 }),
+					Object.freeze({ type: "sweeper", count: 1, spawnInterval: 3.3 }),
+					Object.freeze({ type: "diver", count: 2, spawnInterval: 2.0 }),
+					Object.freeze({ type: "weaver", count: 1, spawnInterval: 3.2 }),
+					Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.9 }),
+					Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.6 }),
+					Object.freeze({ type: "shielded", count: 2, spawnInterval: 3.0 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.6 }),
+				]),
+			}),
+			// Level 35 — BOSS: Pulsor. Dead entry (see level 5's comment).
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.2 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.9 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.5 }),
+					Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.5 }),
+					Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.9 }),
+					Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.6 }),
+				]),
+			}),
+
+			// ---- Chapter 8 — Breaking Point (boss: Zigzag, L40) ----
+			// Level 36 — density resets again, mechanical (Bouncer-family)
+			// focus with Tetra now a fixture, not a novelty.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.9 }),
+					Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.6 }),
+					Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.9 }),
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.2 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.8 }),
+					Object.freeze({ type: "tetra", count: 2, spawnInterval: 2.7 }),
+				]),
+			}),
+			// Level 37 — alien-heavy, Diver/Weaver leaning on the barrier.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "diver", count: 3, spawnInterval: 2.0 }),
+					Object.freeze({ type: "weaver", count: 3, spawnInterval: 3.2 }),
+					Object.freeze({ type: "sweeper", count: 2, spawnInterval: 3.2 }),
+					Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.5 }),
+					Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.5 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.6 }),
+				]),
+			}),
+			// Level 38 — ship-family and Tetra pressure, tightest intervals yet.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
+					Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.4 }),
+					Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.4 }),
+					Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.8 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.5 }),
+				]),
+			}),
+			// Level 39 — full roster, dense, right before Zigzag.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.1 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.4 }),
+					Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.4 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.8 }),
+					Object.freeze({ type: "drifter", count: 2, spawnInterval: 3.1 }),
+					Object.freeze({ type: "sweeper", count: 1, spawnInterval: 3.1 }),
+					Object.freeze({ type: "diver", count: 2, spawnInterval: 1.9 }),
+					Object.freeze({ type: "weaver", count: 2, spawnInterval: 3.0 }),
+					Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.8 }),
+					Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.5 }),
+					Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.9 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.5 }),
+				]),
+			}),
+			// Level 40 — BOSS: Zigzag. Dead entry (see level 5's comment).
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.1 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.8 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.4 }),
+					Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.4 }),
+					Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.8 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.5 }),
+				]),
+			}),
+
+			// ---- Chapter 9 — Point of No Return (boss: Phoenix, L45) ----
+			// Level 41 — density resets, mechanical-heavy again.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.8 }),
+					Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.5 }),
+					Object.freeze({ type: "shielded", count: 3, spawnInterval: 2.8 }),
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.1 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.6 }),
+				]),
+			}),
+			// Level 42 — alien-heavy, all four Drifter-family variants at
+			// their densest yet.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "drifter", count: 2, spawnInterval: 3.0 }),
+					Object.freeze({ type: "sweeper", count: 2, spawnInterval: 3.0 }),
+					Object.freeze({ type: "diver", count: 3, spawnInterval: 1.8 }),
+					Object.freeze({ type: "weaver", count: 3, spawnInterval: 3.0 }),
+					Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.7 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.5 }),
+				]),
+			}),
+			// Level 43 — ship-family/Tetra pressure.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
+					Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.4 }),
+					Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.4 }),
+					Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.7 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.4 }),
+				]),
+			}),
+			// Level 44 — full roster, dense, right before Phoenix.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 5, spawnInterval: 1.1 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.4 }),
+					Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.4 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.7 }),
+					Object.freeze({ type: "drifter", count: 2, spawnInterval: 2.9 }),
+					Object.freeze({ type: "sweeper", count: 2, spawnInterval: 2.9 }),
+					Object.freeze({ type: "diver", count: 2, spawnInterval: 1.8 }),
+					Object.freeze({ type: "weaver", count: 2, spawnInterval: 2.9 }),
+					Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.7 }),
+					Object.freeze({ type: "splitter", count: 2, spawnInterval: 2.4 }),
+					Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.7 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.4 }),
+				]),
+			}),
+			// Level 45 — BOSS: Phoenix. Dead entry (see level 5's comment).
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.1 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.7 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.4 }),
+					Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.4 }),
+					Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.7 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.4 }),
+				]),
+			}),
+
+			// ---- Chapter 10 — Final Stand (boss: Electron, L50 — the
+			// campaign's final boss, matching Mission Mode's own L50) ----
+			// Level 46 — density resets one last time before the run to the
+			// finale.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.7 }),
+					Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.4 }),
+					Object.freeze({ type: "shielded", count: 3, spawnInterval: 2.7 }),
+					Object.freeze({ type: "scout", count: 5, spawnInterval: 1.0 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.5 }),
+				]),
+			}),
+			// Level 47 — alien-heavy.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "drifter", count: 2, spawnInterval: 2.8 }),
+					Object.freeze({ type: "sweeper", count: 2, spawnInterval: 2.8 }),
+					Object.freeze({ type: "diver", count: 3, spawnInterval: 1.7 }),
+					Object.freeze({ type: "weaver", count: 3, spawnInterval: 2.8 }),
+					Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.6 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.4 }),
+				]),
+			}),
+			// Level 48 — mechanical/Tetra heavy, the tankiest non-boss lineup
+			// in the whole 50-level campaign.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "shielded", count: 5, spawnInterval: 2.4 }),
+					Object.freeze({ type: "splitter", count: 4, spawnInterval: 2.3 }),
+					Object.freeze({ type: "bouncer", count: 4, spawnInterval: 1.6 }),
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.0 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.3 }),
+				]),
+			}),
+			// Level 49 — "Full Roster" — the entire roster at the campaign's
+			// highest density, one step short of the finale — the same
+			// "everything at once" beat "The Reckoning" (old level 30) used to
+			// carry.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "shielded", count: 4, spawnInterval: 2.2 }),
+					Object.freeze({ type: "sweeper", count: 2, spawnInterval: 3.2 }),
+					Object.freeze({ type: "scout", count: 6, spawnInterval: 1.0 }),
+					Object.freeze({ type: "sniper", count: 4, spawnInterval: 1.6 }),
+					Object.freeze({ type: "splitter", count: 3, spawnInterval: 2.3 }),
+					Object.freeze({ type: "rocketeer", count: 4, spawnInterval: 1.3 }),
+					Object.freeze({ type: "spitter", count: 4, spawnInterval: 1.3 }),
+					Object.freeze({ type: "bouncer", count: 3, spawnInterval: 1.6 }),
+					Object.freeze({ type: "weaver", count: 3, spawnInterval: 3.0 }),
+					Object.freeze({ type: "diver", count: 2, spawnInterval: 1.7 }),
+					Object.freeze({ type: "drifter", count: 2, spawnInterval: 3.2 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.2 }),
+				]),
+			}),
+			// Level 50 — BOSS: Electron, the campaign's final boss. Dead entry
+			// (see level 5's comment) — level 49 above is the last LIVE level;
+			// once level 50's boss falls, level 51 wraps back around to level
+			// 1's content (see the doc comment above `levels`), continuing to
+			// scale in difficulty via the normal per-level health/damage growth
+			// even as the enemy mix repeats.
+			Object.freeze({
+				enemies: Object.freeze([
+					Object.freeze({ type: "scout", count: 4, spawnInterval: 1.0 }),
+					Object.freeze({ type: "sniper", count: 3, spawnInterval: 1.6 }),
+					Object.freeze({ type: "rocketeer", count: 3, spawnInterval: 1.3 }),
+					Object.freeze({ type: "spitter", count: 3, spawnInterval: 1.3 }),
+					Object.freeze({ type: "shielded", count: 2, spawnInterval: 2.2 }),
+					Object.freeze({ type: "tetra", count: 3, spawnInterval: 2.2 }),
 				]),
 			}),
 		]),
@@ -4436,34 +4934,28 @@ export const Config = Object.freeze({
 	 */
 	bossSchedule: Object.freeze({
 		survival: Object.freeze({
-			// NOTE: everyNLevels/roster below are currently hand-tweaked for
-			// local playtesting (forces every level to be a boss level, Tetra
-			// moved to the front) — canonical shipped values are
-			// `everyNLevels: 7` and roster starting with 'scout1'; revert
-			// before shipping. `nova` is appended at the end regardless, so
-			// it's in rotation either way.
-			everyNLevels: 1,
+			// Every 5th level — matches Mission Mode's own cadence exactly (see
+			// `mission` below), now that Survival's own `waves.levels` has been
+			// extended from 30 to a full 50-level campaign that then WRAPS back
+			// to level 1's content and repeats indefinitely (see the doc
+			// comment above `Config.waves.levels`) rather than freezing on the
+			// last entry forever. Used to be a hand-tweaked `everyNLevels: 1`
+			// with a scrambled roster for local playtesting (forced every
+			// level to be a boss, for quickly reviewing boss fights) — reverted
+			// to a real, shippable schedule here.
+			everyNLevels: 5,
 			roster: Object.freeze([
-				"electron",
-				"phoenix",
 				"scout1",
-				"snake",
 				"spiral",
 				"bouncerPrimal",
+				"snake",
 				"tetra",
 				"nova",
 				"pulsor",
 				"zigzag",
-				"pulsor",
-				"nova",
-				"tetra",
-				"scout1",
-				"spiral",
-				"bouncerPrimal",
-				"snake",
 				"phoenix",
 				"electron",
-			]), // ordered — which boss spawns on the 1st/2nd/3rd/4th/5th/6th/7th/8th/9th/10th/... boss-level encounter, in CANONICAL order (level 7→roster[0] "scout1", 14→roster[1] "spiral", 21→roster[2] "bouncerPrimal", 28→roster[3] "snake", 35→roster[4] "tetra", 42→roster[5] "nova", 49→roster[6] "pulsor", 56→roster[7] "zigzag", 63→roster[8] "phoenix", 70→roster[9] "electron", 77→roster[0] again, ...) — see WaveManager's boss-selection lookup in its constructor. The array above is temporarily reordered for playtesting (see NOTE), so the live spawn order doesn't currently match this comment.
+			]), // ordered — which boss spawns on the 1st/2nd/3rd/.../10th boss-level encounter (level 5→roster[0] "scout1", 10→roster[1] "spiral", 15→roster[2] "bouncerPrimal", 20→roster[3] "snake", 25→roster[4] "tetra", 30→roster[5] "nova", 35→roster[6] "pulsor", 40→roster[7] "zigzag", 45→roster[8] "phoenix", 50→roster[9] "electron", 55→roster[0] again as the 50-level content wraps back to level 1, ...) — same order and same level numbers as Mission's own schedule below, so both modes' boss fights land on identical level numbers even though their surrounding normal-wave content is tuned independently. See WaveManager's boss-selection lookup in its constructor.
 		}),
 		// Mission Mode's real, shipped schedule (independent of Survival's
 		// playtesting hack above) — a boss every 5th level across the full
